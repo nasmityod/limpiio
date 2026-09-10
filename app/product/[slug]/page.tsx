@@ -33,6 +33,7 @@ import { resolveSlugRedirect } from '@/lib/slug-redirects';
 import { PRODUCT_CARD_SELECT, PRODUCT_DETAIL_SELECT } from '@/lib/product-select';
 import { buildProductFaq } from '@/lib/product-faq';
 import type { Product as CatalogProduct } from '@/context/ProductContext';
+import { BRAND } from '@/config/brand';
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -43,7 +44,7 @@ interface PageProps {
 // quickUpdatePrice/Stock (PRD-024 → segmento 02) y delete (PRD-233 → DEPENDENCIA-05).
 export const revalidate = 300;
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://mundotechve.com';
+const SITE_URL = BRAND.siteUrl;
 
 // H38: pre-genera las fichas en build (el ISR sigue activo para productos
 // nuevos vía dynamicParams). Usa slug ?? id — mismo patrón que sitemap y enlaces.
@@ -90,10 +91,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   // P15: si el producto no tiene foto, la preview social usa la imagen de marca.
   const ogImage      = mainImage ? buildOgImageUrl(mainImage) : `${SITE_URL}/og-default.png`;
 
-  // P08/P09 + H02: formato corto "[Producto] | MundoTech" — la marca la añade
-  // una sola vez el template del layout ("%s | MundoTech").
+  // P08/P09 + H02: formato corto "[Producto] | <marca>" — la marca la añade
+  // una sola vez el template del layout ("%s | <marca>").
   const title   = product.name;
-  const ogTitle = `${product.name} | MundoTech`;
+  const ogTitle = `${product.name} | ${BRAND.name}`;
 
   // P11/P12/P84: description única por producto, 140–160 chars, desde el campo
   // real de la BD; el fallback incluye el nombre (keyword principal) y varía
@@ -104,11 +105,11 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     description = clampDescription(rawDesc);
   } else if (rawDesc.length > 0) {
     description = clampDescription(
-      `${rawDesc.replace(/[.!\s]+$/, '')}. Cómpralo en MundoTech Barquisimeto: precio en USD y Bs, retiro en tienda y envíos a toda Venezuela.`,
+      `${rawDesc.replace(/[.!\s]+$/, '')}. Cómpralo en ${BRAND.name} Barquisimeto: precio en USD y Bs, retiro en tienda y envíos a toda Venezuela.`,
     );
   } else {
     description = clampDescription(
-      `Compra ${product.name} en MundoTech Barquisimeto: precio en USD y Bs, retiro en tienda y envíos a toda Venezuela.`,
+      `Compra ${product.name} en ${BRAND.name} Barquisimeto: precio en USD y Bs, retiro en tienda y envíos a toda Venezuela.`,
     );
   }
 
@@ -119,7 +120,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     `${product.name} precio Venezuela`,
     `${product.name} Barquisimeto`,
     'tecnología Barquisimeto',
-    'MundoTech',
+    BRAND.name,
   ].filter(Boolean);
 
   return {
@@ -135,14 +136,14 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       title: ogTitle,
       description,
       url: canonicalUrl,
-      siteName: 'MundoTech',
+      siteName: BRAND.name,
       locale: 'es_VE',
       images: [
         {
           url: ogImage,
           width: 1200,
           height: 630,
-          alt: `${product.name} — MundoTech Barquisimeto`,
+          alt: `${product.name} — ${BRAND.name} Barquisimeto`,
         },
       ],
     },

@@ -6,6 +6,7 @@ import {
   normalizeWaPhone,
   type WhatsAppOrderInput,
 } from './whatsapp-order';
+import { BRAND } from '@/config/brand';
 
 const sample: WhatsAppOrderInput = {
   orderRef: '0026',
@@ -53,13 +54,13 @@ describe('whatsapp-order', () => {
   it('al decodificar el texto vuelven los emojis reales, no �', () => {
     const decoded = decodeURIComponent(buildWhatsAppOrderText(sample));
 
-    expect(decoded).toContain('🛒 *Nuevo pedido MundoTech #0026*');
+    expect(decoded).toContain(`🛒 *Nuevo pedido ${BRAND.name} #0026*`);
     expect(decoded).toContain('👤 *Cliente:* Hhhh Hjjj');
     expect(decoded).toContain('🆔 *Cédula:* V-555');
     expect(decoded).toContain('📞 *Teléfono:* 04128515930');
     expect(decoded).toContain('  • 2× Intercomunicador Bluetooth Q58 Max para Casco de Moto — $10.80');
     expect(decoded).toContain('💰 *Total final:* $21.60 ≈ Bs. 14816.30 (tasa: Bs. 685.94)');
-    expect(decoded).toContain('✅ *Pendiente de confirmación por MundoTech*');
+    expect(decoded).toContain(`✅ *Pendiente de confirmación por ${BRAND.name}*`);
     expect(decoded).not.toContain('�');
   });
 
@@ -80,7 +81,7 @@ describe('whatsapp-order', () => {
 
     // El text del deep link vuelve a emojis reales
     const text = url.split('&text=')[1];
-    expect(decodeURIComponent(text)).toContain('🛒 *Nuevo pedido MundoTech #0026*');
+    expect(decodeURIComponent(text)).toContain(`🛒 *Nuevo pedido ${BRAND.name} #0026*`);
   });
 
   it('buildWhatsAppOrderMessage devuelve emojis reales para logging', () => {

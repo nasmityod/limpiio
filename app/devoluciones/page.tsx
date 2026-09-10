@@ -3,8 +3,9 @@ import Link from 'next/link';
 import LegalPageLayout from '@/app/components/LegalPageLayout';
 import { readSettings } from '@/lib/data-store';
 import { whatsappHref } from '@/lib/mundotech-social';
+import { BRAND } from '@/config/brand';
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://mundotechve.com';
+const SITE_URL = BRAND.siteUrl;
 const PAGE_URL = `${SITE_URL}/devoluciones`;
 
 export const revalidate = 300;
@@ -12,7 +13,7 @@ export const revalidate = 300;
 export const metadata: Metadata = {
   title: 'Devoluciones y garantía',
   description:
-    'Política de devoluciones y garantía de MundoTech Barquisimeto: 7 días en electrónica general (garantía de la tienda), con factura y caja original; sin garantía en electrónica para vehículos ni productos no electrónicos.',
+    `Política de devoluciones y garantía de ${BRAND.name} Barquisimeto: 7 días en electrónica general (garantía de la tienda), con factura y caja original; sin garantía en electrónica para vehículos ni productos no electrónicos.`,
   alternates: { canonical: PAGE_URL },
 };
 
@@ -53,7 +54,7 @@ export default async function DevolucionesPage() {
   const settings = await readSettings();
   const waHref = whatsappHref(
     settings.phone,
-    'Hola MundoTech, necesito ayuda con una devolución o garantía. Mi número de pedido es: ',
+    `Hola ${BRAND.name}, necesito ayuda con una devolución o garantía. Mi número de pedido es: `,
   );
 
   return (
@@ -65,7 +66,7 @@ export default async function DevolucionesPage() {
 
       <LegalPageLayout
         title="Devoluciones y garantía"
-        lastUpdated="Así trabajamos las garantías en MundoTech — claro y sin letra pequeña."
+        lastUpdated={`Así trabajamos las garantías en ${BRAND.name} — claro y sin letra pequeña.`}
       >
         <p>
           Somos una tienda física en Barquisimeto y respondemos por lo que

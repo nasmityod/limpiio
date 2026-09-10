@@ -3,7 +3,7 @@
  *
  * El paquete no publica sus propios `.d.ts` (solo distribuye
  * `dist/webcheckout-sdk.min.js`, ver README del paquete). Se documentan aquí
- * únicamente los miembros usados por MundoTech
+ * únicamente los miembros usados por la tienda
  * (`app/components/checkout/CasheaCheckoutButton.tsx`), tomados del README
  * oficial del SDK. No inventar métodos adicionales sin verificarlos contra
  * el paquete real.

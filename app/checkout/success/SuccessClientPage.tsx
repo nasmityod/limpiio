@@ -17,6 +17,7 @@ import {
 } from '@/lib/ga4';
 import { trackMetaPurchaseOnce } from '@/lib/meta-pixel';
 import { orderShippingChargeLabelFromSnapshot } from '@/lib/shipping-charge';
+import { BRAND } from '@/config/brand';
 
 interface Props {
   order: EnrichedOrder;
@@ -140,7 +141,7 @@ export default function SuccessClientPage({ order }: Props) {
             <motion.a
               variants={fadeUp}
               href={`${MUNDOTECH_SOCIAL.whatsapp}?text=${encodeURIComponent(
-                `Hola MundoTech 👋 Quiero pagar con Cashea mi pedido #${String(order.orderNumber).padStart(4, '0')}. ¿Me ayudan a coordinar el pago?`
+                `Hola ${BRAND.name} 👋 Quiero pagar con Cashea mi pedido #${String(order.orderNumber).padStart(4, '0')}. ¿Me ayudan a coordinar el pago?`
               )}`}
               target="_blank"
               rel="noopener noreferrer"
@@ -176,8 +177,8 @@ export default function SuccessClientPage({ order }: Props) {
             variants={fadeUp}
             href={`${MUNDOTECH_SOCIAL.whatsapp}?text=${encodeURIComponent(
               isWhatsAppOrder
-                ? `Hola MundoTech 👋 Acabo de hacer el pedido #${String(order.orderNumber).padStart(4, '0')}. Quiero coordinar el pago y el envío.`
-                : `Hola MundoTech 👋 Acabo de hacer el pedido #${String(order.orderNumber).padStart(4, '0')}. Quiero recibir las actualizaciones de mi pedido por WhatsApp.`
+                ? `Hola ${BRAND.name} 👋 Acabo de hacer el pedido #${String(order.orderNumber).padStart(4, '0')}. Quiero coordinar el pago y el envío.`
+                : `Hola ${BRAND.name} 👋 Acabo de hacer el pedido #${String(order.orderNumber).padStart(4, '0')}. Quiero recibir las actualizaciones de mi pedido por WhatsApp.`
             )}`}
             target="_blank"
             rel="noopener noreferrer"

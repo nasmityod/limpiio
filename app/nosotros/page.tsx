@@ -17,8 +17,9 @@ import { googleMapsBusinessUrl, googleMapsEmbedUrl } from '@/lib/google-maps';
 import { readSeoLocal, describeOpeningHours } from '@/lib/seo-local';
 import { readSettings } from '@/lib/data-store';
 import { whatsappHref } from '@/lib/mundotech-social';
+import { BRAND } from '@/config/brand';
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://mundotechve.com';
+const SITE_URL = BRAND.siteUrl;
 const PAGE_URL = `${SITE_URL}/nosotros`;
 
 export const revalidate = 300;
@@ -26,10 +27,10 @@ export const revalidate = 300;
 export const metadata: Metadata = {
   title: 'Quiénes somos — la tienda detrás del letrero amarillo',
   description:
-    'MundoTech es una tienda real de tecnología en el centro de Barquisimeto: gadgets, variedades y productos virales. Visítanos o escríbenos por WhatsApp.',
+    `${BRAND.name} es una tienda real de tecnología en el centro de Barquisimeto: gadgets, variedades y productos virales. Visítanos o escríbenos por WhatsApp.`,
   alternates: { canonical: PAGE_URL },
   openGraph: {
-    title: 'Quiénes somos — MundoTech Barquisimeto',
+    title: `Quiénes somos — ${BRAND.name} Barquisimeto`,
     description:
       'Una tienda real, con local físico verificable en Barquisimeto. Conectados Contigo.',
     url: PAGE_URL,
@@ -45,12 +46,12 @@ export default async function NosotrosPage() {
   const mapOpenUrl = seo.googleMapsUrl || googleMapsBusinessUrl(mapQuery);
   const mapEmbedUrl = seo.googleMapsEmbed || googleMapsEmbedUrl(mapQuery);
   const hours = describeOpeningHours(seo);
-  const waHref = whatsappHref(settings.phone, 'Hola MundoTech, leí su página "Quiénes somos" y quiero hacerles una pregunta.');
+  const waHref = whatsappHref(settings.phone, `Hola ${BRAND.name}, leí su página "Quiénes somos" y quiero hacerles una pregunta.`);
 
   const aboutSchema = {
     '@context': 'https://schema.org',
     '@type': 'AboutPage',
-    name: 'Quiénes somos — MundoTech',
+    name: `Quiénes somos — ${BRAND.name}`,
     url: PAGE_URL,
     mainEntity: {
       '@type': 'ElectronicsStore',
@@ -111,7 +112,7 @@ export default async function NosotrosPage() {
               Somos la tienda detrás del letrero amarillo en el centro de Barquisimeto.
             </h1>
             <p className="mt-4 max-w-xl text-[14.5px] sm:text-base leading-relaxed text-white/75">
-              MundoTech no es un marketplace ni una tienda fantasma: es un local
+              {BRAND.name} no es un marketplace ni una tienda fantasma: es un local
               real en el centro de Barquisimeto, atendido por gente que conoce
               cada producto del mostrador. Esta página web es nuestra vitrina;
               la tienda, nuestra casa.
@@ -244,7 +245,7 @@ export default async function NosotrosPage() {
                     rel="noopener noreferrer"
                     className="font-semibold text-navy underline decoration-brand-yellow decoration-2 underline-offset-2"
                   >
-                    @Mundotech39
+                    {BRAND.instagramHandle || 'Instagram'}
                   </a>
                 </div>
               ) : null}

@@ -4,6 +4,7 @@ import type { SiteShellData } from '@/lib/site-shell-cache';
 import { whatsappHref } from '@/lib/mundotech-social';
 import { resolveFooterPhoneLinks } from '@/lib/footer-phones';
 import Logo from '@/components/Logo';
+import { BRAND } from '@/config/brand';
 
 /** Glyph de Instagram (lucide 1.x no exporta iconos de marca). */
 const InstagramGlyph = ({ size = 15 }: { size?: number }) => (
@@ -27,7 +28,7 @@ export default function Footer({ shellData }: { shellData: SiteShellData }) {
 
   const waHref = whatsappHref(
     content.whatsapp.phone || settings.phone,
-    'Hola MundoTech, los contacto desde la página web.',
+    `Hola ${BRAND.name}, los contacto desde la página web.`,
   );
 
   const phoneLinks = resolveFooterPhoneLinks(settings.phone, settings.phone2);
@@ -135,11 +136,11 @@ export default function Footer({ shellData }: { shellData: SiteShellData }) {
                   href={settings.instagram}
                   target="_blank"
                   rel="noreferrer"
-                  aria-label="Instagram de MundoTech"
+                  aria-label={`Instagram de ${BRAND.name}`}
                   className="inline-flex h-10 items-center gap-2 rounded-full bg-white/5 px-4 text-[13px] font-semibold text-gray-300 hover:bg-brand-yellow hover:text-navy transition-all"
                 >
                   <InstagramGlyph size={15} />
-                  @Mundotech39
+                  {BRAND.instagramHandle || 'Instagram'}
                 </a>
               ) : null}
             </div>

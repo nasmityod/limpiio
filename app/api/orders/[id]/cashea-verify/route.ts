@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
 
 /**
  * POST /api/orders/[id]/cashea-verify — Fase 7 ("Página de éxito, correos y
- * panel admin" en docs/MundoTech-Cashea-Orquestacion-Cursor.md), acción
+ * panel admin" en docs/cashea-orquestacion.md), acción
  * admin "Verificar ahora" del bloque Cashea en `/admin/orders/[id]`.
  *
  * Reglas globales (Sección 7 del documento maestro — copiadas literal):

@@ -1,8 +1,9 @@
 import type { Metadata } from 'next';
+import { BRAND } from '@/config/brand';
 
 export const metadata: Metadata = {
   title: 'Iniciar sesión',
-  description: 'Accede a tu cuenta MundoTech para pedidos, favoritos y checkout rápido.',
+  description: `Accede a tu cuenta ${BRAND.name} para pedidos, favoritos y checkout rápido.`,
   // H12/P96/H03: página de auth — fuera del índice y con canonical propio
   // (antes heredaba el canonical de la home desde el layout raíz).
   alternates: { canonical: '/login' },

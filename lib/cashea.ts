@@ -53,7 +53,7 @@ export type CasheaPayload = {
   orders: CasheaOrderInput[];
 };
 
-/** Métodos de envío internos que puede tener un pedido MundoTech (lib/shipping-charge.ts). */
+/** Métodos de envío internos que puede tener un pedido de la tienda (lib/shipping-charge.ts). */
 export type InternalDeliveryMethod = 'tienda' | 'mrw' | 'zoom' | 'tealca';
 
 // ── mapDeliveryMethod (Sección 11.3) ────────────────────────────────────────

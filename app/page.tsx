@@ -42,6 +42,7 @@ import Image from 'next/image';
 import { ArrowRight, Sparkles } from 'lucide-react';
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
+import { BRAND } from '@/config/brand';
 
 const Promotions = dynamic(() => import('@/app/components/Promotions'));
 
@@ -56,16 +57,16 @@ export const revalidate = 300;
 const LCP_PRIORITY_ITEMS = 2;
 
 export const metadata: Metadata = {
-  title: { absolute: 'MundoTech Barquisimeto | Tecnología, gadgets y variedades' },
+  title: { absolute: `${BRAND.name} Barquisimeto | Tecnología, gadgets y variedades` },
   description:
     'Tienda de variedades en Barquisimeto: tecnología, gadgets, hogar, cocina, fitness, salud y cuidado personal. Paga en USD o Bs y recibe en toda Venezuela.',
   alternates: { canonical: '/' },
   openGraph: {
-    title: 'MundoTech Barquisimeto | Tecnología, gadgets y variedades',
+    title: `${BRAND.name} Barquisimeto | Tecnología, gadgets y variedades`,
     description:
       'Tecnología, hogar, cocina, fitness y mucho más en Barquisimeto. Paga en USD o Bs. Envíos a toda Venezuela.',
     url: '/',
-    siteName: 'MundoTech',
+    siteName: BRAND.name,
     locale: 'es_VE',
     type: 'website',
   },
@@ -196,7 +197,7 @@ function CtaBanner({ data }: { data: CtaBannerData | null }) {
       {img ? (
         <Image
           src={img}
-          alt="Tecnología MundoTech"
+          alt={`Tecnología ${BRAND.name}`}
           fill
           sizes="100vw"
           quality={80}

@@ -21,8 +21,9 @@ import { buildLocalBusinessSchema } from "@/lib/seo-local";
 import { getCachedSiteShellData, buildContactFromShellData } from "@/lib/site-shell-cache";
 import { googleMapsBusinessUrl } from "@/lib/google-maps";
 import { getExchangeRateWithTimestamp } from "@/lib/load-exchange-rate-ssr";
+import { BRAND } from "@/config/brand";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://mundotechve.com";
+const SITE_URL = BRAND.siteUrl;
 const META_PIXEL_ID = process.env.NEXT_PUBLIC_META_PIXEL_ID?.trim() || "";
 
 // Jost es la tipografía de marca declarada en el sistema de diseño; antes se
@@ -44,10 +45,10 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   // H02 (P08): las páginas que ya llevan marca usan `title.absolute`;
-  // el resto hereda el sufijo "| MundoTech" una sola vez vía template.
+  // el resto hereda el sufijo "| <marca>" una sola vez vía template.
   title: {
-    default: "MundoTech | Tecnología, hogar y variedades en Barquisimeto",
-    template: "%s | MundoTech",
+    default: `${BRAND.name} | Tecnología, hogar y variedades en Barquisimeto`,
+    template: `%s | ${BRAND.name}`,
   },
   description:
     "Tienda de variedades en Barquisimeto: tecnología, gadgets, hogar, cocina, fitness, salud y cuidado personal. Precios en USD y Bs, retiro en tienda y envíos a toda Venezuela.",
@@ -60,11 +61,11 @@ export const metadata: Metadata = {
     "salud y cuidado personal Barquisimeto",
     "herramientas y automotriz Venezuela",
     "productos virales Barquisimeto",
-    "MundoTech",
+    BRAND.name,
   ],
-  authors: [{ name: "MundoTech", url: SITE_URL }],
-  creator: "MundoTech",
-  publisher: "MundoTech",
+  authors: [{ name: BRAND.name, url: SITE_URL }],
+  creator: BRAND.name,
+  publisher: BRAND.name,
   // H03: sin canonical global — cada página indexable declara el suyo.
   // Heredar el canonical de la raíz hacía que /cart, /login, /account, etc.
   // apuntaran a la home como URL canónica (consolidación errónea de señales).
@@ -75,14 +76,14 @@ export const metadata: Metadata = {
     type: "website",
     locale: "es_VE",
     url: SITE_URL,
-    siteName: "MundoTech",
-    title: "MundoTech | Tecnología, hogar y variedades en Barquisimeto",
+    siteName: BRAND.name,
+    title: `${BRAND.name} | Tecnología, hogar y variedades en Barquisimeto`,
     description:
       "Tecnología, hogar, cocina, fitness y mucho más en Barquisimeto. USD/Bs., retiro en tienda y envíos a toda Venezuela.",
   },
   twitter: {
     card: "summary_large_image",
-    title: "MundoTech | Tecnología, hogar y variedades en Barquisimeto",
+    title: `${BRAND.name} | Tecnología, hogar y variedades en Barquisimeto`,
     description:
       "Variedades en Barquisimeto: tecnología, hogar, cocina y más. Retiro en tienda y envíos a toda Venezuela.",
   },
@@ -95,7 +96,7 @@ export const metadata: Metadata = {
   // (Los iconos PNG/maskable van en manifest.ts + app/apple-icon.png.)
   appleWebApp: {
     capable: true,
-    title: "MundoTech",
+    title: BRAND.name,
     statusBarStyle: "default",
   },
   // H24: solo emitir el meta de verificación cuando la env var existe
@@ -112,7 +113,7 @@ const websiteSchema = {
   "@context": "https://schema.org",
   "@type": "WebSite",
   "@id": `${SITE_URL}/#website`,
-  name: "MundoTech",
+  name: BRAND.name,
   url: SITE_URL,
   inLanguage: "es-VE",
   description:
@@ -232,7 +233,7 @@ export default async function RootLayout({
         <link
           rel="search"
           type="application/opensearchdescription+xml"
-          title="MundoTech"
+          title={BRAND.name}
           href="/opensearch.xml"
         />
         {/* PRD-055: skip link — primer elemento enfocable de la página. */}

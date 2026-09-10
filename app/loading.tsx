@@ -1,7 +1,7 @@
 /**
  * loading.tsx — Boundary de carga global (Next.js App Router)
  * Cubre rutas que no tienen su propio loading.tsx.
- * Skeleton visual coherente con la identidad MundoTech.
+ * Skeleton visual coherente con la identidad de la tienda.
  */
 
 export default function GlobalLoading() {

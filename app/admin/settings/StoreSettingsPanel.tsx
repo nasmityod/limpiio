@@ -197,7 +197,7 @@ export function StoreSettingsPanel({
   return (
     <div ref={panelRef} className="space-y-6 pb-24 max-w-3xl">
       <HelpCallout>
-        Configura los datos públicos de MundoTech, el WhatsApp de pedidos, las condiciones de envío
+        Configura los datos públicos de la tienda, el WhatsApp de pedidos, las condiciones de envío
         y el formato de impresión.
       </HelpCallout>
 
@@ -206,7 +206,7 @@ export function StoreSettingsPanel({
           label="Nombre de la tienda"
           value={generalSettings.storeName}
           onChange={(v) => setGeneral(['storeName'], v)}
-          placeholder="MundoTech"
+          placeholder="Nombre de tu tienda"
           error={fieldError('storeName')}
         />
         <Field
@@ -245,7 +245,7 @@ export function StoreSettingsPanel({
             value={generalSettings.email}
             onChange={(v) => setGeneral(['email'], v)}
             type="email"
-            placeholder="ventas@mundotechve.com"
+            placeholder="ventas@tu-dominio.com"
             error={fieldError('email')}
           />
           <div className="sm:col-span-2">
@@ -298,14 +298,14 @@ export function StoreSettingsPanel({
           value={generalSettings.instagram ?? ''}
           onChange={(v) => setGeneral(['instagram'], v)}
           type="url"
-          placeholder="https://instagram.com/mundotech"
+          placeholder="https://instagram.com/tu_cuenta"
         />
         <Field
           label="Facebook"
           value={generalSettings.facebook ?? ''}
           onChange={(v) => setGeneral(['facebook'], v)}
           type="url"
-          placeholder="https://facebook.com/mundotech"
+          placeholder="https://facebook.com/tu_pagina"
         />
       </CollapsibleSection>
 
@@ -313,7 +313,7 @@ export function StoreSettingsPanel({
         <HelpCallout>
           <ul className="list-disc pl-4 space-y-1">
             <li>
-              <strong>Retiro en tienda:</strong> el cliente paga en web y retira en MundoTech.
+              <strong>Retiro en tienda:</strong> el cliente paga en web y retira en la tienda.
             </li>
             <li>
               <strong>MRW:</strong> puede ser gratis si todos los productos califican.

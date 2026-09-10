@@ -8,6 +8,7 @@
  */
 import { z } from 'zod';
 import { isInternalEditableLink, isSafeEditableImageUrl } from '@/lib/safe-link';
+import { BRAND } from '@/config/brand';
 
 export const SITE_CONTENT_KEY = 'site_content';
 
@@ -113,7 +114,7 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
   whatsapp: {
     enabled: true,
     phone: '0412-1471338',
-    message: '¡Hola MundoTech! Vengo de la página web y quiero preguntar por un producto.',
+    message: `¡Hola ${BRAND.name}! Vengo de la página web y quiero preguntar por un producto.`,
   },
   productTrust: [
     {

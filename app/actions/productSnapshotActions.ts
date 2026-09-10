@@ -23,7 +23,7 @@ export interface ProductSnapshot {
   originalPrice: number | null;
   stock: number;
   images: string[];
-  /** true = MundoTech cubre el envío de este producto; false = cobro a destino. */
+  /** true = la tienda cubre el envío de este producto; false = cobro a destino. */
   freeShipping: boolean;
 }
 

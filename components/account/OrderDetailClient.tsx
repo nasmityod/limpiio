@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/Badge';
 import { getOrderDualMoney, hasFrozenBsPricing } from '@/lib/order-pricing';
 import { DualOrderMoney } from '@/components/order/DualOrderMoney';
 import type { OrderStatus } from '@/lib/definitions';
+import { BRAND } from '@/config/brand';
 
 interface OrderDetailClientProps {
   order: EnrichedOrder | PublicOrderLookup;
@@ -80,7 +81,7 @@ export default function OrderDetailClient({ order }: OrderDetailClientProps) {
     !order.paidAt &&
     order.status !== 'Cancelado';
   const casheaWhatsappHref = `${MUNDOTECH_SOCIAL.whatsapp}?text=${encodeURIComponent(
-    `Hola MundoTech 👋 Quiero pagar con Cashea mi pedido #${String(order.orderNumber).padStart(4, '0')}. ¿Me ayudan a coordinar el pago?`
+    `Hola ${BRAND.name} 👋 Quiero pagar con Cashea mi pedido #${String(order.orderNumber).padStart(4, '0')}. ¿Me ayudan a coordinar el pago?`
   )}`;
   const status =
     statusConfig[order.status as keyof typeof statusConfig] ??

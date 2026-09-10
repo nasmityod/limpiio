@@ -5,11 +5,12 @@ import AdminShell from '@/components/admin/AdminShell';
 import { requireBackofficeAction } from '@/lib/admin-access-server';
 import { readSettings } from '@/lib/data-store';
 import { readSiteContent } from '@/lib/site-content';
+import { BRAND } from '@/config/brand';
 
 export const dynamic = 'force-dynamic';
 
 export const metadata = {
-  title: 'MundoTech Admin',
+  title: `${BRAND.name} Admin`,
   robots: { index: false, follow: false },
   manifest: '/admin-manifest.json',
   themeColor: '#000000',

@@ -11,8 +11,9 @@
  */
 
 import { logWarn, logError } from '@/lib/safe-logger';
+import { BRAND } from '@/config/brand';
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://mundotechve.com';
+const SITE_URL = BRAND.siteUrl;
 
 export async function pingIndexNow(paths: string[]): Promise<void> {
   const key = process.env.INDEXNOW_KEY?.trim();

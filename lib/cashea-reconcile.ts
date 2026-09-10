@@ -1,7 +1,7 @@
 /**
  * lib/cashea-reconcile.ts — verificación idempotente de pedidos Cashea
  * (Fase 5, ver "Fase 5 — Retorno, verificación idempotente y cancelación" en
- * docs/MundoTech-Cashea-Orquestacion-Cursor.md).
+ * docs/cashea-orquestacion.md).
  *
  * `processCasheaConfirmation(orderId)` es el único punto que transiciona un
  * pedido Cashea a `CONFIRMED` — y solo lo hace tras una llamada exitosa a

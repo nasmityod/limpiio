@@ -1,7 +1,7 @@
 /**
  * lib/cashea-session.ts — lógica reutilizable de POST /api/cashea/session
  * (Fase 4, ver "Fase 4 — Endpoint backend de creación de sesión Cashea" en
- * docs/MundoTech-Cashea-Orquestacion-Cursor.md).
+ * docs/cashea-orquestacion.md).
  *
  * El guard del flag (`CASHEA_ENABLED` → 404 si está apagado) y los guards de
  * seguridad compartidos con el checkout actual (CSRF/origen, rate limit,

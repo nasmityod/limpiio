@@ -3,7 +3,7 @@ import { buildPublicCachedCsp, buildStrictCsp } from '@/lib/csp';
 
 /**
  * lib/csp.test.ts — Fase 9 ("Fase 9 — Seguridad/CSP y pruebas E2E" en
- * docs/MundoTech-Cashea-Orquestacion-Cursor.md).
+ * docs/cashea-orquestacion.md).
  *
  * Objetivo: confirmar que la CSP NUNCA se relaja con dominios de Cashea
  * mientras `CASHEA_CSP_DOMAINS` siga vacía (Sección 12, preguntas 14-15 sin

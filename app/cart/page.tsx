@@ -11,6 +11,7 @@ import { PRODUCT_CARD_SELECT } from '@/lib/product-select';
 import { firstCardImage } from '@/lib/product-media';
 import { readSettings } from '@/lib/data-store';
 import DivisaDiscountBanner from '@/app/components/DivisaDiscountBanner';
+import { BRAND } from '@/config/brand';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,7 +19,7 @@ export const dynamic = 'force-dynamic';
 // el canonical de la home y robots.txt la dejaba rastreable).
 export const metadata: Metadata = {
   title: 'Tu carrito',
-  description: 'Revisa los productos de tu carrito MundoTech y finaliza tu compra en USD o Bs.',
+  description: `Revisa los productos de tu carrito ${BRAND.name} y finaliza tu compra en USD o Bs.`,
   alternates: { canonical: '/cart' },
   robots: { index: false, follow: true },
 };

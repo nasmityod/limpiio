@@ -358,7 +358,7 @@ function CategoryDialog({
               onChange={e => setDescription(e.target.value)}
               maxLength={300}
               rows={3}
-              placeholder="Describe brevemente esta categoría: qué productos incluye, para qué sirven y por qué comprar en MundoTech."
+              placeholder="Describe brevemente esta categoría: qué productos incluye, para qué sirven y por qué comprar en la tienda."
               className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl bg-gray-50 text-base resize-none focus:outline-none focus:ring-2 focus:ring-navy/20 focus:border-navy"
             />
             <p className={`text-[11px] mt-1 ${description.length > 260 ? 'text-amber-600' : 'text-gray-400'}`}>

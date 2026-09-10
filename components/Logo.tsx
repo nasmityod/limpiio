@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
+import { BRAND } from '@/config/brand';
 
 export type LogoVariant = 'light' | 'dark' | 'auto';
 
@@ -53,7 +54,7 @@ export default function Logo({
   const dims = SIZES[size];
   const ratio = RATIO[resolvedVariant];
   const width = Math.round(dims.height * ratio);
-  const brandLabel = storeName?.trim() || 'MundoTech';
+  const brandLabel = storeName?.trim() || BRAND.name;
   const alt =
     slogan?.trim()
       ? `${brandLabel} — ${slogan.trim()}`

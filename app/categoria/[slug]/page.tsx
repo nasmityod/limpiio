@@ -14,6 +14,7 @@ import {
   getCachedCategoryProducts,
 } from '@/lib/catalog-cache';
 import type { Product } from '@/context/ProductContext';
+import { BRAND } from '@/config/brand';
 
 // PRD-140 — ISR: 5 min máximo de obsolescencia para precio/stock por categoría
 // (complementado con revalidación on-demand al cambiar tasa — PRD-142).
@@ -21,7 +22,7 @@ import type { Product } from '@/context/ProductContext';
 // por lo que el TTFB en caché caliente baja ~10–50 ms vs. el hit directo a BD.
 export const revalidate = 300;
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://mundotechve.com';
+const SITE_URL = BRAND.siteUrl;
 
 interface PageProps {
   params: Promise<{ slug: string }>;
@@ -68,12 +69,12 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
     : `${category.name} - Tecnología`;
   const title   = page >= 2 ? `${titleBase} — Página ${page}` : titleBase;
   const ogTitle = page >= 2
-    ? `${titleBase} — Página ${page} | MundoTech`
-    : `${titleBase} | MundoTech`;
+    ? `${titleBase} — Página ${page} | ${BRAND.name}`
+    : `${titleBase} | ${BRAND.name}`;
   // P85: descripción única por categoría, o fallback genérico.
   const description = category.description
     ? category.description
-    : `Compra ${category.name} al mejor precio de Venezuela en MundoTech Barquisimeto. Pagas en USD o Bs, retiro en tienda y envíos por MRW, Zoom y Tealca a todo el país.`;
+    : `Compra ${category.name} al mejor precio de Venezuela en ${BRAND.name} Barquisimeto. Pagas en USD o Bs, retiro en tienda y envíos por MRW, Zoom y Tealca a todo el país.`;
   const socialImage = category.imageUrl || `${SITE_URL}/og-default.png`;
 
   return {
@@ -85,7 +86,7 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
       `${category.name} Venezuela`,
       `${category.name} precio`,
       `comprar ${category.name}`,
-      'MundoTech',
+      BRAND.name,
       'tecnología Barquisimeto',
       'estado Lara tecnología',
     ],
@@ -109,7 +110,7 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
       title: ogTitle,
       description,
       url: canonicalUrl,
-      siteName: 'MundoTech',
+      siteName: BRAND.name,
       locale: 'es_VE',
       type: 'website',
       images: [{ url: socialImage, width: 1200, height: 630, alt: category.name }],
@@ -147,10 +148,10 @@ function CategoryJsonLd({
   const schema = {
     '@context': 'https://schema.org',
     '@type': 'CollectionPage',
-    name: `${category.name} — MundoTech`,
+    name: `${category.name} — ${BRAND.name}`,
     description:
       category.description ??
-      `Catálogo de ${category.name} en MundoTech, líderes en tecnología en el estado Lara, Barquisimeto.`,
+      `Catálogo de ${category.name} en ${BRAND.name}, líderes en tecnología en el estado Lara, Barquisimeto.`,
     url,
     breadcrumb: {
       '@type': 'BreadcrumbList',
@@ -264,7 +265,7 @@ export default async function CategoryPage({ params, searchParams }: PageProps) 
             </p>
           ) : (
             <p className="mt-2 text-[13px] sm:text-sm text-slate-500 max-w-2xl">
-              Los mejores productos de <strong>{category.name}</strong> en MundoTech,
+              Los mejores productos de <strong>{category.name}</strong> en {BRAND.name},
               líderes en tecnología en el estado Lara, Barquisimeto. Precio en USD y Bs.,
               retiro en tienda y envíos por MRW, Zoom y Tealca.
             </p>

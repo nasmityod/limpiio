@@ -1,13 +1,14 @@
 import { ImageResponse } from 'next/og';
+import { BRAND } from '@/config/brand';
 
 /**
  * Imagen Open Graph de marca, generada en runtime con next/og.
  * Sustituye al inexistente /og-default.jpg (las previews en WhatsApp,
  * Instagram y Google devolvían 404). Reproduce el letrero de la tienda:
- * navy + amarillo + CONECTADOS CONTIGO.
+ * navy + amarillo + eslogan.
  */
 export const runtime = 'edge';
-export const alt = 'MundoTech — Conectados Contigo · Tecnología en Barquisimeto, Venezuela';
+export const alt = `${BRAND.name} — Conectados Contigo · Tecnología en Barquisimeto, Venezuela`;
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 
@@ -38,8 +39,7 @@ export default async function OpengraphImage() {
             letterSpacing: '-0.03em',
           }}
         >
-          <span style={{ color: '#FFFFFF' }}>Mundo</span>
-          <span style={{ color: '#FFD700' }}>Tech</span>
+          <span style={{ color: '#FFFFFF' }}>{BRAND.name}</span>
         </div>
 
         <div

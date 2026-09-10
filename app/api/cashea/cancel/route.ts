@@ -19,7 +19,7 @@ export const dynamic = 'force-dynamic';
 
 /**
  * POST /api/cashea/cancel — Fase 5 ("Fase 5 — Retorno, verificación
- * idempotente y cancelación" en docs/MundoTech-Cashea-Orquestacion-Cursor.md).
+ * idempotente y cancelación" en docs/cashea-orquestacion.md).
  *
  * Reglas globales (Sección 7 del documento maestro — copiadas literal):
  * - No modificar el flujo de pago existente (Pago Móvil, Zelle, Binance,

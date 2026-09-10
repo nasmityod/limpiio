@@ -35,6 +35,10 @@ export default defineConfig({
       TEMP_TOKEN_RETENTION_DAYS: '7',
       DELETED_UPLOAD_RETENTION_DAYS: '30',
 
+      // Nombre de marca de prueba: verifica que los textos se parametrizan
+      // desde config/brand.ts en vez de llevar una marca hardcodeada.
+      NEXT_PUBLIC_BRAND_NAME: 'Vitest Store',
+
       NEXT_PUBLIC_GA4_ID: 'G-TEST123',
       NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION: 'test-gsc-verification',
     },

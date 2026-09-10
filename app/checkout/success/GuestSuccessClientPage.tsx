@@ -11,6 +11,7 @@ import { GuestOrderItem } from '@/lib/definitions';
 import { DualOrderMoney } from '@/components/order/DualOrderMoney';
 import GuestAccountCard from './GuestAccountCard';
 import { shippingChargeLabel } from '@/lib/shipping-charge';
+import { BRAND } from '@/config/brand';
 
 interface Props {
   order: GuestOrderConfirmation;
@@ -143,7 +144,7 @@ export default function GuestSuccessClientPage({ order, guestToken }: Props) {
         <motion.a
           variants={fadeUp}
           href={`${MUNDOTECH_SOCIAL.whatsapp}?text=${encodeURIComponent(
-            `Hola MundoTech 👋 Acabo de hacer el pedido #${orderNumberPadded}. Quiero recibir las actualizaciones de mi pedido por WhatsApp.`
+            `Hola ${BRAND.name} 👋 Acabo de hacer el pedido #${orderNumberPadded}. Quiero recibir las actualizaciones de mi pedido por WhatsApp.`
           )}`}
           target="_blank"
           rel="noopener noreferrer"
@@ -161,7 +162,7 @@ export default function GuestSuccessClientPage({ order, guestToken }: Props) {
           {[
             { icon: Mail,    title: 'Pago en revisión',     sub: 'Verificaremos tu comprobante pronto' },
             { icon: Package, title: 'Preparando tu pedido', sub: 'Te avisaremos cuando esté listo'     },
-            { icon: Home,    title: 'Rastrea tu pedido',    sub: `Usa #${orderNumberPadded} + tu cédula en mundotechve.com/pedido` },
+            { icon: Home,    title: 'Rastrea tu pedido',    sub: `Usa #${orderNumberPadded} + tu cédula en ${BRAND.siteUrl}/pedido` },
           ].map((step) => (
             <div key={step.title} className="bg-white rounded-2xl border border-slate-200/80 shadow-soft p-4 text-center">
               <div className="mx-auto w-10 h-10 rounded-xl bg-brand-yellowSft text-navy flex items-center justify-center mb-2.5">

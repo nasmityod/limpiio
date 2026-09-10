@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 
 /**
  * POST /api/cashea/session — Fase 4 ("Fase 4 — Endpoint backend de creación
- * de sesión Cashea" en docs/MundoTech-Cashea-Orquestacion-Cursor.md).
+ * de sesión Cashea" en docs/cashea-orquestacion.md).
  *
  * Crea la sesión de checkout Cashea: pedido local + reserva de inventario +
  * token de retorno de un solo uso + payload calculado en servidor. Toda la

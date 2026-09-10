@@ -34,7 +34,7 @@ model Product {
   /// historial de pedidos y URLs. DEPENDENCIA-01 (getProducts) / 02 (checkout)
   /// / 05 (admin): filtrar `isActive: true` en listados públicos y compra.
   isActive        Boolean        @default(true)
-  /// true = MundoTech cubre el envío; false = cobro a destino. Default false:
+  /// true = la tienda cubre el envío; false = cobro a destino. Default false:
   /// todos los productos existentes quedan en cobro a destino al migrar.
   freeShipping    Boolean        @default(false)
   createdAt       DateTime       @default(now())

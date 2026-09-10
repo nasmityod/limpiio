@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import PedidoLookupClient from './PedidoLookupClient';
+import { BRAND } from '@/config/brand';
 
 /**
  * FASE 4.2 (MEJORA 2.1): seguimiento público de pedido — el cliente (invitado
@@ -9,7 +10,7 @@ import PedidoLookupClient from './PedidoLookupClient';
 export const metadata: Metadata = {
   title: 'Rastrea tu pedido',
   description:
-    'Consulta el estado de tu pedido MundoTech con tu número de pedido y cédula. Sin necesidad de cuenta.',
+    `Consulta el estado de tu pedido ${BRAND.name} con tu número de pedido y cédula. Sin necesidad de cuenta.`,
   alternates: { canonical: '/pedido' },
   robots: { index: false, follow: false },
   /* SESIÓN 06: no cachear página de pedido que puede contener datos del comprador */

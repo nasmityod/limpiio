@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { BRAND } from '@/config/brand';
 
 interface Props {
   token: string;
@@ -38,7 +39,7 @@ export default function UnsubscribeConfirmClient({ token }: Props) {
             </div>
             <h1 className="text-lg font-semibold text-navy">Dado de baja</h1>
             <p className="text-sm text-slate-500">
-              No recibirás más recordatorios de carrito abandonado de MundoTech.
+              No recibirás más recordatorios de carrito abandonado de {BRAND.name}.
             </p>
             <Link
               href="/"

@@ -19,6 +19,7 @@ import {
 import { zoomOffices, type ZoomOffice } from '@/lib/zoom-offices';
 import { tealcaOffices, type TealcaOffice } from '@/lib/tealca-offices';
 import { shippingChargeLabel } from '@/lib/shipping-charge';
+import { BRAND } from '@/config/brand';
 
 interface WhatsAppCheckoutProps {
   pagoMovil: StoreSettings['pagoMovil'];
@@ -159,7 +160,7 @@ const WhatsAppCheckout = ({
   transferenciaConfigured = false,
   shippingEstimates,
   whatsappOrderPhone = '',
-  storeName = 'MundoTech',
+  storeName = BRAND.name,
   checkoutPaymentMethods,
 }: WhatsAppCheckoutProps) => {
   const { data: session } = useSession();

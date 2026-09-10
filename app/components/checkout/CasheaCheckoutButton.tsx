@@ -3,7 +3,7 @@
 /**
  * app/components/checkout/CasheaCheckoutButton.tsx — Fase 6 ("Frontend del
  * checkout Cashea con el SDK oficial", ver
- * docs/MundoTech-Cashea-Orquestacion-Cursor.md).
+ * docs/cashea-orquestacion.md).
  *
  * Monta el botón oficial de `cashea-web-checkout-sdk@1.1.19`. El SDK se
  * importa dinámicamente (nunca en el bundle de servidor) y solo se

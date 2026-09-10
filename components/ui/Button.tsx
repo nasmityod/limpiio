@@ -4,7 +4,7 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 /**
- * Sistema de botones MundoTech.
+ * Sistema de botones de la tienda.
  *
  * Variantes:
  *  - primary    → CTA principal, navy s lido (uso general).

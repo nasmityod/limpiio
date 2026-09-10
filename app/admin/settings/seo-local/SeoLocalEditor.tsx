@@ -334,7 +334,7 @@ export default function SeoLocalEditor({ initial }: SeoLocalEditorProps) {
           label="TikTok"
           value={data.tiktok ?? ''}
           onChange={v => set('tiktok', v)}
-          placeholder="https://www.tiktok.com/@mundotech"
+          placeholder="https://www.tiktok.com/@tu_cuenta"
           type="url"
         />
       </Section>

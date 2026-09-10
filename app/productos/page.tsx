@@ -22,10 +22,11 @@ import JsonLd from '@/app/components/JsonLd';
 import RecentlyViewed from '@/components/RecentlyViewed';
 import { ChevronRight } from 'lucide-react';
 import type { Product } from '@/context/ProductContext';
+import { BRAND } from '@/config/brand';
 
 export const revalidate = 300;
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://mundotechve.com';
+const SITE_URL = BRAND.siteUrl;
 
 export { PAGE_SIZE };
 
@@ -76,17 +77,17 @@ export async function generateMetadata({ searchParams }: PageProps): Promise<Met
   return {
     title,
     description:
-      'Catálogo de MundoTech Barquisimeto: tecnología, gadgets, hogar, cocina, fitness, salud y más. Paga en USD o Bs y recibe en toda Venezuela.',
+      `Catálogo de ${BRAND.name} Barquisimeto: tecnología, gadgets, hogar, cocina, fitness, salud y más. Paga en USD o Bs y recibe en toda Venezuela.`,
     alternates: { canonical: canonicalUrl },
     robots: isFiltered
       ? { index: false, follow: true }
       : { index: true, follow: true },
     openGraph: {
-      title: `${title} | MundoTech`,
+      title: `${title} | ${BRAND.name}`,
       description:
         'Tecnología, hogar, cocina, fitness y más en Barquisimeto. USD/Bs., retiro en tienda y envíos nacionales.',
       url: canonicalUrl,
-      siteName: 'MundoTech',
+      siteName: BRAND.name,
       locale: 'es_VE',
       type: 'website',
     },
@@ -124,7 +125,7 @@ function buildCatalogItemList(products: Product[], page: number) {
   return {
     '@context': 'https://schema.org',
     '@type': 'CollectionPage',
-    name: 'Catálogo — MundoTech',
+    name: `Catálogo — ${BRAND.name}`,
     url: page <= 1 ? `${SITE_URL}/productos` : `${SITE_URL}/productos?page=${page}`,
     mainEntity: {
       '@type': 'ItemList',

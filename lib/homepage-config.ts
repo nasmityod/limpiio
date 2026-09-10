@@ -4,6 +4,7 @@
  * No persiste en lectura: la migración V2 ocurre solo al guardar.
  */
 import { z } from 'zod';
+import { BRAND } from '@/config/brand';
 
 export const HOME_SHELF_KEYS = ['offers', 'newest', 'featured'] as const;
 export type HomeShelfKey = (typeof HOME_SHELF_KEYS)[number];
@@ -66,13 +67,13 @@ export const DEFAULT_HOMEPAGE_SHELVES: HomepageShelvesConfig = {
     },
     newest: {
       enabled: true,
-      title: 'Novedades en MundoTech',
+      title: `Novedades en ${BRAND.name}`,
       badge: 'Recién llegados',
       subtitle: '',
     },
     featured: {
       enabled: true,
-      title: 'Selección MundoTech',
+      title: `Selección ${BRAND.name}`,
       badge: 'Destacados',
       subtitle: 'Productos seleccionados por nuestro equipo',
     },

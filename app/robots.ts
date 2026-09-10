@@ -1,6 +1,7 @@
 import type { MetadataRoute } from 'next';
+import { BRAND } from '@/config/brand';
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://mundotechve.com';
+const SITE_URL = BRAND.siteUrl;
 
 /**
  * /robots.txt — permite el rastreo de la tienda pública (home, catálogo,

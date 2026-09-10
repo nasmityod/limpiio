@@ -9,8 +9,9 @@ import ProductCard from '@/components/ProductCard';
 import ProductCardSkeleton from '@/components/ProductCardSkeleton';
 import SearchFiltersBar from './SearchFiltersBar';
 import SearchPagination from './SearchPagination';
+import { BRAND } from '@/config/brand';
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://mundotechve.com';
+const SITE_URL = BRAND.siteUrl;
 
 interface PageProps {
   searchParams: Promise<{
@@ -37,8 +38,8 @@ export async function generateMetadata({ searchParams }: PageProps): Promise<Met
     ? `"${q}" — Búsqueda`
     : 'Resultados de búsqueda';
   const description = q
-    ? `Resultados para "${q}" en MundoTech: tecnología, gadgets y accesorios en Barquisimeto.`
-    : 'Busca productos de tecnología y gadgets en MundoTech Barquisimeto.';
+    ? `Resultados para "${q}" en ${BRAND.name}: tecnología, gadgets y accesorios en Barquisimeto.`
+    : `Busca productos de tecnología y gadgets en ${BRAND.name} Barquisimeto.`;
 
   // P97/H62: el canonical refleja la URL real (q, cat, brand, page) — sin
   // señales contradictorias aunque la página sea noindex.

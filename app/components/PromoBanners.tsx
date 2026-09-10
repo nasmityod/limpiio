@@ -1,5 +1,6 @@
 import Image from 'next/image';
 import PromotionLink from '@/app/components/PromotionLink';
+import { BRAND } from '@/config/brand';
 
 export interface PromoBannerItem {
   id: string;
@@ -22,7 +23,7 @@ function PromoBannerCard({
   priority?: boolean;
 }) {
   const href = banner.link || '/productos';
-  const alt = banner.title || 'Promoción MundoTech';
+  const alt = banner.title || `Promoción ${BRAND.name}`;
   const promotion = {
     promotion_id: `promo-banner-${banner.id}`,
     promotion_name: banner.title?.trim() || 'Promo banner',

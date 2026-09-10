@@ -9,40 +9,41 @@ import { readSeoLocal, buildLocalBusinessSchema, describeOpeningHours } from '@/
 import { readSettings } from '@/lib/data-store';
 import { resolveCategoryPathFromProductCategory } from '@/lib/resolve-category-path';
 import JsonLd from '@/app/components/JsonLd';
+import { BRAND } from '@/config/brand';
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://mundotechve.com';
+const SITE_URL = BRAND.siteUrl;
 const PAGE_URL = `${SITE_URL}/tienda-barquisimeto`;
 
 export const revalidate = 300;
 
 export const metadata: Metadata = {
-  // H26: marca unificada "MundoTech" (sin espacio) + título absoluto para que
+  // H26: marca unificada (sin espacio) + título absoluto para que
   // el template del layout no duplique la marca (H02/P08).
-  title: { absolute: 'Tienda de variedades y tecnología en Barquisimeto | MundoTech' },
+  title: { absolute: `Tienda de variedades y tecnología en Barquisimeto | ${BRAND.name}` },
   description:
-    'MundoTech en el centro de Barquisimeto: tecnología, hogar, cocina, fitness, salud y más. Precios en USD y Bs, retiro en tienda y envíos a toda Venezuela.',
+    `${BRAND.name} en el centro de Barquisimeto: tecnología, hogar, cocina, fitness, salud y más. Precios en USD y Bs, retiro en tienda y envíos a toda Venezuela.`,
   keywords: [
     'tienda de variedades Barquisimeto',
     'tienda tecnología Barquisimeto',
     'productos para el hogar Barquisimeto',
     'artículos de cocina Barquisimeto',
-    'MundoTech Barquisimeto',
+    `${BRAND.name} Barquisimeto`,
     'variedades Lara Venezuela',
   ],
   alternates: { canonical: PAGE_URL },
   // og:image heredada de app/opengraph-image.tsx (imagen de marca generada)
   openGraph: {
-    title: 'MundoTech Barquisimeto — Conectados Contigo',
+    title: `${BRAND.name} Barquisimeto — Conectados Contigo`,
     description:
       'Tu tienda en el Centro de Barquisimeto: tecnología, hogar, cocina, fitness y más. USD/Bs., retiro en tienda y envíos nacionales.',
     url: PAGE_URL,
-    siteName: 'MundoTech',
+    siteName: BRAND.name,
     locale: 'es_VE',
     type: 'website',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'MundoTech Barquisimeto — Conectados Contigo',
+    title: `${BRAND.name} Barquisimeto — Conectados Contigo`,
     description:
       'Variedades en Barquisimeto: tecnología, hogar, cocina y más. USD/Bs., retiro en tienda y envíos nacionales.',
   },

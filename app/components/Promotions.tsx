@@ -1,6 +1,7 @@
 import Image from 'next/image';
 import { ArrowRight } from 'lucide-react';
 import PromotionLink from '@/app/components/PromotionLink';
+import { BRAND } from '@/config/brand';
 
 export interface PromoItem {
   id: string;
@@ -17,7 +18,7 @@ interface Props {
 }
 
 /**
- * Fallbacks MundoTech rellenan huecos cuando en admin hay pocas promos.
+ * Los fallbacks de marca rellenan huecos cuando en admin hay pocas promos.
  * Sin fotos stock: si el admin no subió imagen, la tarjeta usa el panel navy
  * de marca (las fotos genéricas de Unsplash además quedaban bloqueadas por
  * el CSP, que solo permite el CDN de R2).
@@ -80,7 +81,7 @@ function buildBoxes(promotions: PromoItem[] | undefined): Box[] {
       const discountLine = normalizeLabel(p.discountText, p.title);
       out.push({
         id: p.id,
-        label: discountLine || 'MundoTech · Promo',
+        label: discountLine || `${BRAND.name} · Promo`,
         title: p.title?.trim() || fb?.title || 'Oferta',
         subtitle: p.subtitle?.trim() ?? null,
         cta: 'Ver ofertas',

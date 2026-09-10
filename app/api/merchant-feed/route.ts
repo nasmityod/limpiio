@@ -32,8 +32,9 @@ import { prisma } from '@/lib/prisma';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { readSettings } from '@/lib/data-store';
 import { getGoogleCategoryId } from '@/lib/google-product-categories';
+import { BRAND } from '@/config/brand';
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://mundotechve.com';
+const SITE_URL = BRAND.siteUrl;
 
 // Escapa caracteres especiales XML para datos de usuario (nombre, descripción).
 function escapeXml(str: string): string {

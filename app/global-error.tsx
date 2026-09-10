@@ -14,6 +14,7 @@ import {
   isChunkLoadError,
   tryRecoverFromChunkLoadError,
 } from '@/lib/chunk-load-error';
+import { BRAND } from '@/config/brand';
 
 export default function GlobalError({
   error,
@@ -62,7 +63,7 @@ export default function GlobalError({
               marginBottom: 20,
             }}
           >
-            MundoTech
+            {BRAND.name}
           </p>
           <h1 style={{ fontSize: 26, fontWeight: 800, margin: '0 0 12px' }}>
             Algo salió mal de nuestro lado

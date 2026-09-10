@@ -18,8 +18,9 @@ import JsonLd from '@/app/components/JsonLd';
 import type { Review, ReviewSummary, ProductSpec } from '@/lib/definitions';
 import { parseProductSpecs } from '@/lib/definitions';
 import type { ProductFaqItem } from '@/lib/product-faq';
+import { BRAND } from '@/config/brand';
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://mundotechve.com';
+const SITE_URL = BRAND.siteUrl;
 
 // Imágenes en R2 ya optimizadas en upload; usar URL tal cual para JSON-LD / OG.
 function buildOgImageUrl(src: string): string {

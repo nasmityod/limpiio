@@ -10,7 +10,7 @@ export const maxDuration = 60;
 
 /**
  * GET /api/cron/cashea-reconcile — Fase 8 ("Fase 8 — Cron de reconciliación"
- * en docs/MundoTech-Cashea-Orquestacion-Cursor.md).
+ * en docs/cashea-orquestacion.md).
  *
  * Reglas globales (Sección 7 del documento maestro — copiadas literal):
  * - No modificar el flujo de pago existente (Pago Móvil, Zelle, Binance,

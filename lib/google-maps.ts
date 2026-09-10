@@ -1,5 +1,5 @@
 /**
- * URLs de Google Maps para MundoTech (Barquisimeto).
+ * URLs de Google Maps para la tienda física.
  *
  * En producción conviene configurar NEXT_PUBLIC_GOOGLE_MAPS_BUSINESS_URL con el vínculo
  * de la ficha del negocio: abre Maps → busca tu tienda verificada → Compartir → Copiar vínculo.

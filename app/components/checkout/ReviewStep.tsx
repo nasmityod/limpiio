@@ -22,6 +22,7 @@ import CasheaCheckoutButton from '@/app/components/checkout/CasheaCheckoutButton
 // Import type-only: se erradica en build, nunca trae al cliente el módulo
 // `lib/cashea.ts` (exclusivo de servidor — expone casheaPrivateFetch/la clave privada).
 import type { CasheaPayload } from '@/lib/cashea';
+import { BRAND } from '@/config/brand';
 
 /** Espejo cliente del master switch — nunca `lib/cashea-config.ts` (servidor). */
 const CASHEA_AUTOMATIC_ENABLED = process.env.NEXT_PUBLIC_CASHEA_ENABLED === 'true';
@@ -801,7 +802,7 @@ const ReviewStep = ({ shippingData, paymentData, checkoutPaymentMethods = [], wh
                   <dd className="text-navy font-mono text-right">{paymentData?.referenceNumber}</dd>
                 </div>
                 <p className="text-xs text-slate-500 pt-1 leading-relaxed">
-                  Tras confirmar, reservamos tu pedido y MundoTech verificará tu pago en Binance antes de preparar el envío.
+                  Tras confirmar, reservamos tu pedido y {BRAND.name} verificará tu pago en Binance antes de preparar el envío.
                 </p>
               </>
             )}

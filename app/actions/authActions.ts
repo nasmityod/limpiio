@@ -8,6 +8,7 @@ import { rateLimitCritical, hashForBucket } from '@/lib/rate-limit';
 import { getActionClientIp, hashToken } from '@/lib/security';
 import { logError, logInfo } from '@/lib/safe-logger';
 import bcrypt from 'bcrypt';
+import { BRAND } from '@/config/brand';
 
 function firstNameFromName(displayName: string): string {
   const t = displayName.trim();
@@ -17,7 +18,7 @@ function firstNameFromName(displayName: string): string {
 
 /** Mensaje único para anti-enumeración (correo válido). */
 const PASSWORD_RESET_GENERIC_MESSAGE =
-  'Si el correo está registrado en MundoTech, recibirás instrucciones para restablecer tu contraseña. Revisa la bandeja de entrada y el spam. El enlace expira en 15 minutos.';
+  `Si el correo está registrado en ${BRAND.name}, recibirás instrucciones para restablecer tu contraseña. Revisa la bandeja de entrada y el spam. El enlace expira en 15 minutos.`;
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 

@@ -8,6 +8,7 @@ import { Stars } from '@/components/reviews/Stars';
 import type { Review, ReviewSummary } from '@/lib/definitions';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
+import { BRAND } from '@/config/brand';
 
 interface Props {
   productId: string;
@@ -482,7 +483,7 @@ export default function ProductReviews({ productId, productName, initialSummary,
                   {r.adminReply && (
                     <div className="mt-3 rounded-xl bg-amber-50/60 border border-amber-100 px-3.5 py-2.5">
                       <p className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700">
-                        <ChevronRight size={12} /> Respuesta de MundoTech
+                        <ChevronRight size={12} /> Respuesta de {BRAND.name}
                       </p>
                       <p className="text-sm text-slate-600 mt-0.5">{r.adminReply}</p>
                     </div>

@@ -17,7 +17,7 @@ interface AuthSplitLayoutProps {
 
 /**
  * Layout de autenticación "letrero de tienda": una sola tarjeta centrada.
- * La banda superior reproduce la fachada real de MundoTech (navy + logo
+ * La banda superior reproduce la fachada real de la tienda (navy + logo
  * amarillo + CONECTADOS CONTIGO) y el pie ancla la cuenta a un lugar físico
  * verificable. Sin split-layout con ilustración — ese es el patrón que
  * cualquier generador escupe por defecto.

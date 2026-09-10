@@ -4,6 +4,7 @@ import { sendReviewRequestEmail } from '@/lib/resend';
 import type { ReviewRequestProduct } from '@/emails/mundotech/ReviewRequestEmail';
 import { verifyBearerSecret } from '@/lib/security';
 import { logInfo, logError } from '@/lib/safe-logger';
+import { BRAND } from '@/config/brand';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -49,7 +50,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const base = (process.env.NEXT_PUBLIC_SITE_URL ?? 'https://mundotechve.com').replace(/\/$/, '');
+  const base = BRAND.siteUrl.replace(/\/$/, '');
   const now = Date.now();
   const newestEligible = new Date(now - WINDOW_MIN_DAYS * 24 * 60 * 60 * 1000);
   const oldestEligible = new Date(now - WINDOW_MAX_DAYS * 24 * 60 * 60 * 1000);

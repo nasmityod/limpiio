@@ -2,9 +2,10 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { getSavedAddresses } from '@/app/actions/addressActions';
 import AddressListClient from '@/components/account/AddressListClient';
+import { BRAND } from '@/config/brand';
 
 export const metadata = {
-  title: 'Mis direcciones — MundoTech',
+  title: `Mis direcciones — ${BRAND.name}`,
 };
 
 export default async function AddressesPage() {

@@ -30,6 +30,7 @@ import { readAnnouncement, type Announcement } from '@/lib/announcement';
 import { resolveCategoryPathFromProductCategory } from '@/lib/resolve-category-path';
 import { buildFooterPaymentMethodLabels } from '@/lib/footer-payment-labels';
 import { logInfo, logWarn } from '@/lib/safe-logger';
+import { BRAND } from '@/config/brand';
 
 // ── Tags de caché ───────────────────────────────────────────────────────────
 
@@ -194,7 +195,7 @@ export const getCachedSiteShellData = unstable_cache(
       return {
         announcement: { active: false, text: '', link: '', bgColor: '#0B1220', textColor: '#FFFFFF' },
         settings: {
-          storeName: 'MundoTech',
+          storeName: BRAND.name,
           tagline: '',
           phone: '',
           phone2: '',

@@ -7,6 +7,7 @@ import { X, ChevronRight, Clock, Zap, Sparkles, Tag } from 'lucide-react';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { useReducedMotion, reducedTransition } from '@/lib/motion';
+import { BRAND } from '@/config/brand';
 
 interface PromoData {
   title:        string;
@@ -181,7 +182,7 @@ export default function CategoryDrawer({ open, onClose }: CategoryDrawerProps) {
                     <div className="relative">
                       <span className="inline-flex items-center gap-1.5 bg-white/10 backdrop-blur border border-white/15 text-white text-[10px] font-semibold px-2.5 py-1 rounded-full mb-3">
                         <Sparkles size={10} className="text-brand-yellow" />
-                        Promo MundoTech
+                        Promo {BRAND.name}
                       </span>
 
                       <div className="inline-flex items-center gap-1.5 bg-emerald-500 text-white text-[10px] font-semibold px-2.5 py-1 rounded-full mb-3 ml-2">

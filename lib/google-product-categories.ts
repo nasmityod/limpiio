@@ -1,5 +1,5 @@
 /**
- * Google Product Taxonomy ID mapper for the MundoTech Merchant Center feed.
+ * Google Product Taxonomy ID mapper for the Merchant Center feed.
  *
  * Maps internal category names (stored in Product.category / Category.name)
  * to Google Product Taxonomy numeric IDs. Numeric IDs are preferred over text

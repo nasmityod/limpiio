@@ -15,6 +15,7 @@ import {
   type HomepageFreeShippingConfig,
   type HomepageShelvesConfig,
 } from '@/lib/homepage-config';
+import { BRAND } from '@/config/brand';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -52,7 +53,7 @@ const DEFAULT_BENEFITS: BenefitItem[] = [
   { title: 'Pago seguro',       sub: 'Pago Móvil · Transferencia'            },
 ];
 
-const DEFAULT_FLASH: FlashConfig = { title: 'Ofertas MundoTech', endHour: 23 };
+const DEFAULT_FLASH: FlashConfig = { title: `Ofertas ${BRAND.name}`, endHour: 23 };
 
 const PROMO_DEFAULTS = [
   { order: 1, title: 'Hasta 30%\nde descuento', subtitle: 'En consolas, gadgets y tech seleccionados', discountText: 'Hasta 30%', bgColor: '#FFD700', link: '/productos', active: true, imageUrl: null, subtitle_ph: 'Descripción de la oferta' },
@@ -66,7 +67,7 @@ const PROMO_LABELS = ['Promo Grande (Amarilla)', 'Promo Pequeña 1 (Navy)', 'Pro
 // ─── Helper: subir imagen ─────────────────────────────────────────────────────
 
 /** PRD-248: `purpose` explícito — sin él, todo caía al folder por defecto
- *  `mundotech/banners` de /api/upload (upload/route.ts, dueño 01). Mismo
+ *  `banners` de /api/upload (upload/route.ts, dueño 01). Mismo
  *  convenio que PhotoUploader (`category`, `banner`, …). */
 async function uploadImage(file: File, purpose: string): Promise<string> {
   const fd = new FormData();
@@ -494,7 +495,7 @@ export default function HomeManagerPage() {
                 <input type="text" value={flash.title}
                   onChange={e => setFlash(f => ({ ...f, title: e.target.value }))}
                   className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-navy/20"
-                  placeholder="ej. Ofertas MundoTech" />
+                  placeholder="ej. Ofertas de la semana" />
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">Hora de expiración (0–23)</label>

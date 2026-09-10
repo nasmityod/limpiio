@@ -18,6 +18,7 @@ import {
   DEFAULT_PAYMENT_METHODS,
   type PaymentMethodConfig,
 } from '@/lib/payment-methods';
+import { BRAND } from '@/config/brand';
 
 const paymentMethodsFieldSchema = z.preprocess(
   (val) => mergePaymentMethodsWithDefaults(val),
@@ -124,20 +125,27 @@ export type StoreSettings = z.infer<typeof storeSettingsSchema> & {
 
 const SETTINGS_KEY = 'store_settings';
 
-// PRD-101: los datos de contacto provienen del material físico verificado de la
-// tienda (letrero, tarjetas, marketing). Los datos FINANCIEROS (pago móvil,
-// transferencia) NUNCA llevan placeholders: si la BD no tiene configuración
-// quedan vacíos y el checkout debe ocultarlos (ver hasConfiguredPayments).
+// PRD-101: los datos de contacto se rellenan desde Admin → Configuración con
+// el material físico verificado de la tienda (letrero, tarjetas, marketing).
+// Aquí solo hay valores NEUTROS: lo que no venga de config/brand.ts queda
+// vacío, para que una instancia recién derivada nunca muestre los datos de
+// otra tienda. Los datos FINANCIEROS (pago móvil, transferencia) NUNCA llevan
+// placeholders: si la BD no tiene configuración quedan vacíos y el checkout
+// debe ocultarlos (ver hasConfiguredPayments).
 // Un cliente jamás debe ver una cuenta/RIF que no sea real.
 export const DEFAULT_SETTINGS: StoreSettings = {
-  storeName:  'MundoTech',
-  tagline:    'Tecnología, variedades y lo más viral para tu casa. Tienda física en Barquisimeto y envíos a toda Venezuela.',
-  phone:      '0412-1471338',
-  phone2:     '0414-5709470',
-  email:      'ventas@mundotechve.com',
-  address:    'Carrera 21 con esquina calle 21, Centro, Barquisimeto 3001, estado Lara.',
-  instagram:  'https://instagram.com/Mundotech39',
-  facebook:   '',
+  storeName:  BRAND.name,
+  tagline:    BRAND.tagline,
+  // `phone` y `email` son OBLIGATORIOS en storeSettingsSchema, así que no
+  // pueden quedar vacíos sin invalidar los propios defaults. Se usan
+  // marcadores inequívocamente ficticios (dominio example.com, RFC 2606) que
+  // el administrador debe sustituir antes del lanzamiento.
+  phone:      '0000-0000000',
+  phone2:     '',
+  email:      BRAND.contactEmail || 'contacto@example.com',
+  address:    BRAND.address,
+  instagram:  BRAND.social.instagram,
+  facebook:   BRAND.social.facebook,
   // Sin datos bancarios por defecto: deben guardarse desde Admin → Configuración
   // antes del lanzamiento. La validación todo-o-nada en superRefine exige que
   // si se llena un campo del grupo se completen todos, o todos vacíos.

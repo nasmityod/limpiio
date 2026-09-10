@@ -2,16 +2,17 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import LegalPageLayout from '@/app/components/LegalPageLayout';
 import { readSettings } from '@/lib/data-store';
+import { BRAND } from '@/config/brand';
 
 export const revalidate = 300;
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://mundotechve.com';
+const SITE_URL = BRAND.siteUrl;
 const PAGE_URL = `${SITE_URL}/terms-of-service`;
 
 export const metadata: Metadata = {
   title: 'Términos y condiciones',
   description:
-    'Condiciones generales de compra en MundoTech Barquisimeto: pedidos, precios en USD y Bs, métodos de pago, envíos nacionales, garantía y devoluciones.',
+    `Condiciones generales de compra en ${BRAND.name} Barquisimeto: pedidos, precios en USD y Bs, métodos de pago, envíos nacionales, garantía y devoluciones.`,
   alternates: { canonical: PAGE_URL },
   robots: { index: true, follow: true },
 };
@@ -93,7 +94,7 @@ export default async function TermsOfServicePage() {
 
       <h2>7. Garantía y cambios</h2>
       <p>
-        La garantía de MundoTech aplica según la categoría del producto: electrónica en general
+        La garantía de {BRAND.name} aplica según la categoría del producto: electrónica en general
         tiene 7 días de garantía de la tienda (no de fábrica); la electrónica para vehículos y
         los productos no electrónicos no tienen garantía. Para hacerla válida, el producto debe
         devolverse con su factura y su caja o empaque original. Los detalles completos están en

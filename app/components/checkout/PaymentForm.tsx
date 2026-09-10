@@ -13,6 +13,7 @@ import {
   type CheckoutPaymentMethodDto,
   type PaymentCurrencyGroup,
 } from '@/lib/payment-methods';
+import { BRAND } from '@/config/brand';
 
 export type PaymentFormData = {
   paymentMethodId: string;
@@ -594,7 +595,7 @@ const PaymentForm = forwardRef<PaymentFormHandle, PaymentFormProps>(({
           className="bg-navy/5 border border-navy/10 rounded-2xl p-5"
         >
           <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-3">
-            Transfiere a estos datos de MundoTech
+            Transfiere a estos datos de {BRAND.name}
           </p>
           <dl className="space-y-2">
             {storeDataRows.map((row) => (
@@ -644,7 +645,7 @@ const PaymentForm = forwardRef<PaymentFormHandle, PaymentFormProps>(({
           >
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-2">
-                Paga a MundoTech en Binance
+                Paga a {BRAND.name} en Binance
               </p>
               {binancePayId.trim() ? (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3">
@@ -671,7 +672,7 @@ const PaymentForm = forwardRef<PaymentFormHandle, PaymentFormProps>(({
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={binanceQrUrl.trim()}
-                    alt="Código QR Binance MundoTech"
+                    alt={`Código QR Binance ${BRAND.name}`}
                     referrerPolicy="no-referrer"
                     loading="lazy"
                     decoding="async"

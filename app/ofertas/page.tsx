@@ -8,10 +8,11 @@ import JsonLd from '@/app/components/JsonLd';
 import RecentlyViewed from '@/components/RecentlyViewed';
 import { ChevronRight, Sparkles, Tag } from 'lucide-react';
 import type { Product } from '@/context/ProductContext';
+import { BRAND } from '@/config/brand';
 
 export const revalidate = 300;
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://mundotechve.com';
+const SITE_URL = BRAND.siteUrl;
 
 interface PageProps {
   searchParams: Promise<{ page?: string }>;
@@ -37,15 +38,15 @@ export async function generateMetadata({ searchParams }: PageProps): Promise<Met
   return {
     title,
     description:
-      'Ofertas y rebajas reales en MundoTech Barquisimeto: tecnología, hogar, cocina, fitness y más con descuento. Paga en USD o Bs y recibe en toda Venezuela.',
+      `Ofertas y rebajas reales en ${BRAND.name} Barquisimeto: tecnología, hogar, cocina, fitness y más con descuento. Paga en USD o Bs y recibe en toda Venezuela.`,
     alternates: { canonical: canonicalUrl },
     robots: { index: true, follow: true },
     openGraph: {
-      title: `${title} | MundoTech`,
+      title: `${title} | ${BRAND.name}`,
       description:
         'Productos con descuento real en Barquisimeto. USD/Bs., retiro en tienda y envíos nacionales.',
       url: canonicalUrl,
-      siteName: 'MundoTech',
+      siteName: BRAND.name,
       locale: 'es_VE',
       type: 'website',
     },

@@ -22,6 +22,7 @@ import type { CheckoutPaymentMethodDto } from '@/lib/payment-methods';
 import { saveCartSnapshotAction } from '@/app/actions/abandonedCartActions';
 import type { AbandonedCartItem } from '@/lib/definitions';
 import { track, toGa4Item, ga4ItemsValue, GA4_CURRENCY } from '@/lib/ga4';
+import { BRAND } from '@/config/brand';
 
 interface CheckoutFlowProps {
   pagoMovil: StoreSettings['pagoMovil'];
@@ -47,7 +48,7 @@ interface CheckoutFlowProps {
   checkoutPaymentMethods: CheckoutPaymentMethodDto[];
 }
 
-const CheckoutFlow = ({ pagoMovil, transferencia, supportPhone, binancePayId, binanceQrUrl, pagoMovilConfigured = false, transferenciaConfigured = false, shippingEstimates, whatsappMode = false, whatsappOrderPhone = '', storeName = 'MundoTech', checkoutPaymentMethods }: CheckoutFlowProps) => {
+const CheckoutFlow = ({ pagoMovil, transferencia, supportPhone, binancePayId, binanceQrUrl, pagoMovilConfigured = false, transferenciaConfigured = false, shippingEstimates, whatsappMode = false, whatsappOrderPhone = '', storeName = BRAND.name, checkoutPaymentMethods }: CheckoutFlowProps) => {
   const prefersReduced = useReducedMotion();
   const [currentStep, setCurrentStep] = useState(0);
   const [direction, setDirection]     = useState<1 | -1>(1);

@@ -16,6 +16,7 @@ import {
   HelpCallout,
   CollapsibleSection,
 } from '@/app/admin/settings/components/SettingsUI';
+import { BRAND } from '@/config/brand';
 
 type Props = {
   methods: PaymentMethodConfig[];
@@ -344,7 +345,7 @@ export function PaymentMethodsAdminSection({
                               className="w-full min-h-[48px] px-3 border border-gray-200 rounded-lg text-sm bg-gray-100 text-slate-600"
                             />
                             <p className="mt-1 text-xs text-slate-500">
-                              MundoTech recibe efectivo solamente en USD.
+                              {BRAND.name} recibe efectivo solamente en USD.
                             </p>
                           </div>
                         )}

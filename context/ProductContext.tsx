@@ -25,7 +25,7 @@ export interface Product {
   rating?:       number;
   /** Nº de reseñas aprobadas. */
   reviewCount?:  number;
-  /** true = MundoTech cubre el envío de este producto; false = cobro a destino. */
+  /** true = la tienda cubre el envío de este producto; false = cobro a destino. */
   freeShipping:  boolean;
 }
 

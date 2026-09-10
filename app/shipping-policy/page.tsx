@@ -2,16 +2,17 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import LegalPageLayout from '@/app/components/LegalPageLayout';
 import { readSettings } from '@/lib/data-store';
+import { BRAND } from '@/config/brand';
 
 export const revalidate = 300;
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://mundotechve.com';
+const SITE_URL = BRAND.siteUrl;
 const PAGE_URL = `${SITE_URL}/shipping-policy`;
 
 export const metadata: Metadata = {
   title: 'Envíos',
   description:
-    'Política de envíos de MundoTech Barquisimeto: cobertura nacional por MRW, Zoom y Tealca (cobro a destino), delivery gratis en Barquisimeto (Centro y Este), retiro en tienda.',
+    `Política de envíos de ${BRAND.name} Barquisimeto: cobertura nacional por MRW, Zoom y Tealca (cobro a destino), delivery gratis en Barquisimeto (Centro y Este), retiro en tienda.`,
   alternates: { canonical: PAGE_URL },
   robots: { index: true, follow: true },
 };

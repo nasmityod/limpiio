@@ -6,6 +6,7 @@ import {
   normalizeWhatsAppPhone,
   isValidWhatsAppPhone,
 } from '@/lib/whatsapp-phone';
+import { BRAND } from '@/config/brand';
 
 const EMOJI_ENC = {
   cart:    '%F0%9F%9B%92', // 🛒
@@ -65,7 +66,7 @@ function buildOrderSegments(input: WhatsAppOrderInput): WaSegment[] {
   const e = (emoji: EmojiKey) => seg.push({ emoji });
   const nl = () => t('\n');
 
-  e('cart'); t(` *Nuevo pedido MundoTech #${input.orderRef}*`); nl(); nl();
+  e('cart'); t(` *Nuevo pedido ${BRAND.name} #${input.orderRef}*`); nl(); nl();
   e('person'); t(` *Cliente:* ${input.customerName}`); nl();
   if (input.idNumber?.trim()) { e('id'); t(` *Cédula:* ${input.idNumber.trim()}`); nl(); }
   e('phone'); t(` *Teléfono:* ${input.phone}`); nl();
@@ -100,7 +101,7 @@ function buildOrderSegments(input: WhatsAppOrderInput): WaSegment[] {
   t(` *Total final:* $${input.totalUsd.toFixed(2)} ≈ Bs. ${totalBs.toFixed(2)} (tasa: Bs. ${input.rate.toFixed(2)})`);
   nl(); nl();
 
-  e('pending'); t(' *Pendiente de confirmación por MundoTech*');
+  e('pending'); t(` *Pendiente de confirmación por ${BRAND.name}*`);
 
   return seg;
 }

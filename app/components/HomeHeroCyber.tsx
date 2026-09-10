@@ -6,6 +6,7 @@ import Logo from '@/components/Logo';
 import { ArrowRight, Tag, MapPin } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useReducedMotion } from '@/lib/motion';
+import { BRAND } from '@/config/brand';
 
 /** Fila del modelo Banner (type: 'hero') tal como llega de Prisma. */
 export interface HeroBannerRow {
@@ -170,7 +171,7 @@ export default function HomeHeroCyber({
               );
               if (dist > 1) return null;
               const layerAlt =
-                s.title.replace(/\n/g, ' ') || s.badge || 'MundoTech — Conectados Contigo';
+                s.title.replace(/\n/g, ' ') || s.badge || `${BRAND.name} — Conectados Contigo`;
               const isActive = i === active;
               return (
                 <Image
@@ -240,7 +241,7 @@ export default function HomeHeroCyber({
         {/* Fallback h1 for screen readers when the hero has no visible copy */}
         {!showCopy && (
           <h1 className="sr-only">
-            MundoTech: Conectados Contigo · tecnología y variedades en Barquisimeto
+            {BRAND.name}: Conectados Contigo · tecnología y variedades en Barquisimeto
           </h1>
         )}
 
@@ -258,7 +259,7 @@ export default function HomeHeroCyber({
                 </h1>
               ) : (
                 <h1 className="sr-only">
-                  MundoTech: Conectados Contigo · tecnología y variedades en Barquisimeto
+                  {BRAND.name}: Conectados Contigo · tecnología y variedades en Barquisimeto
                 </h1>
               )}
 

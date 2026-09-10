@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Zap, ArrowRight, ChevronRight } from 'lucide-react';
+import { BRAND } from '@/config/brand';
 
 interface FlashProduct {
   id:            string;
@@ -123,7 +124,7 @@ function FlashCard({ product }: { product: FlashProduct }) {
   );
 }
 
-const FlashDeals = ({ products, title = 'Ofertas MundoTech', endHour = 23 }: Props) => {
+const FlashDeals = ({ products, title = `Ofertas ${BRAND.name}`, endHour = 23 }: Props) => {
   const { h, m, s } = useCountdown(endHour);
   if (products.length === 0) return null;
 
