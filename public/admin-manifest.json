@@ -1,7 +1,7 @@
 {
-  "name": "MundoTech Admin",
-  "short_name": "MT Admin",
-  "description": "Panel de administración de Mundo Tech — gestión móvil de inventario, pedidos y tienda física.",
+  "name": "Panel de administración",
+  "short_name": "Admin",
+  "description": "Panel de administración de la tienda — gestión móvil de inventario, pedidos y tienda física.",
   "start_url": "/admin",
   "scope": "/admin",
   "display": "standalone",

@@ -1,7 +1,7 @@
 /**
  * lib/cashea-config.ts — configuración tipada de la integración Cashea.
  *
- * Fuente de verdad: docs/ENTREGABLE-CLIENTE/integracion-cashea.md (Secciones
+ * Fuente de verdad: docs/cashea-orquestacion.md (Secciones
  * 2, 5 y 9). Mientras `CASHEA_ENABLED=false` (default), el método Cashea
  * sigue en su modo manual actual (coordinar por WhatsApp) y nada de esto se
  * usa. Solo cuando el flag pasa a `true` y llegan las credenciales reales, el

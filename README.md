@@ -1,8 +1,8 @@
-# MundoTech E-commerce
+# Plataforma de E-commerce
 
-Tienda online de MundoTech Barquisimeto — Next.js 16 (App Router) + Prisma 7 + PostgreSQL + NextAuth 4 + Resend + Cloudflare R2.
+Tienda online — Next.js 16 (App Router) + Prisma 7 + PostgreSQL + NextAuth 4 + Resend + Cloudflare R2.
 
-**Producción:** VPS propio (`mundotech.service` systemd activo; PM2 con [`ecosystem.config.js`](ecosystem.config.js) como alternativa no simultánea) en `https://mundotechve.com`. CI en GitHub Actions. `vercel.json` está vacío (`{}`); los crons ya no corren en Vercel.
+**Producción:** VPS propio (`$APP_SLUG.service` systemd activo; PM2 con [`ecosystem.config.js`](ecosystem.config.js) como alternativa no simultánea) en `https://tu-dominio.com`. CI en GitHub Actions. `vercel.json` está vacío (`{}`); los crons ya no corren en Vercel.
 
 > README operativo (PRD-059): cómo levantar el proyecto, migrar la base de datos y desplegar sin sorpresas.
 
@@ -13,7 +13,7 @@ Tienda online de MundoTech Barquisimeto — Next.js 16 (App Router) + Prisma 7 +
 - Node.js 20+ (CI usa 22)
 - PostgreSQL (Neon u otro; producción usa conexión remota con pooling)
 - Cuentas/servicios: Resend, Cloudflare R2 (y Upstash Redis recomendado en multi-instancia)
-- **Producción VPS:** systemd (`mundotech.service`), nginx ([`deploy/nginx/sites-available/mundotech`](deploy/nginx/sites-available/mundotech)), crontab ([`deploy/crontab.vps`](deploy/crontab.vps) instalado vía [`scripts/install-crontab.sh`](scripts/install-crontab.sh)) — ver [`docs/ENTREGABLE-CRON-BCV-VPS-V2.md`](docs/ENTREGABLE-CRON-BCV-VPS-V2.md)
+- **Producción VPS:** systemd (`$APP_SLUG.service`), nginx ([`deploy/nginx/sites-available/app`](deploy/nginx/sites-available/app)), crontab ([`deploy/crontab.vps`](deploy/crontab.vps) instalado vía [`scripts/install-crontab.sh`](scripts/install-crontab.sh)) — ver [`docs/ENTREGABLE-CRON-BCV-VPS-V2.md`](docs/ENTREGABLE-CRON-BCV-VPS-V2.md)
 
 ## Arranque local
 
@@ -59,7 +59,7 @@ Referencia completa con formato: `.env.example`.
 DATABASE_URL=            # Postgres con connection pooling (Neon, etc.)
 DIRECT_URL=              # Conexión directa sin PgBouncer — obligatoria para `prisma migrate deploy`
 NEXTAUTH_SECRET=
-NEXTAUTH_URL=https://mundotechve.com
+NEXTAUTH_URL=https://tu-dominio.com
 
 # Modo de compra server-side (obligatorio en producción)
 # whatsapp: checkout de una página, guest permitido, redirige a WhatsApp
@@ -71,12 +71,12 @@ CHECKOUT_MODE=whatsapp
 R2_ENDPOINT=
 R2_ACCESS_KEY_ID=
 R2_SECRET_ACCESS_KEY=
-R2_BUCKET_NAME=mundotech-media
+R2_BUCKET_NAME=storefront-media
 R2_PUBLIC_BASE_URL=https://cdn.tu-dominio.com
 NEXT_PUBLIC_R2_PUBLIC_BASE_URL=   # mismo valor; validación de comprobantes en admin (client)
 
 # R2 PRIVADO — bucket para comprobantes de pago (obligatorio en producción)
-R2_PRIVATE_BUCKET_NAME=mundotech-private
+R2_PRIVATE_BUCKET_NAME=storefront-private
 R2_PRIVATE_ACCESS_KEY_ID=
 R2_PRIVATE_SECRET_ACCESS_KEY=
 
@@ -85,14 +85,14 @@ CRON_SECRET=
 
 # EMAIL (recomendadas — sin ellas no se envían correos)
 RESEND_API_KEY=
-RESEND_FROM_ADDRESS=noreply@mundotechve.com
+RESEND_FROM_ADDRESS=noreply@tu-dominio.com
 
 # RECOMENDADAS EN PRODUCCIÓN
 DEPLOYMENT_ENV=cloudflare   # VPS detrás de Cloudflare → IP real en rate limit (cf-connecting-ip)
 UPSTASH_REDIS_REST_URL=
 UPSTASH_REDIS_REST_TOKEN=
-NEXT_PUBLIC_SITE_URL=https://mundotechve.com
-NEXT_PUBLIC_CONTACT_EMAIL=ventas@mundotechve.com
+NEXT_PUBLIC_SITE_URL=https://tu-dominio.com
+NEXT_PUBLIC_CONTACT_EMAIL=ventas@tu-dominio.com
 
 # OBSERVABILIDAD (PRD-033 — opcionales; sin DSN, Sentry es no-op)
 SENTRY_DSN=              # errores de servidor (instrumentation.ts)
@@ -116,18 +116,18 @@ Cambiar `CHECKOUT_MODE` requiere **rebuild y restart** del proceso Node (afecta 
 
 ```bash
 # 1. Editar el archivo de entorno (una sola línea)
-sudoedit /etc/mundotech/mundotech.env
+sudoedit /etc/$APP_SLUG/$APP_SLUG.env
 # → cambiar CHECKOUT_MODE=whatsapp  o  CHECKOUT_MODE=full
 
 # 2. Deploy completo (valida el modo antes de compilar; aborta si es inválido)
-cd /var/www/mundotech && npm run deploy:vps
+cd /var/www/$APP_SLUG && npm run deploy:vps
 ```
 
 #### Verificar el modo activo
 
 ```bash
 # Estado del servicio
-sudo systemctl status mundotech.service
+sudo systemctl status $APP_SLUG.service
 
 # Health endpoint
 curl -s http://127.0.0.1:3000/api/health | python3 -m json.tool
@@ -177,11 +177,11 @@ Si la BD ya tenía el schema del baseline anterior, el squash `init` puede reque
 
 ## Despliegue en VPS (producción)
 
-1. **Servicio:** `mundotech.service` (systemd) ejecuta `npm start` → `next start` en `:3000`. Config PM2 alternativa: [`ecosystem.config.js`](ecosystem.config.js) — solo un gestor activo a la vez.
-2. **Proxy:** nginx en [`deploy/nginx/sites-available/mundotech`](deploy/nginx/sites-available/mundotech) (SSL Cloudflare, `client_max_body_size 100m` para videos).
-3. **Variables:** `/etc/mundotech/mundotech.env` (systemd + crontab) y `.env` en el repo deben estar sincronizados (`CRON_SECRET`, BD, R2, etc.). **Si `CRON_SECRET` falta en `mundotech.env`, el cron BCV responderá 401 silenciosamente** — diagnosticar con `sudo grep -c "^CRON_SECRET=" /etc/mundotech/mundotech.env` (debe devolver `1`).
+1. **Servicio:** `$APP_SLUG.service` (systemd) ejecuta `npm start` → `next start` en `:3000`. Config PM2 alternativa: [`ecosystem.config.js`](ecosystem.config.js) — solo un gestor activo a la vez.
+2. **Proxy:** nginx en [`deploy/nginx/sites-available/app`](deploy/nginx/sites-available/app) (SSL Cloudflare, `client_max_body_size 100m` para videos).
+3. **Variables:** `/etc/$APP_SLUG/$APP_SLUG.env` (systemd + crontab) y `.env` en el repo deben estar sincronizados (`CRON_SECRET`, BD, R2, etc.). **Si `CRON_SECRET` falta en `$APP_SLUG.env`, el cron BCV responderá 401 silenciosamente** — diagnosticar con `sudo grep -c "^CRON_SECRET=" /etc/$APP_SLUG/$APP_SLUG.env` (debe devolver `1`).
 4. **Crontab:** Instalar/actualizar con `sudo bash scripts/install-crontab.sh`. El instalador valida `CRON_SECRET` y `scripts/run-bcv-cron.sh` antes de instalar. El archivo fuente es [`deploy/crontab.vps`](deploy/crontab.vps) (TZ America/Caracas).
-5. **Build seguro:** `npm run deploy:vps` (alias de `bash scripts/deploy-vps.sh`) — compila en `.next-staging` sin detener el servicio activo, luego swap atómico (stop → mv → start) de ~segundos, health-check con rollback automático, y purga opcional de caché Cloudflare vía `CF_ZONE_ID`/`CF_API_TOKEN` desde `/etc/mundotech/mundotech.env`.
+5. **Build seguro:** `npm run deploy:vps` (alias de `bash scripts/deploy-vps.sh`) — compila en `.next-staging` sin detener el servicio activo, luego swap atómico (stop → mv → start) de ~segundos, health-check con rollback automático, y purga opcional de caché Cloudflare vía `CF_ZONE_ID`/`CF_API_TOKEN` desde `/etc/$APP_SLUG/$APP_SLUG.env`.
 6. **Migraciones:** `npx prisma migrate deploy` se ejecuta dentro de `npm run build` (el script `build` lo incluye automáticamente).
 
 ### Artefactos locales del deploy
@@ -214,7 +214,7 @@ Documentación operativa completa: [`docs/ENTREGABLE-CRON-BCV-VPS-V2.md`](docs/E
 
 **Logs:**
 - `/var/log/bcv-cron.log` — cron BCV (644, root)
-- `/var/log/mundotech-cron.log` — abandoned-cart, review-request, purge-product-views, purge-temporary-data, purge-payment-uploads
+- `/var/log/$APP_SLUG-cron.log` — abandoned-cart, review-request, purge-product-views, purge-temporary-data, purge-payment-uploads
 
 `vercel.json` no define crons (`{}`). Backups del schedule legacy Vercel: `vercel.json.bak.*` en el servidor.
 
@@ -249,8 +249,8 @@ Documentación operativa completa: [`docs/ENTREGABLE-CRON-BCV-VPS-V2.md`](docs/E
 pip install git-filter-repo
 
 # 2. SOLO sobre un clon fresco y con los demás trabajos mergeados/commiteados
-git clone <url-del-repo> mundotech-limpio
-cd mundotech-limpio
+git clone <url-del-repo> mi-tienda
+cd mi-tienda
 
 # 3. Purgar el archivo de TODO el historial (también purga los PNG de Playwright)
 git filter-repo --invert-paths \
@@ -303,7 +303,7 @@ Equivalente con BFG: `bfg --delete-files db.json` (mismo flujo de clon fresco + 
 | `scripts/generate-placeholder.mjs` | Genera `public/placeholder-product.png` (PNG sin dep.) |
 | `scripts/normalize-admin-role.ts` | Normaliza one-shot: minúsculas → `ADMIN`/`CLIENT` |
 | `deploy/crontab.vps` | Fuente de verdad del crontab de producción |
-| `deploy/nginx/sites-available/mundotech` | Configuración de nginx (SSL Cloudflare, 100m video) |
+| `deploy/nginx/sites-available/app` | Configuración de nginx (SSL Cloudflare, 100m video) |
 | `lib/abandoned-cart.ts` | Carrito abandonado (tokens de recuperación **hasheados**) |
 | `prisma/schema.prisma` | Schema (dueño: segmento 03 — ver docs/ANALISIS-PRODUCCION-00-INDICE.md) |
 | `app/api/cron/*` | Crons autenticados con `CRON_SECRET` |
@@ -327,11 +327,11 @@ El script [`scripts/backup-postgres.sh`](scripts/backup-postgres.sh) realiza bac
 ```bash
 # 1. Descargar dump desde R2 (dashboard o presigned URL)
 # 2. Detener la app
-sudo systemctl stop mundotech
+sudo systemctl stop $APP_SLUG
 # 3. Restaurar (usa DIRECT_URL, no pooler)
-pg_restore --clean --if-exists -d "$DIRECT_URL" mundotech_YYYYMMDD_HHMMSS.dump
+pg_restore --clean --if-exists -d "$DIRECT_URL" <slug>_YYYYMMDD_HHMMSS.dump
 # 4. Re-iniciar y verificar health
-sudo systemctl start mundotech
+sudo systemctl start $APP_SLUG
 curl -s http://127.0.0.1:3000/api/health
 ```
 
@@ -358,7 +358,7 @@ Detalle completo: [`docs/MONITOREO-HEALTH.md`](docs/MONITOREO-HEALTH.md).
 | Comando | Descripción |
 |---|---|
 | `npm test` | Tests unitarios (Vitest, lógica pura sin BD). `vitest.config.ts` inyecta dummies de entorno. |
-| `npm run test:e2e` | Playwright E2E con BD Postgres aislada (nombre debe contener `_e2e`). Guard de seguridad: aborta si baseURL contiene `mundotechve.com`. |
+| `npm run test:e2e` | Playwright E2E con BD Postgres aislada (nombre debe contener `_e2e`). Guard de seguridad: aborta si baseURL contiene `tu-dominio.com`. |
 | `npm run test:e2e:ui` | Playwright UI mode interactivo. |
 | `npm run test:r2-private` | Prueba de integración contra R2 privado real: crea objeto → head → signed GET → delete → head 404. Requiere credenciales reales de R2 privado. |
 | `npm run security:api-guards` | Verifica que todos los Route Handlers de mutación (POST/PUT/PATCH/DELETE) tengan `rejectInvalidMutationOrigin`. |

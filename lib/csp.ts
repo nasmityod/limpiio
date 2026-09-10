@@ -24,7 +24,7 @@
  *   - Sentry DSN origin (solo si NEXT_PUBLIC_SENTRY_DSN está configurado)
  *   - Cashea (script/connect/frame-src) — SOLO si NEXT_PUBLIC_CASHEA_ENABLED='true'
  *     Y `CASHEA_CSP_DOMAINS` fue completada con dominios reales (Sección 12,
- *     preguntas 14-15, docs/ENTREGABLE-CLIENTE/integracion-cashea.md). Vacía
+ *     preguntas 14-15, docs/cashea-orquestacion.md). Vacía
  *     hoy — no relaja la CSP con el flag apagado ni con dominios inventados.
  *
  * @see middleware.ts — aplica estos builders con nonce por request

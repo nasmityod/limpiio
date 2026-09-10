@@ -1,7 +1,7 @@
-# Auditoría y optimización de rendimiento — MundoTech
+# Auditoría y optimización de rendimiento
 
 **Fecha:** 2026-08-27
-**Rama de trabajo:** `perf/audit-2026-08` (git worktree en `/home/deploy/mundotech-audit`)
+**Rama de trabajo:** `perf/audit-2026-08` (git worktree en `/home/deploy/audit-worktree`)
 **Commit base:** `0d05152`
 **Next.js:** 16.2.10 (Turbopack) · **React:** 19.2.5 · App Router · Node 22
 
@@ -20,9 +20,9 @@ npx next build
 
 ### Mecanismo
 
-`/var/www/mundotech` **no es una copia de trabajo: es el despliegue de producción**.
-El servicio systemd `mundotech.service` ejecuta `next start` sirviendo desde
-`/var/www/mundotech/.next`.
+`/var/www/$APP_SLUG` **no es una copia de trabajo: es el despliegue de producción**.
+El servicio systemd `$APP_SLUG.service` ejecuta `next start` sirviendo desde
+`/var/www/$APP_SLUG/.next`.
 
 `next build` **borra y regenera `.next` in-place**. La ejecución falló a mitad:
 
@@ -43,11 +43,11 @@ Error: ENOTEMPTY: directory not empty, rmdir
   nuevo habría recibido 404.
 - El sitio **no habría sobrevivido a un reinicio ni a un despliegue** en ese estado.
 
-Error real en `journalctl -u mundotech`:
+Error real en `journalctl -u $APP_SLUG`:
 
 ```
 ⨯ Error [ChunkLoadError]: Failed to load chunk server/chunks/ssr/_0pauh9z._.js
-  [cause]: Cannot find module '/var/www/mundotech/.next/server/chunks/ssr/_0pauh9z._.js'
+  [cause]: Cannot find module '/var/www/$APP_SLUG/.next/server/chunks/ssr/_0pauh9z._.js'
 ```
 
 ### Build afectado
@@ -78,7 +78,7 @@ Pasos ejecutados:
 mv .next .next-BROKEN-20260827-102807     # el build dañado se CONSERVA
 cp -a .next-previous .next
 # (re-merge de server/ — ver nota abajo)
-sudo systemctl restart mundotech          # ejecutado manualmente por el propietario
+sudo systemctl restart $APP_SLUG          # ejecutado manualmente por el propietario
 ```
 
 **Nota sobre la copia:** el primer `cp -a` falló parcialmente porque el servidor vivo
@@ -125,11 +125,11 @@ anterior funciona sin problemas contra el esquema migrado.
 ### Regla permanente de aislamiento
 
 > **PROHIBIDO** ejecutar `next build`, `npx next build` o cualquier comando que
-> escriba en `/var/www/mundotech/.next` mientras esa carpeta sea producción.
+> escriba en `/var/www/$APP_SLUG/.next` mientras esa carpeta sea producción.
 
 Todo el trabajo de auditoría se realiza en un **git worktree aislado**:
 
-- Ubicación: `/home/deploy/mundotech-audit` (rama `perf/audit-2026-08`)
+- Ubicación: `/home/deploy/audit-worktree` (rama `perf/audit-2026-08`)
 - Puerto local exclusivo: **3210** (producción sigue en 3000; el 3100 pertenece a
   otro servicio preexistente y no se tocó)
 - `node_modules` es una **copia real** (no symlink: Turbopack rechaza symlinks que
@@ -805,7 +805,7 @@ home (solo `localStorage`, cero escrituras en BD). **Nunca se pulsó "Realizar c
 
 | Comprobación | Resultado |
 |---|---|
-| Carga de `/checkout` | 200, `h1` = "MundoTech — Pedido por WhatsApp" |
+| Carga de `/checkout` | 200, `h1` = "<marca> — Pedido por WhatsApp" |
 | Campos de formulario | 9 inputs / 8 labels / 4 radios |
 | Métodos de pago presentes | Pago Móvil, Zelle, Binance, Efectivo, Transferencia, Cashea |
 | Envío / retiro | ambos presentes |
@@ -841,9 +841,9 @@ queda sin verificar.**
 
 | Elemento | Home | Ficha de producto |
 |---|---|---|
-| `<title>` | "MundoTech Barquisimeto \| Tecnología, gadgets y variedades" | "Set de Termo… \| MundoTech" (plantilla aplicada) |
+| `<title>` | "<marca> Barquisimeto \| Tecnología, gadgets y variedades" | "Set de Termo… \| <marca>" (plantilla aplicada) |
 | `description` | presente | presente |
-| `canonical` | `https://mundotechve.com` | `https://mundotechve.com/product/<slug>` |
+| `canonical` | `https://tu-dominio.com` | `https://tu-dominio.com/product/<slug>` |
 | `robots` | `index, follow` | `index, follow` |
 | Open Graph | 7 tags | 6 tags |
 | JSON-LD | 3 bloques: WebSite, LocalBusiness, Organization | 6 bloques: + Product, BreadcrumbList, FAQPage |
@@ -958,7 +958,7 @@ infraestructura, fuera del alcance de este trabajo.
 ## 15. Estado del despliegue
 
 **Nada de este trabajo está en producción.** Todos los cambios viven en la rama
-`perf/audit-2026-08` dentro de `/home/deploy/mundotech-audit`.
+`perf/audit-2026-08` dentro de `/home/deploy/audit-worktree`.
 
 Producción sigue sirviendo el build restaurado `dAGvg1PHxviK0xkhBQ9AE` (código
 `fa7e71d`, 20-ago), que es **un commit anterior a `0d05152`** por el incidente de la

@@ -2,7 +2,7 @@
  * lib/cashea.ts — cliente backend de Cashea, tipos del payload del SDK y el
  * adaptador de verificación autoritativa.
  *
- * Fuente de verdad: docs/ENTREGABLE-CLIENTE/integracion-cashea.md (Secciones
+ * Fuente de verdad: docs/cashea-orquestacion.md (Secciones
  * 3, 4, 5, 7 y 11). Este módulo es SOLO de servidor — nunca importar desde un
  * componente cliente (expondría `casheaPrivateFetch`/la clave privada).
  *

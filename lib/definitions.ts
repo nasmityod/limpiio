@@ -66,7 +66,7 @@ export const VALID_ORDER_STATUSES: OrderStatus[] = [
 ];
 
 // ─────────────────────────────────────────────────────────────
-// CASHEA (Fase 7 — ver docs/ENTREGABLE-CLIENTE/integracion-cashea.md
+// CASHEA (Fase 7 — ver docs/cashea-orquestacion.md
 // Sección 6: máquina de estados `casheaStatus`)
 // ─────────────────────────────────────────────────────────────
 

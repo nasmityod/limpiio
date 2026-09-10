@@ -238,7 +238,7 @@ model PasswordResetToken {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CASHEA — Sección 6 del documento maestro (docs/ENTREGABLE-CLIENTE/integracion-cashea.md)
+// CASHEA — Sección 6 del documento maestro (docs/cashea-orquestacion.md)
 // Transiciones válidas:
 //   CREATED -> REDIRECTED -> RETURNED -> VERIFYING -> CONFIRMED
 //   VERIFYING -> RETURNED            (verificación aún pendiente, reintentable)

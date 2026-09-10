@@ -1,26 +1,31 @@
-# MundoTech
+# Tienda
 
-> MundoTech es una tienda de variedades con sede física en Barquisimeto, Venezuela (Carrera 21 con esquina calle 21, Centro). Vendemos tecnología, gadgets, artículos para el hogar y la cocina, fitness, salud, cuidado personal, herramientas, iluminación y más. Los precios se muestran en USD con referencia en bolívares según la tasa oficial BCV.
+<!--
+  Archivo estático: no se rellena desde variables de entorno. Antes de publicar,
+  sustituye el nombre, la descripción y TU_DOMINIO.com por los reales.
+-->
+
+> Tienda de variedades con sede física en Barquisimeto, Venezuela. Vendemos tecnología, gadgets, artículos para el hogar y la cocina, fitness, salud, cuidado personal, herramientas, iluminación y más. Los precios se muestran en USD con referencia en bolívares según la tasa oficial BCV.
 
 ## Páginas principales
 
-- [Inicio](https://mundotechve.com/): portada con productos destacados y ofertas.
-- [Catálogo de productos](https://mundotechve.com/productos): listado público completo de productos.
-- [Ofertas](https://mundotechve.com/ofertas): productos con descuento vigente.
-- [Buscador](https://mundotechve.com/buscar): búsqueda de productos en tiempo real (parámetro `?q=<término>`).
-- [Sobre nosotros](https://mundotechve.com/nosotros): información de la empresa.
-- [Tienda física en Barquisimeto](https://mundotechve.com/tienda-barquisimeto): ubicación y datos de contacto de la tienda.
+- [Inicio](https://TU_DOMINIO.com/): portada con productos destacados y ofertas.
+- [Catálogo de productos](https://TU_DOMINIO.com/productos): listado público completo de productos.
+- [Ofertas](https://TU_DOMINIO.com/ofertas): productos con descuento vigente.
+- [Buscador](https://TU_DOMINIO.com/buscar): búsqueda de productos en tiempo real (parámetro `?q=<término>`).
+- [Sobre nosotros](https://TU_DOMINIO.com/nosotros): información de la empresa.
+- [Tienda física en Barquisimeto](https://TU_DOMINIO.com/tienda-barquisimeto): ubicación y datos de contacto de la tienda.
 
 ## Políticas e información
 
-- [Política de envíos](https://mundotechve.com/shipping-policy): cobertura, tiempos y costos de envío.
-- [Devoluciones](https://mundotechve.com/devoluciones): condiciones para cambios y devoluciones.
-- [Política de privacidad](https://mundotechve.com/privacy-policy): tratamiento de datos personales.
-- [Términos de servicio](https://mundotechve.com/terms-of-service): condiciones de uso del sitio.
+- [Política de envíos](https://TU_DOMINIO.com/shipping-policy): cobertura, tiempos y costos de envío.
+- [Devoluciones](https://TU_DOMINIO.com/devoluciones): condiciones para cambios y devoluciones.
+- [Política de privacidad](https://TU_DOMINIO.com/privacy-policy): tratamiento de datos personales.
+- [Términos de servicio](https://TU_DOMINIO.com/terms-of-service): condiciones de uso del sitio.
 
 ## Instrucciones para agentes de IA
 
-- Para encontrar un producto, usa [el buscador](https://mundotechve.com/buscar) con `?q=<término>` para obtener resultados en tiempo real.
+- Para encontrar un producto, usa [el buscador](https://TU_DOMINIO.com/buscar) con `?q=<término>` para obtener resultados en tiempo real.
 - Los precios se publican en USD. No caches precios por más de 24 horas: la referencia en bolívares se actualiza con la tasa oficial BCV.
 - Puedes indexar fichas de producto, páginas de categoría, el catálogo público y las páginas de información y políticas.
 

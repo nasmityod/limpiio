@@ -8,7 +8,7 @@
 
 ## Resumen ejecutivo
 
-El Panel Admin de mundotech se degradaba de forma **lineal con el tamaño del
+El Panel Admin de la tienda se degradaba de forma **lineal con el tamaño del
 catálogo** porque su pantalla central —Inventario— estaba construida sobre una
 premisa que dejó de ser cierta al crecer la tienda: *«descarga todo el catálogo y
 filtra/pinta en el navegador»*.
@@ -400,7 +400,7 @@ sólo se atenúan** mientras llega la búsqueda nueva.
 ## Evidencia
 
 Todas las cifras provienen de mediciones reales sobre una base de datos de
-pruebas dedicada (`mundotech_perf`), nunca de producción. La siembra es
+pruebas dedicada (`app_perf`), nunca de producción. La siembra es
 reproducible con `scripts/perf-seed.mjs`, que **se niega a escribir** si el
 nombre de la base no contiene `perf` o `test`.
 
@@ -806,7 +806,7 @@ antiguas, y la limpieza de archivos huérfanos en R2
 ## Antes vs después
 
 Todos los valores son medidos, no estimados. Dataset de referencia: 5 000
-productos, 20 000 pedidos, 5 000 reseñas en `mundotech_perf`.
+productos, 20 000 pedidos, 5 000 reseñas en `app_perf`.
 
 ### Inventario (`/admin/products`)
 
@@ -1001,9 +1001,10 @@ los mismos nombres de prueba**.
 Ninguno toca las rutas, componentes ni acciones modificados aquí. Quedan
 documentados, **no silenciados**.
 
-También falla `npm run plan:check`, porque el script busca un archivo
-`PLAN-AUDITORIA-CORRECCION-MUNDOTECH.md` que no existe en el repositorio.
-Preexistente y ajeno a este trabajo.
+También fallaba `npm run plan:check`, porque el script buscaba un archivo de
+plan que no existe en el repositorio. Preexistente y ajeno a aquel trabajo.
+Resuelto después: el script, su entrada en package.json y su paso de CI se
+eliminaron durante el desmarcado del proyecto.
 
 ---
 
@@ -1071,10 +1072,10 @@ Documentados honestamente, con el criterio aplicado en cada caso.
     la consulta sin cota frente a construir una paginación que ninguna tienda real
     va a usar.
 
-11. **La base de pruebas `mundotech_perf` queda creada en el servidor.** Es una
+11. **La base de pruebas `app_perf` queda creada en el servidor.** Es una
     base separada, sembrada con datos sintéticos, que **nunca** se toca desde la
     aplicación (sólo desde los scripts, y con la guarda de nombre). Puede
-    eliminarse con `DROP DATABASE mundotech_perf` cuando ya no se necesite.
+    eliminarse con `DROP DATABASE app_perf` cuando ya no se necesite.
 
 12. **La navegación del inventario es Anterior/Siguiente, no salto directo a una
     página.** Es la contrapartida natural de la paginación keyset, que a cambio da
@@ -1087,8 +1088,8 @@ Documentados honestamente, con el criterio aplicado en cada caso.
 
 ```bash
 # 1. Crear y sembrar una base de pruebas (NUNCA producción; el script lo verifica)
-createdb mundotech_perf
-PERF_URL="postgresql://USUARIO:CLAVE@127.0.0.1:5432/mundotech_perf"
+createdb app_perf
+PERF_URL="postgresql://USUARIO:CLAVE@127.0.0.1:5432/app_perf"
 DATABASE_URL="$PERF_URL" DIRECT_URL="$PERF_URL" npx prisma migrate deploy
 PERF_DATABASE_URL="$PERF_URL" npm run perf:seed -- --products 5000 --orders 20000 --reviews 5000
 
