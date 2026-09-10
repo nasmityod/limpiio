@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { getSiteContent, updateSiteContent } from '@/app/actions/siteContentActions';
 import { DEFAULT_SITE_CONTENT, type SiteContent, type TrustIcon } from '@/lib/site-content-schema';
-import { whatsappHref } from '@/lib/mundotech-social';
+import { whatsappHref } from '@/lib/social-links';
 import PhotoUploader from '@/components/admin/PhotoUploader';
 
 const ICON_OPTIONS: { value: TrustIcon; label: string; icon: LucideIcon }[] = [

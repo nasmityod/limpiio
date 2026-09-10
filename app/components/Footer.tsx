@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { Phone, MapPin, Mail, Clock } from 'lucide-react';
 import type { SiteShellData } from '@/lib/site-shell-cache';
-import { whatsappHref } from '@/lib/mundotech-social';
+import { whatsappHref } from '@/lib/social-links';
 import { resolveFooterPhoneLinks } from '@/lib/footer-phones';
 import Logo from '@/components/Logo';
 import { BRAND } from '@/config/brand';

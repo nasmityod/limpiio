@@ -3,9 +3,10 @@
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { MapPin, ShieldCheck } from 'lucide-react';
-import { whatsappHref } from '@/lib/mundotech-social';
+import { whatsappHref } from '@/lib/social-links';
 import Logo from '@/components/Logo';
 import { useReducedMotion, reducedTransition } from '@/lib/motion';
+import { BRAND } from '@/config/brand';
 
 export type AuthSplitVariant = 'login' | 'register' | 'recovery';
 
@@ -46,7 +47,7 @@ export default function AuthSplitLayout({
   const { tagline } = COPY[variant];
   const waHref = whatsappHref(
     '0412-1471338',
-    'Hola MundoTech, necesito ayuda con mi cuenta en la página web.',
+    `Hola ${BRAND.name}, necesito ayuda con mi cuenta en la página web.`,
   );
 
   return (

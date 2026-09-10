@@ -217,12 +217,12 @@
       100% 100%;
   }
 
-  /* Brillo recorrido en botones MundoTech (sin afectar accesibilidad del texto) */
-  .btn-mundotech-shimmer {
+  /* Brillo recorrido en botones de marca (sin afectar accesibilidad del texto) */
+  .btn-brand-shimmer {
     position: relative;
     overflow: hidden;
   }
-  .btn-mundotech-shimmer::after {
+  .btn-brand-shimmer::after {
     content: '';
     position: absolute;
     inset: 0;

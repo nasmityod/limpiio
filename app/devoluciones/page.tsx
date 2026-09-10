@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import LegalPageLayout from '@/app/components/LegalPageLayout';
 import { readSettings } from '@/lib/data-store';
-import { whatsappHref } from '@/lib/mundotech-social';
+import { whatsappHref } from '@/lib/social-links';
 import { BRAND } from '@/config/brand';
 
 const SITE_URL = BRAND.siteUrl;

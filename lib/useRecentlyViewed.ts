@@ -13,7 +13,7 @@ export interface RecentlyViewedItem {
   ts: number;
 }
 
-const STORAGE_KEY = 'mundotech:recently-viewed';
+const STORAGE_KEY = 'store:recently-viewed';
 const MAX_ITEMS   = 8;
 
 const safeParse = (raw: string | null): RecentlyViewedItem[] => {

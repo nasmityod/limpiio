@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { EnrichedOrder } from '@/app/account/orders/[id]/page';
 import type { PublicOrderLookup } from '@/lib/definitions';
-import { MUNDOTECH_SOCIAL } from '@/lib/mundotech-social';
+import { SOCIAL_LINKS } from '@/lib/social-links';
 import { Badge } from '@/components/ui/Badge';
 import { getOrderDualMoney, hasFrozenBsPricing } from '@/lib/order-pricing';
 import { DualOrderMoney } from '@/components/order/DualOrderMoney';
@@ -80,7 +80,7 @@ export default function OrderDetailClient({ order }: OrderDetailClientProps) {
     order.paymentMethod === 'Cashea' &&
     !order.paidAt &&
     order.status !== 'Cancelado';
-  const casheaWhatsappHref = `${MUNDOTECH_SOCIAL.whatsapp}?text=${encodeURIComponent(
+  const casheaWhatsappHref = `${SOCIAL_LINKS.whatsapp}?text=${encodeURIComponent(
     `Hola ${BRAND.name} 👋 Quiero pagar con Cashea mi pedido #${String(order.orderNumber).padStart(4, '0')}. ¿Me ayudan a coordinar el pago?`
   )}`;
   const status =

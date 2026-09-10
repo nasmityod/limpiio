@@ -6,7 +6,7 @@ import Image from 'next/image';
 import { motion } from 'framer-motion';
 import { Check, ArrowRight, Package, Mail, Home, MessageCircle, AlertTriangle } from 'lucide-react';
 import { useReducedMotion, reducedTransition } from '@/lib/motion';
-import { MUNDOTECH_SOCIAL } from '@/lib/mundotech-social';
+import { SOCIAL_LINKS } from '@/lib/social-links';
 import { CASHEA_STATUS_CUSTOMER_COPY } from '@/lib/definitions';
 import type { EnrichedOrder } from './page';
 import { DualOrderMoney } from '@/components/order/DualOrderMoney';
@@ -140,7 +140,7 @@ export default function SuccessClientPage({ order }: Props) {
           <motion.div variants={fadeUp} className="mt-6 space-y-3">
             <motion.a
               variants={fadeUp}
-              href={`${MUNDOTECH_SOCIAL.whatsapp}?text=${encodeURIComponent(
+              href={`${SOCIAL_LINKS.whatsapp}?text=${encodeURIComponent(
                 `Hola ${BRAND.name} 👋 Quiero pagar con Cashea mi pedido #${String(order.orderNumber).padStart(4, '0')}. ¿Me ayudan a coordinar el pago?`
               )}`}
               target="_blank"
@@ -175,7 +175,7 @@ export default function SuccessClientPage({ order }: Props) {
         {order.paymentMethod !== 'Cashea' && (
           <motion.a
             variants={fadeUp}
-            href={`${MUNDOTECH_SOCIAL.whatsapp}?text=${encodeURIComponent(
+            href={`${SOCIAL_LINKS.whatsapp}?text=${encodeURIComponent(
               isWhatsAppOrder
                 ? `Hola ${BRAND.name} 👋 Acabo de hacer el pedido #${String(order.orderNumber).padStart(4, '0')}. Quiero coordinar el pago y el envío.`
                 : `Hola ${BRAND.name} 👋 Acabo de hacer el pedido #${String(order.orderNumber).padStart(4, '0')}. Quiero recibir las actualizaciones de mi pedido por WhatsApp.`

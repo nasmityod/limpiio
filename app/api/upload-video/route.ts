@@ -199,7 +199,7 @@ export async function POST(request: Request) {
       );
     }
 
-    tmpDir = await mkdtemp(join(tmpdir(), 'mundotech-video-'));
+    tmpDir = await mkdtemp(join(tmpdir(), 'video-upload-'));
     const inputPath = join(tmpDir, 'input');
 
     await streamFileToDisk(file, inputPath);

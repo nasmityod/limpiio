@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { motion } from 'framer-motion';
 import { Check, ArrowRight, Package, Mail, Home, MessageCircle } from 'lucide-react';
 import { useReducedMotion, reducedTransition } from '@/lib/motion';
-import { MUNDOTECH_SOCIAL } from '@/lib/mundotech-social';
+import { SOCIAL_LINKS } from '@/lib/social-links';
 import type { GuestOrderConfirmation } from '@/lib/definitions';
 import { GuestOrderItem } from '@/lib/definitions';
 import { DualOrderMoney } from '@/components/order/DualOrderMoney';
@@ -143,7 +143,7 @@ export default function GuestSuccessClientPage({ order, guestToken }: Props) {
         {/* WhatsApp CTA */}
         <motion.a
           variants={fadeUp}
-          href={`${MUNDOTECH_SOCIAL.whatsapp}?text=${encodeURIComponent(
+          href={`${SOCIAL_LINKS.whatsapp}?text=${encodeURIComponent(
             `Hola ${BRAND.name} 👋 Acabo de hacer el pedido #${orderNumberPadded}. Quiero recibir las actualizaciones de mi pedido por WhatsApp.`
           )}`}
           target="_blank"

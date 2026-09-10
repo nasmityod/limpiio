@@ -111,7 +111,7 @@ export async function GET(request: Request) {
     return new Response(`\uFEFF${csv}`, {
       headers: {
         'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': `attachment; filename="inventario-mundotech-${stamp}.csv"`,
+        'Content-Disposition': `attachment; filename="inventario-${stamp}.csv"`,
         'Cache-Control': 'no-store',
       },
     });

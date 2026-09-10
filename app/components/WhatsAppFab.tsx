@@ -2,7 +2,7 @@
 
 import { usePathname } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { whatsappHref } from '@/lib/mundotech-social';
+import { whatsappHref } from '@/lib/social-links';
 import { useReducedMotion, reducedTransition } from '@/lib/motion';
 
 /**

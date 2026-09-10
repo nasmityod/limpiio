@@ -1,14 +1,16 @@
-/** URLs oficiales — sobreescribe con NEXT_PUBLIC_* en .env.local */
+import { BRAND } from '@/config/brand';
 
-export const MUNDOTECH_SOCIAL = {
-  instagram:
-    process.env.NEXT_PUBLIC_INSTAGRAM_URL ?? 'https://instagram.com/Mundotech39',
-  facebook:
-    process.env.NEXT_PUBLIC_FACEBOOK_URL ?? 'https://www.facebook.com/',
+/**
+ * URLs de redes sociales de la tienda. La única fuente es `config/brand.ts`
+ * (variables NEXT_PUBLIC_*): sin configurar quedan vacías, de modo que una
+ * instancia derivada nunca enlace a los perfiles de otra tienda. Quien las
+ * consuma debe ocultar el enlace cuando el valor esté vacío.
+ */
+export const SOCIAL_LINKS = {
+  instagram: BRAND.social.instagram,
+  facebook: BRAND.social.facebook,
   /** wa.me con código país sin + (ej. 584121471338) */
-  whatsapp:
-    process.env.NEXT_PUBLIC_WHATSAPP_URL ??
-    'https://wa.me/584121471338',
+  whatsapp: BRAND.social.whatsapp,
 } as const;
 
 /**

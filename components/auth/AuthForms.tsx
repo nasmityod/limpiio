@@ -35,6 +35,7 @@ import {
 import { resolvePostLoginRedirect, safeInternalPath } from '@/lib/auth-path';
 import { registerUserAction } from '@/app/actions/authActions';
 import { toast } from '@/components/ui/use-toast';
+import { BRAND } from '@/config/brand';
 
 function GoogleMark({ className }: { className?: string }) {
   return (
@@ -189,7 +190,7 @@ export function AuthLoginForm({ callbackUrl, defaultEmail }: LoginPanelProps) {
   const finishSuccess = useCallback(async () => {
     toast({
       title: 'Sesión iniciada',
-      description: 'Bienvenido de nuevo a MundoTech.',
+      description: `Bienvenido de nuevo a ${BRAND.name}.`,
       variant: 'success',
     });
     router.refresh();
@@ -200,7 +201,7 @@ export function AuthLoginForm({ callbackUrl, defaultEmail }: LoginPanelProps) {
 
   const onSubmit: SubmitHandler<AuthLoginValues> = async (data) => {
     try {
-      sessionStorage.setItem('mundotech-auth-remember', rememberMe ? '1' : '0');
+      sessionStorage.setItem('auth-remember', rememberMe ? '1' : '0');
     } catch {
       /* ignore */
     }
@@ -354,7 +355,7 @@ export function AuthLoginForm({ callbackUrl, defaultEmail }: LoginPanelProps) {
           className={cn(
             'relative mt-2 flex h-11 w-full items-center justify-center gap-2 overflow-hidden rounded-xl',
             'bg-[#0B1220] text-white font-semibold tracking-tight shadow-soft hover:bg-[#111826] hover:shadow-card',
-            'transition-colors duration-200 disabled:opacity-55 disabled:pointer-events-none btn-mundotech-shimmer',
+            'transition-colors duration-200 disabled:opacity-55 disabled:pointer-events-none btn-brand-shimmer',
           )}
         >
           {submitting ? (
@@ -722,7 +723,7 @@ export function AuthRegisterForm({ callbackUrl }: RegisterPanelProps) {
               <Link href="/terms-of-service" className="font-semibold text-navy underline-offset-2 hover:underline">
                 términos
               </Link>{' '}
-              y el tratamiento de mis datos conforme a las políticas de MundoTech.
+              y el tratamiento de mis datos conforme a las políticas de {BRAND.name}.
             </span>
           </label>
           {form.formState.errors.acceptTerms && (

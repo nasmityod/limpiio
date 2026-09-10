@@ -16,7 +16,7 @@ const InstagramGlyph = ({ size = 17, className = '' }: { size?: number; classNam
 import { googleMapsBusinessUrl, googleMapsEmbedUrl } from '@/lib/google-maps';
 import { readSeoLocal, describeOpeningHours } from '@/lib/seo-local';
 import { readSettings } from '@/lib/data-store';
-import { whatsappHref } from '@/lib/mundotech-social';
+import { whatsappHref } from '@/lib/social-links';
 import { BRAND } from '@/config/brand';
 
 const SITE_URL = BRAND.siteUrl;

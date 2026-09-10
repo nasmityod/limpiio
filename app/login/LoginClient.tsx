@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 import AuthSplitLayout from '@/components/auth/AuthSplitLayout';
-import { AuthLoginForm } from '@/components/auth/MundoTechAuthForms';
+import { AuthLoginForm } from '@/components/auth/AuthForms';
 import {
   readFreshStashedLoginRedirectPath,
   clearStashedLoginRedirectPath,

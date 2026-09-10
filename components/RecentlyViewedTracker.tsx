@@ -6,7 +6,7 @@ import { track, GA4_CURRENCY } from '@/lib/ga4';
 
 function getOrCreateSessionId(): string {
   if (typeof window === 'undefined') return '';
-  const KEY = 'mundotech:sid';
+  const KEY = 'store:sid';
   let sid = sessionStorage.getItem(KEY);
   if (!sid) {
     sid = `${Date.now()}-${Math.random().toString(36).slice(2)}`;

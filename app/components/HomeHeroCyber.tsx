@@ -272,7 +272,7 @@ export default function HomeHeroCyber({
               <div className="mt-3 sm:mt-5 flex flex-wrap items-center gap-2 sm:gap-3">
                 <Link
                   href={slide.href}
-                  className="btn-mundotech-shimmer inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-[#E6C200] bg-[#FFD700] px-4 sm:px-5 text-[13px] sm:text-sm font-black text-black shadow-lg transition-all duration-300 active:scale-[0.97] hover:bg-[#FFE03A]"
+                  className="btn-brand-shimmer inline-flex min-h-[44px] items-center gap-2 rounded-lg border border-[#E6C200] bg-[#FFD700] px-4 sm:px-5 text-[13px] sm:text-sm font-black text-black shadow-lg transition-all duration-300 active:scale-[0.97] hover:bg-[#FFE03A]"
                 >
                   {slide.cta} <ArrowRight size={16} strokeWidth={2.5} aria-hidden />
                 </Link>
