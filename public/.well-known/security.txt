@@ -1,0 +1,7 @@
+# security.txt (RFC 9116) — MundoTech
+# Reporte responsable de vulnerabilidades de seguridad.
+# TODO: reemplazar por el contacto real antes de publicar.
+Contact: mailto:seguridad@mundotechve.com
+Expires: 2027-08-01T00:00:00.000Z
+Preferred-Languages: es, en
+Canonical: https://mundotechve.com/.well-known/security.txt

@@ -1,0 +1,296 @@
+# PRD-031: CI mínimo — lint + typecheck + tests + build real contra Postgres
+# limpio (valida también que las migraciones Prisma reproducen la BD: PRD-004).
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  quality:
+    name: Lint, tipos y tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+        env:
+          # postinstall ejecuta `prisma generate` (no necesita BD)
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+
+      - name: Verificar versiones de seguridad
+        run: npm run security:versions
+
+      - name: Auditoría de dependencias runtime (bloqueante)
+        run: npm run security:audit:runtime
+
+      - name: Auditoría de dependencias dev (no bloqueante)
+        run: npm run security:audit:dev
+        continue-on-error: true
+
+      - name: Subir artifact de auditoría dev
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: dev-dependency-audit
+          path: docs/DEV-DEPENDENCY-AUDIT.md
+          retention-days: 30
+
+      - name: Verificar guards de origen API
+        run: npm run security:api-guards
+
+      - name: Verificar guards RBAC en APIs/actions
+        run: npm run security:permission-guards
+
+      - name: Verificar guards RBAC en páginas admin
+        run: npm run security:admin-page-guards
+
+      - name: Verificar consistencia del plan de auditoría
+        run: npm run plan:check
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: TypeScript
+        run: npm run typecheck
+
+      - name: Tests unitarios
+        run: npm test
+
+  build:
+    name: Migraciones + build de producción
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: mundotech_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/mundotech_ci
+      # migrate deploy lee DIRECT_URL vía prisma.config.ts (sin PgBouncer en CI = mismo valor)
+      DIRECT_URL: postgresql://ci:ci@localhost:5432/mundotech_ci
+      NEXTAUTH_SECRET: ci-secret-no-real
+      NEXTAUTH_URL: http://localhost:3000
+      CRON_SECRET: ci-cron-secret
+      RESEND_API_KEY: re_ci_dummy
+      RESEND_FROM_ADDRESS: ci@example.com
+      NEXT_PUBLIC_SITE_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Verificar versiones de seguridad
+        run: npm run security:versions
+
+      - name: Aplicar migraciones a BD limpia (PRD-004)
+        run: npx prisma migrate deploy
+
+      - name: Build de producción
+        run: npm run build
+
+      - name: Generar SBOM CycloneDX
+        run: npm run security:sbom
+
+      - name: Subir SBOM como artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: cyclonedx-sbom
+          path: sbom/
+          retention-days: 30
+
+  e2e:
+    name: Playwright E2E
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: mundotech_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # BD E2E aislada (contiene "_e2e" → pasa el guard de seguridad)
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/mundotech_e2e
+      DIRECT_URL: postgresql://ci:ci@localhost:5432/mundotech_e2e
+      NEXTAUTH_SECRET: e2e-secret-no-real
+      NEXTAUTH_URL: http://localhost:3000
+      CRON_SECRET: e2e-cron-secret
+      RESEND_API_KEY: ''
+      RESEND_FROM_ADDRESS: e2e@mundotechtest.com
+      NEXT_PUBLIC_SITE_URL: http://localhost:3000
+      # Credenciales dummy para R2 (assertR2Env los acepta en E2E)
+      R2_ENDPOINT: 'https://e2e.r2.cloudflarestorage.com'
+      R2_ACCESS_KEY_ID: e2e-access-key
+      R2_SECRET_ACCESS_KEY: e2e-secret-key
+      R2_BUCKET_NAME: e2e-media
+      R2_PUBLIC_BASE_URL: 'https://cdn.e2e.test'
+      NEXT_PUBLIC_R2_PUBLIC_BASE_URL: 'https://cdn.e2e.test'
+      R2_PRIVATE_BUCKET_NAME: e2e-proofs
+      R2_PRIVATE_ACCESS_KEY_ID: e2e-private-access
+      R2_PRIVATE_SECRET_ACCESS_KEY: e2e-private-secret
+      PLAYWRIGHT_BASE_URL: 'http://localhost:3000'
+      E2E_MODE: '1'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Instalar browsers Playwright
+        run: npx playwright install --with-deps chromium webkit
+
+      - name: Aplicar migraciones a BD E2E
+        run: npx prisma migrate deploy
+
+      # Guest solo en whatsapp / auth obligatoria en full — cada modo corre
+      # como una invocación independiente porque CHECKOUT_MODE afecta al
+      # middleware/bundle del servidor (requiere reset + arranque propio).
+      - name: 'Sembrar datos E2E — full'
+        run: npx tsx scripts/e2e-reset-db.ts
+        env:
+          CHECKOUT_MODE: full
+
+      - name: 'Ejecutar tests E2E — full (desktop, sin @whatsapp)'
+        run: npx playwright test --project=desktop-chromium --grep-invert "@whatsapp" --workers=1
+        env:
+          CHECKOUT_MODE: full
+
+      - name: 'Sembrar datos E2E — whatsapp (desktop)'
+        run: npx tsx scripts/e2e-reset-db.ts
+        env:
+          CHECKOUT_MODE: whatsapp
+
+      - name: 'Ejecutar tests E2E — whatsapp (desktop, @whatsapp)'
+        run: npx playwright test --project=desktop-chromium --grep "@whatsapp" --workers=1
+        env:
+          CHECKOUT_MODE: whatsapp
+
+      - name: 'Sembrar datos E2E — whatsapp (mobile)'
+        run: npx tsx scripts/e2e-reset-db.ts
+        env:
+          CHECKOUT_MODE: whatsapp
+
+      - name: 'Ejecutar tests E2E — whatsapp (mobile Android + iOS, @whatsapp)'
+        run: npx playwright test --project=mobile-android --project=mobile-ios --grep "@whatsapp" --workers=1
+        env:
+          CHECKOUT_MODE: whatsapp
+
+      - name: Subir artefactos Playwright (solo al fallar)
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
+  axe:
+    name: Axe accesibilidad
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: mundotech_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/mundotech_e2e
+      DIRECT_URL: postgresql://ci:ci@localhost:5432/mundotech_e2e
+      NEXTAUTH_SECRET: e2e-secret-no-real
+      NEXTAUTH_URL: http://localhost:3000
+      CRON_SECRET: e2e-cron-secret
+      RESEND_API_KEY: ''
+      RESEND_FROM_ADDRESS: e2e@mundotechtest.com
+      NEXT_PUBLIC_SITE_URL: http://localhost:3000
+      R2_ENDPOINT: 'https://e2e.r2.cloudflarestorage.com'
+      R2_ACCESS_KEY_ID: e2e-access-key
+      R2_SECRET_ACCESS_KEY: e2e-secret-key
+      R2_BUCKET_NAME: e2e-media
+      R2_PUBLIC_BASE_URL: 'https://cdn.e2e.test'
+      NEXT_PUBLIC_R2_PUBLIC_BASE_URL: 'https://cdn.e2e.test'
+      R2_PRIVATE_BUCKET_NAME: e2e-proofs
+      R2_PRIVATE_ACCESS_KEY_ID: e2e-private-access
+      R2_PRIVATE_SECRET_ACCESS_KEY: e2e-private-secret
+      PLAYWRIGHT_BASE_URL: 'http://localhost:3000'
+      E2E_MODE: '1'
+      CHECKOUT_MODE: 'full'
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Instalar browsers Playwright
+        run: npx playwright install chromium
+
+      - name: Aplicar migraciones a BD E2E
+        run: npx prisma migrate deploy
+
+      - name: Sembrar datos E2E
+        run: npx tsx scripts/e2e-reset-db.ts
+
+      - name: Ejecutar tests Axe
+        run: npx playwright test --project=desktop-chromium --grep "Axe"
+
+      - name: Subir artefactos Axe (solo al fallar)
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: axe-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

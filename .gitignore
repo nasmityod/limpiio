@@ -1,0 +1,75 @@
+# Dependencias (El "agujero negro" que ralentiza la IA)
+node_modules/
+
+# Archivos de Next.js (Basura técnica de compilación)
+.next/
+# Builds del deploy atómico (scripts/deploy-vps.sh)
+.next-*/
+out/
+build/
+
+# Base de datos y Prisma
+# PRD-004: prisma/migrations/ DEBE versionarse (reproducibilidad de BD entre entornos).
+/lib/generated/prisma
+*.db
+*.db-journal
+
+# PRD-003/143: volcado legacy con PII real — nunca volver a trackear
+lib/db.json
+
+# PRD-148: artefactos de debug de Playwright (capturas de resultado)
+scripts/playwright-*.png
+scripts/test-proof.png
+
+# Variables de Entorno (¡SEGURIDAD CRÍTICA!)
+.env
+.env.local
+.env.production
+.env.development
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db
+*.log
+
+# Artefactos de build / análisis internos
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+analisis.md
+.vercel
+.env*.local
+
+# Test coverage
+coverage/
+
+# IDEs
+.vscode/
+.idea/
+
+# npm debug logs (redundante con *.log, explícito)
+npm-debug.log*
+
+# Backups de variables de entorno: JAMAS trackear (incidente 14-jun: .env.bak commiteado con credenciales)
+.env.bak*
+.env*.bak*
+
+# Backups y artefactos de Vercel (nunca versionar)
+vercel.json.bak*
+
+# Archivos con credenciales en el nombre
+*credencial*
+*credential*
+
+# Variables de entorno adicionales (nunca versionar .env.* salvo .env.example)
+.env.*
+!.env.example
+
+# Playwright report y test outputs
+playwright-report/
+test-results/
+
+# SBOM generados por CI (cyclonedx-npm)
+sbom/
+
+# Auditoría de dependencias dev generada por CI
+docs/DEV-DEPENDENCY-AUDIT.md

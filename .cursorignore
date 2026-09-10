@@ -1,0 +1,20 @@
+﻿node_modules/
+
+# Archivos de Next.js (Basura técnica de compilación)
+.next/
+out/
+build/
+
+# Base de datos y Prisma
+# PRD-004: prisma/migrations/ SÍ debe versionarse — no ocultar a la IA.
+/lib/generated/prisma
+*.db
+*.db-journal
+
+# Variables de Entorno (¡SEGURIDAD CRÍTICA!)
+
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db
+*.log

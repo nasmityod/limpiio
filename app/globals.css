@@ -1,0 +1,298 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Variables globales ─────────────────────────────────────────────────── */
+@layer base {
+  :root {
+    --navy:    #0B1220;
+    --navy-500:#1A202C;
+    --yellow:  #FFD700;
+    --green:   #48BB78;
+    --border:  #E2E8F0;
+    --surface: #FFFFFF;
+    --surface-muted: #F8FAFC;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  html {
+    scroll-behavior: smooth;
+    overflow-x: hidden;
+    max-width: 100vw;
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    font-family: var(--font-jost), 'Jost', sans-serif;
+    font-size: 15px;
+    line-height: 1.65;
+    background-color: #FFFFFF;
+    color: #0B1220;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: 'cv11', 'ss01', 'ss03';
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+    max-width: 100vw;
+    width: 100%;
+    min-height: 100dvh;
+  }
+
+  /* Prevent iOS auto-zoom on form inputs (requires font-size >= 16px) */
+  input, select, textarea {
+    font-size: 16px;
+  }
+
+  /* iOS: never inherit zoom on tap; respect 44x44 touch targets */
+  button, a, [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  /* Prevent any media element from causing horizontal overflow */
+  img, video, iframe, svg {
+    max-width: 100%;
+    height: auto;
+  }
+
+  h1 {
+    font-family: var(--font-jost), 'Jost', sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: #0B1220;
+    line-height: 1.1;
+  }
+
+  h2 {
+    font-family: var(--font-jost), 'Jost', sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    color: #0B1220;
+    line-height: 1.2;
+  }
+
+  h3 {
+    font-family: var(--font-jost), 'Jost', sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: #0B1220;
+    line-height: 1.3;
+  }
+
+  /* Focus visible accesible y elegante */
+  :focus-visible {
+    outline: 2px solid #0B1220;
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  /* Scrollbar moderna en navegadores webkit */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(11, 18, 32, 0.18);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(11, 18, 32, 0.32);
+    background-clip: padding-box;
+  }
+}
+
+/* ── Utilidades de textura ──────────────────────────────────────────────── */
+@layer utilities {
+
+  /* Patrón de puntos sutil */
+  .dot-pattern {
+    background-image:
+      radial-gradient(circle, rgba(255,255,255,0.10) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+
+  .dot-pattern-dark {
+    background-image:
+      radial-gradient(circle, rgba(11,18,32,0.06) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+
+  /* Mesh gradient — profundidad sin peso visual */
+  .mesh-light {
+    background-image:
+      radial-gradient(at 15% 25%, rgba(255,255,255,0.10) 0px, transparent 55%),
+      radial-gradient(at 85%  5%, rgba(255,215,0,0.08) 0px, transparent 50%),
+      radial-gradient(at  5% 75%, rgba(255,255,255,0.07) 0px, transparent 50%),
+      radial-gradient(at 90% 85%, rgba(255,255,255,0.05) 0px, transparent 40%);
+  }
+
+  /* Glass effect */
+  .glass {
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: saturate(180%) blur(14px);
+    -webkit-backdrop-filter: saturate(180%) blur(14px);
+  }
+
+  .glass-dark {
+    background: rgba(11, 18, 32, 0.55);
+    backdrop-filter: saturate(180%) blur(14px);
+    -webkit-backdrop-filter: saturate(180%) blur(14px);
+  }
+
+  /* Skeleton shimmer */
+  .skeleton {
+    background-color: #E5E9F2;
+    background-image: linear-gradient(
+      90deg,
+      rgba(255,255,255,0) 0%,
+      rgba(255,255,255,0.6) 50%,
+      rgba(255,255,255,0) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.6s linear infinite;
+  }
+
+  /* Scrollbar invisible (drawers, carousels) */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Divisor de sección 1px */
+  .section-divider {
+    border-top: 1px solid #E2E8F0;
+  }
+
+  /* Texto con balance moderno (Chrome 114+, Safari 17.5+) */
+  .text-balance {
+    text-wrap: balance;
+  }
+  .text-pretty {
+    text-wrap: pretty;
+  }
+
+  /* Reduced motion: spinners become static, ping/pulse/bounce disabled */
+  @media (prefers-reduced-motion: reduce) {
+    .skeleton {
+      animation: none;
+      background-image: none;
+      background-color: #E5E9F2;
+    }
+  }
+
+  /* Tabular nums helper */
+  .nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /*
+   * Trazas de circuito del logo real: dorado sobre negro mate (#000000).
+   * El letrero físico de la tienda es negro + amarillo.
+   */
+  .circuit-bg {
+    background-color: #000000;
+    background-image:
+      linear-gradient(rgba(255, 215, 0, 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 215, 0, 0.05) 1px, transparent 1px),
+      radial-gradient(ellipse 70% 50% at 20% 80%, rgba(255, 215, 0, 0.07), transparent 50%);
+    background-size:
+      56px 56px,
+      56px 56px,
+      100% 100%;
+  }
+
+  /* Brillo recorrido en botones MundoTech (sin afectar accesibilidad del texto) */
+  .btn-mundotech-shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+  .btn-mundotech-shimmer::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      105deg,
+      transparent 35%,
+      rgba(255, 255, 255, 0.45) 50%,
+      transparent 65%
+    );
+    background-size: 220% 100%;
+    animation: shimmer 2.2s ease-in-out infinite;
+    pointer-events: none;
+    border-radius: inherit;
+  }
+
+  /* Snap horizontal carousel para categorías y carruseles móviles */
+  .snap-x-mandatory {
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+  }
+  .snap-x-mandatory > * {
+    scroll-snap-align: start;
+  }
+
+  /* Sticky de pago en móvil */
+  .sticky-pay-cta {
+    position: sticky;
+    bottom: 0;
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
+
+  /* Util: contenedor que nunca desborda horizontalmente */
+  .safe-x {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+}
+
+/* ── Tarjetas elevadas (retail: Amazon / Target) ─────────────────────────── */
+@layer components {
+  .card-elevated {
+    @apply bg-white border border-border rounded-2xl shadow-card;
+  }
+
+  .card-elevated-lg {
+    @apply bg-white border border-border rounded-3xl shadow-card;
+  }
+
+  .card-interactive {
+    @apply card-elevated transition-all duration-300;
+  }
+
+  /* Solo con hover real: :hover en táctil aplica al tocar y cancela el scroll. */
+  @media (hover: hover) and (prefers-reduced-motion: no-preference) {
+    .card-interactive:hover {
+      @apply -translate-y-0.5 shadow-card-hover;
+    }
+  }
+
+  /* Chip marca/categoría — navy + dorado */
+  .chip-brand {
+    @apply inline-flex items-center rounded-full bg-navy px-2.5 py-1 text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.18em] text-brand-yellow;
+  }
+
+  /* Banda de sección de marca — negro mate + texto claro */
+  .section-band-navy {
+    @apply relative bg-black text-white overflow-hidden;
+  }
+  .section-band-navy .circuit-bg {
+    @apply absolute inset-0 opacity-40 pointer-events-none;
+  }
+}

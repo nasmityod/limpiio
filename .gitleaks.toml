@@ -1,0 +1,29 @@
+# .gitleaks.toml
+# Configuración de gitleaks para mundotech-ecommerce.
+# Las reglas predeterminadas de gitleaks están activas (useDefault = true).
+# Solo se permiten valores dummy exactos mediante regexes, sin ignorar
+# archivos completos.
+
+title = "MundoTech gitleaks config"
+
+[extend]
+useDefault = true
+
+# Allowlist de valores dummy exactos utilizados únicamente por CI y tests.
+# No se ignoran archivos completos, solo estos valores literales.
+[[allowlists]]
+description = "Valores dummy exactos usados únicamente por CI y tests"
+regexTarget = "match"
+regexes = [
+  '''^vitest-secret$''',
+  '''^ci-secret-no-real$''',
+  '''^ci-cron-secret$''',
+  '''^re_ci_dummy$''',
+  '''^re_vitest_dummy$''',
+  '''^vitest-private-access-key$''',
+  '''^vitest-private-secret-key$''',
+  '''^vitest-public-access-key$''',
+  '''^vitest-public-secret-key$''',
+  '''^ci@example\.com$''',
+  '''^vitest@example\.com$''',
+]

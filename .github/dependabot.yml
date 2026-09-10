@@ -1,0 +1,56 @@
+# Dependabot configuration for mundotech-ecommerce
+# Schedule: weekly (sábado)
+# - patch/minor dependencies agrupadas en un solo PR
+# - major dependencies: PR individual sin automerge
+version: 2
+updates:
+  # --- npm (runtime + dev) ---
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "saturday"
+      time: "04:00"
+      timezone: "America/Caracas"
+    open-pull-requests-limit: 10
+    # Grupos: patch y minor juntos para reducir ruido
+    groups:
+      npm-minor-patch:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    # Major: PR individual (sin ignore semver-major; sin automerge)
+    # Etiquetas para identificar el tipo
+    labels:
+      - "dependencies"
+      - "npm"
+    reviewers:
+      - "nasmityo2"
+    # Sin automerge: requiere revisión manual
+
+  # --- GitHub Actions ---
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "saturday"
+      time: "04:00"
+      timezone: "America/Caracas"
+    open-pull-requests-limit: 5
+    groups:
+      actions-minor-patch:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    # Major: PR individual (sin ignore semver-major; sin automerge)
+    labels:
+      - "dependencies"
+      - "github-actions"
+    reviewers:
+      - "nasmityo2"
