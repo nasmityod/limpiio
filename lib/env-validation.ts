@@ -21,6 +21,11 @@ const RECOMMENDED_IN_PRODUCTION = ['RESEND_API_KEY', 'RESEND_FROM_ADDRESS'] as c
  */
 const REQUIRED_IN_PRODUCTION = [
   'CRON_SECRET',
+  // Sin esto, config/brand.ts cae a http://localhost:3000 y los canonicals,
+  // el sitemap, las tarjetas OG y los enlaces de los correos apuntarían a
+  // localhost. Antes existía un fallback a un dominio concreto y el fallo
+  // pasaba inadvertido: ahora producción debe declarar su propia URL.
+  'NEXT_PUBLIC_SITE_URL',
   'R2_ENDPOINT',
   'R2_ACCESS_KEY_ID',
   'R2_SECRET_ACCESS_KEY',
