@@ -8,16 +8,20 @@
 #   4. Conserva además una copia local (últimos 7 días) como caché rápida.
 #
 # Cron sugerido (TZ America/Caracas, ver scripts/install-crontab.sh):
-#   0 3 * * * /var/www/mundotech/scripts/backup-postgres.sh >> /var/log/mundotech-backup.log 2>&1
+#   0 3 * * * /var/www/$APP_SLUG/scripts/backup-postgres.sh >> /var/log/$APP_SLUG-backup.log 2>&1
 #
 # RESTORE (runbook — probado el 2026-07-03):
 #   1. Descarga el dump desde R2 (dashboard Cloudflare → R2 → bucket → backups/)
 #      o con: node scripts/lib/restore-list-r2.mjs (listar) + presigned URL.
-#   2. pg_restore --clean --if-exists -d "$DIRECT_URL" mundotech_YYYYMMDD_HHMMSS.dump
+#   2. pg_restore --clean --if-exists -d "$DIRECT_URL" <slug>_YYYYMMDD_HHMMSS.dump
 #      (usa DIRECT_URL, no el pooler. --clean recrea objetos; hazlo con la app
-#      detenida: sudo systemctl stop mundotech).
-#   3. sudo systemctl start mundotech && curl -s localhost:3000/api/health
+#      detenida: sudo systemctl stop "$APP_SLUG").
+#   3. sudo systemctl start "$APP_SLUG" && curl -s localhost:3000/api/health
 set -euo pipefail
+
+# Nombre de la instancia: prefija los dumps para no mezclar backups de
+# varias tiendas en el mismo directorio ni en el mismo bucket.
+APP_SLUG="${APP_SLUG:-storefront}"
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LOCAL_DIR="/home/deploy/backups"
@@ -33,7 +37,7 @@ if [[ -z "$DIRECT_URL" ]]; then
 fi
 
 TS="$(date +%Y%m%d_%H%M%S)"
-DUMP="$LOCAL_DIR/mundotech_${TS}.dump"
+DUMP="$LOCAL_DIR/${APP_SLUG}_${TS}.dump"
 
 echo "[backup] $(date -Is) pg_dump → $DUMP"
 pg_dump --dbname="$DIRECT_URL" -F c -f "$DUMP"
@@ -43,6 +47,6 @@ cd "$ROOT"
 node scripts/lib/backup-r2.mjs "$DUMP"
 
 # Copia local: solo los últimos N días (el histórico completo vive en R2).
-find "$LOCAL_DIR" -name "mundotech_*.dump" -mtime "+${LOCAL_RETENTION_DAYS}" -delete
+find "$LOCAL_DIR" -name "${APP_SLUG}_*.dump" -mtime "+${LOCAL_RETENTION_DAYS}" -delete
 
 echo "[backup] $(date -Is) OK"

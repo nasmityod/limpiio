@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # generate-sbom.sh
-# Genera SBOM CycloneDX para mundotech-ecommerce.
+# Genera SBOM CycloneDX para la plataforma de ecommerce.
 # Uso: bash scripts/generate-sbom.sh [output-dir]
 set -euo pipefail
 

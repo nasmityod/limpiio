@@ -1,10 +1,10 @@
 # .gitleaks.toml
-# Configuración de gitleaks para mundotech-ecommerce.
+# Configuración de gitleaks para la plataforma de ecommerce.
 # Las reglas predeterminadas de gitleaks están activas (useDefault = true).
 # Solo se permiten valores dummy exactos mediante regexes, sin ignorar
 # archivos completos.
 
-title = "MundoTech gitleaks config"
+title = "Gitleaks config"
 
 [extend]
 useDefault = true

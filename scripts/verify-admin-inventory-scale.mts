@@ -6,7 +6,7 @@
  * la paginación keyset recorre el catálogo completo sin saltos ni duplicados.
  *
  * Uso (con la base sembrada por scripts/perf-seed.mjs):
- *   PERF_DATABASE_URL=postgres://…/mundotech_perf npm run verify:inventory-scale
+ *   PERF_DATABASE_URL=postgres://…/app_perf npm run verify:inventory-scale
  *
  * Criterio de aceptación que verifica: el número de productos recibidos en la
  * primera carga NO depende del total existente.

@@ -7,7 +7,8 @@ SRC="$ROOT/deploy/crontab.vps"
 [ -f "$SRC" ] || { echo "No existe $SRC" >&2; exit 1; }
 
 # --- Preflight: CRON_SECRET y wrapper BCV ---
-ENV_FILE="${MUNDOTECH_ENV_FILE:-/etc/mundotech/mundotech.env}"
+APP_SLUG="${APP_SLUG:-storefront}"
+ENV_FILE="${APP_ENV_FILE:-/etc/${APP_SLUG}/${APP_SLUG}.env}"
 BCV_RUNNER="$ROOT/scripts/run-bcv-cron.sh"
 
 if [[ ! -r "$ENV_FILE" ]]; then

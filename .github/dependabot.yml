@@ -1,4 +1,4 @@
-# Dependabot configuration for mundotech-ecommerce
+# Dependabot configuration for the ecommerce platform
 # Schedule: weekly (sábado)
 # - patch/minor dependencies agrupadas en un solo PR
 # - major dependencies: PR individual sin automerge

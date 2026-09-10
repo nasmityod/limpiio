@@ -26,6 +26,6 @@ describe('deploy/crontab.vps', () => {
   it('auto-cancel-orders escribe en el log operativo', () => {
     const line = crontab.split('\n').find((l) => l.includes('auto-cancel-orders'));
     expect(line).toBeDefined();
-    expect(line).toContain('/var/log/mundotech-cron.log');
+    expect(line).toContain('/var/log/$APP_SLUG-cron.log');
   });
 });

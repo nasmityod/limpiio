@@ -45,7 +45,7 @@ const client = new S3Client({
 });
 
 const key = `proofs/integration-test-${randomUUID()}.webp`;
-const body = Buffer.from('mundotech-r2-private-integration-test');
+const body = Buffer.from('r2-private-integration-test');
 
 const results = {
   putObject: 'NOT_RUN',

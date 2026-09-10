@@ -9,7 +9,7 @@
 #   3. Swap atómico: stop → mv .next → start (segundos, no minutos).
 #   4. Health-check con rollback automático al build anterior si el nuevo no arranca.
 #   5. Purga opcional de caché Cloudflare (si CF_ZONE_ID + CF_API_TOKEN están en
-#      /etc/mundotech/mundotech.env) para que ningún HTML viejo quede cacheado.
+#      /etc/$APP_SLUG/$APP_SLUG.env) para que ningún HTML viejo quede cacheado.
 #
 # NUNCA correr `npm run build` a mano en producción sin este script: el server
 # en ejecución mantiene el manifest viejo en memoria y el HTML ISR regenerado
@@ -18,7 +18,10 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
-SERVICE="${MUNDOTECH_SERVICE:-mundotech.service}"
+# Nombre de la instancia en el servidor: da nombre al servicio systemd, a
+# /var/www/<slug>, a /etc/<slug>/ y al sitio de nginx.
+APP_SLUG="${APP_SLUG:-storefront}"
+SERVICE="${APP_SERVICE:-${APP_SLUG}.service}"
 STAGING=".next-staging"
 CURRENT=".next"
 PREVIOUS=".next-previous"
@@ -36,12 +39,12 @@ source "$ROOT/scripts/lib/cloudflare-purge.sh"
 # ── 0. Cargar y validar configuración de entorno ─────────────────────────────
 # El archivo de entorno es la fuente única de verdad para CHECKOUT_MODE.
 # El proceso Node (systemd) y el build deben usar exactamente el mismo valor.
-ENV_FILE="${MUNDOTECH_ENV_FILE:-/etc/mundotech/mundotech.env}"
+ENV_FILE="${APP_ENV_FILE:-/etc/${APP_SLUG}/${APP_SLUG}.env}"
 
 if ! sudo test -r "$ENV_FILE"; then
   echo "ERROR: no se puede leer el archivo de entorno '${ENV_FILE}'." >&2
   echo "       Verifica que existe y que el usuario de deploy tiene acceso sudo a él." >&2
-  echo "       Para cambiar la ruta usa: MUNDOTECH_ENV_FILE=/ruta/alternativa npm run deploy:vps" >&2
+  echo "       Para cambiar la ruta usa: APP_ENV_FILE=/ruta/alternativa npm run deploy:vps" >&2
   exit 1
 fi
 

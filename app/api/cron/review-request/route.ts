@@ -26,7 +26,7 @@ export const maxDuration = 60;
  *   la marca, no envía).
  *
  * Crontab (root, TZ America/Caracas — ver deploy/crontab.vps):
- *   0 10 * * * . /etc/mundotech/mundotech.env; curl -fsS -H "Authorization: Bearer $CRON_SECRET" http://127.0.0.1:3000/api/cron/review-request >> /var/log/mundotech-cron.log 2>&1
+ *   0 10 * * * . /etc/$APP_SLUG/$APP_SLUG.env; curl -fsS -H "Authorization: Bearer $CRON_SECRET" http://127.0.0.1:3000/api/cron/review-request >> /var/log/$APP_SLUG-cron.log 2>&1
  */
 
 const WINDOW_MIN_DAYS = 7;

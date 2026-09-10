@@ -1,5 +1,5 @@
 {
-  "name": "mundotech-ecommerce",
+  "name": "ecommerce-platform",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -19,7 +19,6 @@
     "security:audit:runtime": "npm audit --omit=dev --audit-level=high",
     "security:audit:dev": "bash scripts/audit-dev-dependencies.sh",
     "security:sbom": "bash scripts/generate-sbom.sh",
-    "plan:check": "node scripts/check-plan-consistency.mjs",
     "deploy:vps": "bash scripts/deploy-vps.sh",
     "db:seed:reviews": "tsx scripts/seed-reviews.ts",
     "db:migrate:images": "tsx scripts/migrate-legacy-images-to-r2.ts",

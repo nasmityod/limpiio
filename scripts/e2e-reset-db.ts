@@ -265,10 +265,10 @@ async function main() {
       data: {
         key: 'store_settings',
         value: JSON.stringify({
-          storeName: 'MundoTech E2E',
+          storeName: 'Tienda E2E',
           tagline: 'Tienda de pruebas E2E',
           phone: '0412-0000000',
-          email: 'e2e@mundotechtest.com',
+          email: 'e2e@example.test',
           address: 'Dirección de prueba E2E',
           pagoMovil: { bank: 'TestBank', phone: '0412-0000000', idNumber: 'V-00000000' },
           transferencia: {

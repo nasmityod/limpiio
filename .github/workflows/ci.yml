@@ -56,9 +56,6 @@ jobs:
       - name: Verificar guards RBAC en páginas admin
         run: npm run security:admin-page-guards
 
-      - name: Verificar consistencia del plan de auditoría
-        run: npm run plan:check
-
       - name: ESLint
         run: npm run lint
 
@@ -77,7 +74,7 @@ jobs:
         env:
           POSTGRES_USER: ci
           POSTGRES_PASSWORD: ci
-          POSTGRES_DB: mundotech_ci
+          POSTGRES_DB: app_ci
         ports:
           - 5432:5432
         options: >-
@@ -86,9 +83,9 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql://ci:ci@localhost:5432/mundotech_ci
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/app_ci
       # migrate deploy lee DIRECT_URL vía prisma.config.ts (sin PgBouncer en CI = mismo valor)
-      DIRECT_URL: postgresql://ci:ci@localhost:5432/mundotech_ci
+      DIRECT_URL: postgresql://ci:ci@localhost:5432/app_ci
       NEXTAUTH_SECRET: ci-secret-no-real
       NEXTAUTH_URL: http://localhost:3000
       CRON_SECRET: ci-cron-secret
@@ -134,7 +131,7 @@ jobs:
         env:
           POSTGRES_USER: ci
           POSTGRES_PASSWORD: ci
-          POSTGRES_DB: mundotech_e2e
+          POSTGRES_DB: app_e2e
         ports:
           - 5432:5432
         options: >-
@@ -144,13 +141,13 @@ jobs:
           --health-retries 10
     env:
       # BD E2E aislada (contiene "_e2e" → pasa el guard de seguridad)
-      DATABASE_URL: postgresql://ci:ci@localhost:5432/mundotech_e2e
-      DIRECT_URL: postgresql://ci:ci@localhost:5432/mundotech_e2e
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/app_e2e
+      DIRECT_URL: postgresql://ci:ci@localhost:5432/app_e2e
       NEXTAUTH_SECRET: e2e-secret-no-real
       NEXTAUTH_URL: http://localhost:3000
       CRON_SECRET: e2e-cron-secret
       RESEND_API_KEY: ''
-      RESEND_FROM_ADDRESS: e2e@mundotechtest.com
+      RESEND_FROM_ADDRESS: e2e@example.test
       NEXT_PUBLIC_SITE_URL: http://localhost:3000
       # Credenciales dummy para R2 (assertR2Env los acepta en E2E)
       R2_ENDPOINT: 'https://e2e.r2.cloudflarestorage.com'
@@ -233,7 +230,7 @@ jobs:
         env:
           POSTGRES_USER: ci
           POSTGRES_PASSWORD: ci
-          POSTGRES_DB: mundotech_e2e
+          POSTGRES_DB: app_e2e
         ports:
           - 5432:5432
         options: >-
@@ -242,13 +239,13 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql://ci:ci@localhost:5432/mundotech_e2e
-      DIRECT_URL: postgresql://ci:ci@localhost:5432/mundotech_e2e
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/app_e2e
+      DIRECT_URL: postgresql://ci:ci@localhost:5432/app_e2e
       NEXTAUTH_SECRET: e2e-secret-no-real
       NEXTAUTH_URL: http://localhost:3000
       CRON_SECRET: e2e-cron-secret
       RESEND_API_KEY: ''
-      RESEND_FROM_ADDRESS: e2e@mundotechtest.com
+      RESEND_FROM_ADDRESS: e2e@example.test
       NEXT_PUBLIC_SITE_URL: http://localhost:3000
       R2_ENDPOINT: 'https://e2e.r2.cloudflarestorage.com'
       R2_ACCESS_KEY_ID: e2e-access-key

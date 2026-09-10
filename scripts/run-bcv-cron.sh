@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ENV_FILE="${MUNDOTECH_ENV_FILE:-/etc/mundotech/mundotech.env}"
-ENDPOINT="${MUNDOTECH_BCV_ENDPOINT:-http://127.0.0.1:3000/api/cron/update-bcv-rate}"
+APP_SLUG="${APP_SLUG:-storefront}"
+ENV_FILE="${APP_ENV_FILE:-/etc/${APP_SLUG}/${APP_SLUG}.env}"
+ENDPOINT="${APP_BCV_ENDPOINT:-http://127.0.0.1:3000/api/cron/update-bcv-rate}"
 
 log() {
   printf '%s %s\n' "$(date --iso-8601=seconds)" "$*"

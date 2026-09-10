@@ -10,6 +10,9 @@
  * Este script NO toca nada del proyecto, solo hace pruebas de encoding.
  */
 
+// Nombre de tienda de ejemplo: este script solo prueba codificacion de emojis.
+const STORE_NAME = 'Tienda';
+
 const EMOJI_ENC = {
   cart:    '%F0%9F%9B%92',
   person:  '%F0%9F%91%A4',
@@ -43,7 +46,7 @@ function buildOrderText(input) {
   const e = (emoji) => seg.push({ emoji });
   const nl = () => t('\n');
 
-  e('cart'); t(` *Nuevo pedido MundoTech #${input.orderRef}*`); nl(); nl();
+  e('cart'); t(` *Nuevo pedido ${STORE_NAME} #${input.orderRef}*`); nl(); nl();
   e('person'); t(` *Cliente:* ${input.customerName}`); nl();
   if (input.idNumber?.trim()) { e('id'); t(` *Cédula:* ${input.idNumber.trim()}`); nl(); }
   e('phone'); t(` *Teléfono:* ${input.phone}`); nl();
@@ -62,7 +65,7 @@ function buildOrderText(input) {
   t(` *Total:* $${input.totalUsd.toFixed(2)} \u2248 Bs. ${totalBs.toFixed(2)} (tasa: Bs. ${input.rate.toFixed(2)})`);
   nl(); nl();
 
-  e('pending'); t(' *Pendiente de confirmaci\u00f3n por MundoTech*');
+  e('pending'); t(` *Pendiente de confirmaci\u00f3n por ${STORE_NAME}*`);
 
   return seg;
 }

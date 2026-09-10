@@ -45,7 +45,7 @@ async function main() {
   } catch (err) {
     console.log(`   ❌ ${err.name}: ${err.message}`);
     console.log('\n📋 Posibles causas:');
-    console.log('   - El bucket no existe (confirma que se llama exactamente "mundotech-proofs")');
+    console.log(`   - El bucket no existe (confirma que se llama exactamente "${BUCKET}")`);
     console.log('   - El token no está vinculado a este bucket');
     console.log('   - El Account ID en el endpoint no coincide');
     process.exit(1);
