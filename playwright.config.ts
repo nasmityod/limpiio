@@ -1,10 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
+import { assertE2eBaseUrl } from './lib/e2e-host-guard';
 
 /**
  * Playwright E2E de la tienda.
- * - Nunca apunta a producción — aborta si baseURL contiene E2E_FORBIDDEN_HOST.
+ * - Nunca apunta a producción — guarda de host fail-safe (lib/e2e-host-guard.ts).
  * - BD: DATABASE_URL de E2E debe contener "_e2e" o "test" (scripts/e2e-reset-db.ts).
  * - E2E_MODE=1: emails/R2 mockeados sin red externa (lib/resend.tsx, lib/r2.ts).
  * - Traces/capturas: solo al fallar.
@@ -28,21 +29,16 @@ import { execSync } from 'node:child_process';
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:34567';
 
 /**
- * Host de producción que las pruebas E2E NUNCA deben tocar. Se declara por
- * entorno (E2E_FORBIDDEN_HOST) para que la protección viaje con cada instancia
- * en vez de estar fijada al dominio de una tienda concreta.
- * Defínela en el .env de cada despliegue: sin ella esta comprobación no puede
- * saber cuál es tu dominio de producción y queda inactiva (la guarda de puerto
- * de abajo sigue operativa).
+ * Guarda de host — FAIL-SAFE: la ausencia de configuración aborta, nunca
+ * permite. La cascada completa (E2E_FORBIDDEN_HOST → host derivado de
+ * NEXT_PUBLIC_SITE_URL → solo hosts locales) vive en `lib/e2e-host-guard.ts`,
+ * extraída para poder testearla (tests/e2e-safety-guard.test.ts).
  */
-const FORBIDDEN_HOST = process.env.E2E_FORBIDDEN_HOST?.trim();
-
-if (FORBIDDEN_HOST && BASE_URL.includes(FORBIDDEN_HOST)) {
-  throw new Error(
-    `[E2E SAFETY] BASE_URL contiene ${FORBIDDEN_HOST}. ` +
-      'Nunca apuntes pruebas E2E a producción. Usa localhost o un VPS de staging.',
-  );
-}
+assertE2eBaseUrl({
+  baseUrl: BASE_URL,
+  forbiddenHost: process.env.E2E_FORBIDDEN_HOST,
+  siteUrl: process.env.NEXT_PUBLIC_SITE_URL,
+});
 
 /** Aborta si el puerto ya responde localmente sin opt-in (antes de arrancar webServer). */
 function assertPortFreeForE2e(): void {
