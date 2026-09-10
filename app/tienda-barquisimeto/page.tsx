@@ -189,6 +189,7 @@ export default async function TiendaBarquisimetoPage() {
                 </div>
               </div>
 
+              {(settings.phone || settings.phone2) && (
               <div className="flex items-start gap-3">
                 <Phone size={18} className="text-[#FFD700] flex-shrink-0 mt-0.5" />
                 <div>
@@ -211,7 +212,9 @@ export default async function TiendaBarquisimetoPage() {
                   )}
                 </div>
               </div>
+              )}
 
+              {settings.email && (
               <div className="flex items-start gap-3">
                 <Mail size={18} className="text-[#FFD700] flex-shrink-0 mt-0.5" />
                 <div>
@@ -224,6 +227,7 @@ export default async function TiendaBarquisimetoPage() {
                   </a>
                 </div>
               </div>
+              )}
             </address>
 
             <div className="border-t border-slate-100 pt-5">

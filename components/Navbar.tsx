@@ -85,10 +85,14 @@ const Navbar = ({ onCartClick, contact }: { onCartClick: () => void; contact: Na
           <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-[1400px]
                           flex justify-between items-center py-2 text-[11px]">
             <div className="flex items-center gap-5">
-              <span className="flex items-center gap-1.5">
-                <Phone size={11} /> {contact.phone}{contact.phone2 ? ` · ${contact.phone2}` : ''}
-              </span>
-              <span className="flex items-center gap-1.5"><Mail size={11} /> {contact.email}</span>
+              {contact.phone ? (
+                <span className="flex items-center gap-1.5">
+                  <Phone size={11} /> {contact.phone}{contact.phone2 ? ` · ${contact.phone2}` : ''}
+                </span>
+              ) : null}
+              {contact.email ? (
+                <span className="flex items-center gap-1.5"><Mail size={11} /> {contact.email}</span>
+              ) : null}
             </div>
             <div className="flex items-center gap-4 text-white/80">
               {contact.address ? (

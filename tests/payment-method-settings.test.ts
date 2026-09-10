@@ -23,6 +23,38 @@ describe('payment-method-settings', () => {
     }
   });
 
+  // PRD-101: la invariante sigue siendo «los defaults satisfacen el esquema».
+  // Lo que cambia es el esquema: `phone` y `email` admiten vacío para que
+  // DEFAULT_SETTINGS no tenga que inventar un dato de contacto que el cliente
+  // acabaría viendo en el pie, el topbar o las páginas legales.
+  it('los defaults de contacto van vacíos y siguen satisfaciendo el esquema', () => {
+    expect(DEFAULT_SETTINGS.phone).toBe('');
+    expect(DEFAULT_SETTINGS.phone2).toBe('');
+    // `email` se resuelve desde NEXT_PUBLIC_CONTACT_EMAIL (config/brand.ts):
+    // vacío si no se configuró, nunca un marcador ficticio.
+    expect(DEFAULT_SETTINGS.email).not.toMatch(/example\.com/);
+    expect(DEFAULT_SETTINGS.phone).not.toMatch(/0000/);
+
+    expect(storeSettingsSchema.safeParse(DEFAULT_SETTINGS).success).toBe(true);
+    expect(
+      storeSettingsSchema.safeParse({
+        ...DEFAULT_SETTINGS,
+        phone: '',
+        phone2: '',
+        email: '',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('el esquema sigue rechazando un correo mal escrito', () => {
+    expect(
+      storeSettingsSchema.safeParse({ ...DEFAULT_SETTINGS, email: 'no-es-un-correo' }).success,
+    ).toBe(false);
+    expect(
+      storeSettingsSchema.safeParse({ ...DEFAULT_SETTINGS, email: 'ventas@tienda.test' }).success,
+    ).toBe(true);
+  });
+
   it('pickFinancialSettingsDto incluye paymentMethods', () => {
     const dto = pickFinancialSettingsDto({
       ...DEFAULT_SETTINGS,

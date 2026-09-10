@@ -35,7 +35,11 @@ export function buildProductFaq(params: {
     },
     {
       question: '¿Puedo ver el producto antes de comprar?',
-      answer: `Claro: somos tienda física en Barquisimeto — ${storeAddress}. También te atendemos por WhatsApp al ${storePhone}.`,
+      answer:
+        `Claro: somos tienda física en Barquisimeto — ${storeAddress}.` +
+        // Sin teléfono configurado se omite la frase entera: «te atendemos por
+        // WhatsApp al .» acabaría publicada en el JSON-LD de FAQ.
+        (storePhone.trim() ? ` También te atendemos por WhatsApp al ${storePhone}.` : ''),
     },
   ];
 }

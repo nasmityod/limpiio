@@ -83,7 +83,14 @@ export default async function DevolucionesPage() {
           vehículos y productos no electrónicos no tienen garantía.
         </p>
         <ul>
-          <li>Escríbenos por WhatsApp al <strong>{settings.phone}</strong> o al correo <strong>{settings.email}</strong>.</li>
+          {(settings.phone || settings.email) && (
+            <li>
+              Escríbenos
+              {settings.phone && <> por WhatsApp al <strong>{settings.phone}</strong></>}
+              {settings.phone && settings.email && ' o'}
+              {settings.email && <> al correo <strong>{settings.email}</strong></>}.
+            </li>
+          )}
           <li>Indica tu número de pedido, presenta tu factura y adjunta foto o video del problema.</li>
           <li>Conserva la caja o empaque original — es requisito para cualquier gestión de garantía.</li>
           <li>Te respondemos con los pasos a seguir — normalmente el mismo día hábil.</li>
@@ -148,7 +155,11 @@ export default async function DevolucionesPage() {
 
         <p>
           ¿Tienes un caso particular? Escríbenos por{' '}
-          <a href={waHref} target="_blank" rel="noopener noreferrer">WhatsApp</a>{' '}
+          {waHref ? (
+            <a href={waHref} target="_blank" rel="noopener noreferrer">WhatsApp</a>
+          ) : (
+            'WhatsApp'
+          )}{' '}
           o visita la sección{' '}
           <Link href="/nosotros">Quiénes somos</Link> para conocer la tienda.
           También puedes revisar nuestra{' '}

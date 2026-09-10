@@ -59,8 +59,8 @@ export default async function NosotrosPage() {
       '@id': `${SITE_URL}/#localbusiness`,
       name: settings.storeName,
       slogan: seo.slogan,
-      telephone: settings.phone,
-      email: settings.email,
+      ...(settings.phone ? { telephone: settings.phone } : {}),
+      ...(settings.email ? { email: settings.email } : {}),
       address: {
         '@type': 'PostalAddress',
         streetAddress: seo.streetAddress,
@@ -127,14 +127,16 @@ export default async function NosotrosPage() {
               >
                 <Navigation size={15} aria-hidden /> Cómo llegar
               </a>
-              <a
-                href={waHref}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex min-h-[46px] items-center gap-2 rounded-xl border border-white/25 bg-white/10 px-5 text-sm font-semibold text-white backdrop-blur-sm transition-all hover:bg-white/15 active:scale-[0.98]"
-              >
-                <Phone size={15} aria-hidden /> Escríbenos por WhatsApp
-              </a>
+              {waHref && (
+                <a
+                  href={waHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex min-h-[46px] items-center gap-2 rounded-xl border border-white/25 bg-white/10 px-5 text-sm font-semibold text-white backdrop-blur-sm transition-all hover:bg-white/15 active:scale-[0.98]"
+                >
+                  <Phone size={15} aria-hidden /> Escríbenos por WhatsApp
+                </a>
+              )}
             </div>
           </div>
         </section>
@@ -229,13 +231,15 @@ export default async function NosotrosPage() {
                   </div>
                 </div>
               )}
-              <div className="flex items-start gap-3">
-                <Phone size={17} className="mt-0.5 flex-shrink-0 text-brand-yellowDk" aria-hidden />
-                <p>
-                  {settings.phone}
-                  {settings.phone2 ? ` · ${settings.phone2}` : ''}
-                </p>
-              </div>
+              {settings.phone && (
+                <div className="flex items-start gap-3">
+                  <Phone size={17} className="mt-0.5 flex-shrink-0 text-brand-yellowDk" aria-hidden />
+                  <p>
+                    {settings.phone}
+                    {settings.phone2 ? ` · ${settings.phone2}` : ''}
+                  </p>
+                </div>
+              )}
               {settings.instagram ? (
                 <div className="flex items-start gap-3">
                   <InstagramGlyph size={17} className="mt-0.5 flex-shrink-0 text-brand-yellowDk" />

@@ -80,26 +80,30 @@ export default function Footer({ shellData }: { shellData: SiteShellData }) {
                   {phone.display}
                 </a>
               ))}
-              <a
-                href={`mailto:${settings.email}`}
-                className="flex items-center gap-2 text-[13px] text-on-dark hover:text-brand-yellow transition-colors"
-              >
-                <Mail size={13} className="text-brand-yellow flex-shrink-0" aria-hidden="true" />
-                {settings.email}
-              </a>
+              {settings.email && (
+                <a
+                  href={`mailto:${settings.email}`}
+                  className="flex items-center gap-2 text-[13px] text-on-dark hover:text-brand-yellow transition-colors"
+                >
+                  <Mail size={13} className="text-brand-yellow flex-shrink-0" aria-hidden="true" />
+                  {settings.email}
+                </a>
+              )}
             </div>
 
-            <a
-              href={waHref}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-5 inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-[#25D366]/40 bg-[#25D366]/10 px-4 text-[13px] font-semibold text-[#7bedaa] transition-colors hover:bg-[#25D366]/20"
-            >
-              <svg viewBox="0 0 32 32" fill="currentColor" className="h-4 w-4" aria-hidden>
-                <path d="M16.04 4C9.5 4 4.2 9.3 4.2 15.83c0 2.08.55 4.12 1.6 5.92L4 28l6.42-1.68a11.8 11.8 0 0 0 5.62 1.43h.01c6.53 0 11.84-5.3 11.84-11.84C27.89 9.3 22.57 4 16.04 4Zm5.4 14.37c-.3-.15-1.75-.86-2.02-.96-.27-.1-.47-.15-.66.15-.2.3-.77.96-.94 1.15-.17.2-.35.22-.64.08-.3-.15-1.25-.46-2.38-1.47a8.9 8.9 0 0 1-1.65-2.04c-.17-.3-.02-.46.13-.6.13-.14.3-.35.44-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.03-.52-.07-.15-.66-1.6-.9-2.18-.24-.58-.49-.5-.66-.51l-.57-.01c-.2 0-.52.07-.79.37-.27.3-1.04 1.01-1.04 2.47s1.06 2.87 1.21 3.06c.15.2 2.09 3.2 5.07 4.48.71.3 1.26.49 1.69.63.71.22 1.36.19 1.87.12.57-.09 1.75-.72 2-1.41.24-.7.24-1.29.17-1.41-.07-.13-.27-.2-.57-.35Z" />
-              </svg>
-              Escríbenos por WhatsApp
-            </a>
+            {waHref && (
+              <a
+                href={waHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-5 inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-[#25D366]/40 bg-[#25D366]/10 px-4 text-[13px] font-semibold text-[#7bedaa] transition-colors hover:bg-[#25D366]/20"
+              >
+                <svg viewBox="0 0 32 32" fill="currentColor" className="h-4 w-4" aria-hidden>
+                  <path d="M16.04 4C9.5 4 4.2 9.3 4.2 15.83c0 2.08.55 4.12 1.6 5.92L4 28l6.42-1.68a11.8 11.8 0 0 0 5.62 1.43h.01c6.53 0 11.84-5.3 11.84-11.84C27.89 9.3 22.57 4 16.04 4Zm5.4 14.37c-.3-.15-1.75-.86-2.02-.96-.27-.1-.47-.15-.66.15-.2.3-.77.96-.94 1.15-.17.2-.35.22-.64.08-.3-.15-1.25-.46-2.38-1.47a8.9 8.9 0 0 1-1.65-2.04c-.17-.3-.02-.46.13-.6.13-.14.3-.35.44-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.03-.52-.07-.15-.66-1.6-.9-2.18-.24-.58-.49-.5-.66-.51l-.57-.01c-.2 0-.52.07-.79.37-.27.3-1.04 1.01-1.04 2.47s1.06 2.87 1.21 3.06c.15.2 2.09 3.2 5.07 4.48.71.3 1.26.49 1.69.63.71.22 1.36.19 1.87.12.57-.09 1.75-.72 2-1.41.24-.7.24-1.29.17-1.41-.07-.13-.27-.2-.57-.35Z" />
+                </svg>
+                Escríbenos por WhatsApp
+              </a>
+            )}
           </div>
 
           {/* Links de tienda */}

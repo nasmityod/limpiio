@@ -37,14 +37,17 @@ export default function WhatsAppFab({
   // (checkout sticky): subir el FAB para no tapar el CTA.
   const hasBottomBar = pathname === '/cart';
 
-  if (hidden || !phone.trim()) return null;
+  const waHref = whatsappHref(phone, message);
+  // Sin teléfono configurado no hay destino: el FAB desaparece en vez de
+  // enlazar a una URL wa.me rota.
+  if (hidden || !waHref) return null;
 
   return (
     <motion.a
       initial={prefersReduced ? { opacity: 0 } : { opacity: 0, scale: 0.6, y: 16 }}
       animate={prefersReduced ? { opacity: 1 } : { opacity: 1, scale: 1, y: 0 }}
       transition={prefersReduced ? reducedTransition : { type: 'spring', stiffness: 320, damping: 22, delay: 0.4 }}
-      href={whatsappHref(phone, message)}
+      href={waHref}
       target="_blank"
       rel="noopener noreferrer"
       aria-label={`Escríbenos por WhatsApp al ${phone}`}

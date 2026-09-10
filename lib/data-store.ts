@@ -28,9 +28,23 @@ const paymentMethodsFieldSchema = z.preprocess(
 export const storeSettingsSchema = z.object({
   storeName:     z.string().min(1, 'El nombre de la tienda es requerido.'),
   tagline:       z.string().optional().default(''),
-  phone:         z.string().min(1, 'El teléfono es requerido.'),
+  /**
+   * PRD-101: admiten vacío. Un dato de contacto sin rellenar debe quedar
+   * ausente —quien lo renderiza omite la línea—, nunca sustituido por un
+   * marcador ficticio que el cliente llegue a ver. El formato del correo se
+   * sigue exigiendo cuando sí hay valor.
+   */
+  phone:         z.string().trim().optional().default(''),
   phone2:        z.string().optional().default(''),
-  email:         z.string().email('Email inválido.'),
+  email: z
+    .string()
+    .trim()
+    .optional()
+    .default('')
+    .refine(
+      (value) => value === '' || z.string().email().safeParse(value).success,
+      'Email inválido.',
+    ),
   address:       z.string().optional().default('Barquisimeto, Lara — Venezuela. Atención y envíos a nivel nacional.'),
   instagram:     z.string().optional().default(''),
   facebook:      z.string().optional().default(''),
@@ -136,13 +150,13 @@ const SETTINGS_KEY = 'store_settings';
 export const DEFAULT_SETTINGS: StoreSettings = {
   storeName:  BRAND.name,
   tagline:    BRAND.tagline,
-  // `phone` y `email` son OBLIGATORIOS en storeSettingsSchema, así que no
-  // pueden quedar vacíos sin invalidar los propios defaults. Se usan
-  // marcadores inequívocamente ficticios (dominio example.com, RFC 2606) que
-  // el administrador debe sustituir antes del lanzamiento.
-  phone:      '0000-0000000',
+  // Sin marcadores: el esquema admite vacío en `phone` y `email`, y quien los
+  // renderiza omite la línea entera. Un cliente jamás debe ver un dato de
+  // contacto que no sea real, ni una etiqueta huérfana («Escríbenos al:»
+  // seguido de nada).
+  phone:      '',
   phone2:     '',
-  email:      BRAND.contactEmail || 'contacto@example.com',
+  email:      BRAND.contactEmail,
   address:    BRAND.address,
   instagram:  BRAND.social.instagram,
   facebook:   BRAND.social.facebook,

@@ -102,6 +102,9 @@ export default function AdminPersonalizarPage() {
   }
 
   const { heroFallback, brandStrip, whatsapp, productTrust, popup } = data;
+  // null mientras no haya un teléfono con dígitos: sin destino no se ofrece
+  // la previsualización del enlace.
+  const whatsappPreviewHref = whatsappHref(whatsapp.phone, whatsapp.message);
 
   return (
     <div className="space-y-4 max-w-3xl pb-24">
@@ -279,9 +282,9 @@ export default function AdminPersonalizarPage() {
             onChange={(e) => setData((d) => ({ ...d, whatsapp: { ...d.whatsapp, message: e.target.value } }))}
           />
         </div>
-        {whatsapp.phone.trim() ? (
+        {whatsappPreviewHref ? (
           <a
-            href={whatsappHref(whatsapp.phone, whatsapp.message)}
+            href={whatsappPreviewHref}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 text-[12.5px] font-semibold text-green-700 underline underline-offset-2"

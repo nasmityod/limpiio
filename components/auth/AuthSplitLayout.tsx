@@ -111,18 +111,20 @@ export default function AuthSplitLayout({
           </div>
         </motion.div>
 
-        <p className="mt-4 text-center text-[12px] text-slate-600">
-          ¿Trancado con algo?{' '}
-          <a
-            href={waHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-semibold text-navy underline decoration-brand-yellow decoration-2 underline-offset-2"
-          >
-            Escríbenos por WhatsApp
-          </a>{' '}
-          y te ayudamos al toque.
-        </p>
+        {waHref && (
+          <p className="mt-4 text-center text-[12px] text-slate-600">
+            ¿Trancado con algo?{' '}
+            <a
+              href={waHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold text-navy underline decoration-brand-yellow decoration-2 underline-offset-2"
+            >
+              Escríbenos por WhatsApp
+            </a>{' '}
+            y te ayudamos al toque.
+          </p>
+        )}
       </div>
     </div>
   );

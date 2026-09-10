@@ -94,8 +94,10 @@ export function buildLocalBusinessSchema(seo: SeoLocal, opts: LocalBusinessSchem
     legalName: seo.legalName,
     slogan: seo.slogan,
     url: opts.pageUrl ?? opts.siteUrl,
-    telephone: opts.phone ?? undefined,
-    email: opts.email ?? undefined,
+    // `|| undefined`, no `?? undefined`: con la tienda recién instalada estos
+    // llegan como cadena vacía y `telephone: ""` es peor que no declararlo.
+    telephone: opts.phone || undefined,
+    email: opts.email || undefined,
     logo: `${opts.siteUrl}/opengraph-image`,
     image: opts.ogImage ?? `${opts.siteUrl}/opengraph-image`,
     description: opts.description,

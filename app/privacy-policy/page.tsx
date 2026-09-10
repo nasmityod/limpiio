@@ -120,17 +120,20 @@ export default async function PrivacyPolicyPage() {
       </p>
 
       <h2>11. Contacto</h2>
-      <p>
-        Para ejercer derechos o consultas sobre privacidad:{' '}
-        <a href={`mailto:${settings.email}`}>{settings.email}</a>
-        {settings.phone ? (
-          <>
-            {' '}
-            · Teléfono:{' '}
-            <a href={`tel:${settings.phone.replace(/\s/g, '')}`}>{settings.phone}</a>
-          </>
-        ) : null}
-      </p>
+      {settings.email || settings.phone ? (
+        <p>
+          Para ejercer derechos o consultas sobre privacidad:{' '}
+          {settings.email ? (
+            <a href={`mailto:${settings.email}`}>{settings.email}</a>
+          ) : null}
+          {settings.phone ? (
+            <>
+              {settings.email ? ' · ' : ''}Teléfono:{' '}
+              <a href={`tel:${settings.phone.replace(/\s/g, '')}`}>{settings.phone}</a>
+            </>
+          ) : null}
+        </p>
+      ) : null}
       {settings.address ? (
         <p>
           Dirección de referencia: <strong>{settings.address}</strong>

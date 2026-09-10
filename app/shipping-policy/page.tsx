@@ -78,16 +78,27 @@ export default async function ShippingPolicyPage() {
       </p>
 
       <h2>5. Contacto</h2>
-      <p>
-        Teléfonos: <strong>{settings.phone}</strong>
-        {settings.phone2 ? (
-          <>
-            {' '}
-            / <strong>{settings.phone2}</strong>
-          </>
-        ) : null}
-        . Correo: <strong>{settings.email}</strong>.
-      </p>
+      {settings.phone || settings.email ? (
+        <p>
+          {settings.phone ? (
+            <>
+              Teléfonos: <strong>{settings.phone}</strong>
+              {settings.phone2 ? (
+                <>
+                  {' '}
+                  / <strong>{settings.phone2}</strong>
+                </>
+              ) : null}
+              .{' '}
+            </>
+          ) : null}
+          {settings.email ? (
+            <>
+              Correo: <strong>{settings.email}</strong>.
+            </>
+          ) : null}
+        </p>
+      ) : null}
     </LegalPageLayout>
   );
 }

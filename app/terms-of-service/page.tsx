@@ -134,18 +134,23 @@ export default async function TermsOfServicePage() {
       </p>
 
       <h2>12. Contacto</h2>
-      <p>
-        Para consultas sobre estos términos o tu pedido, escribe a{' '}
-        <a href={`mailto:${settings.email}`}>{settings.email}</a>
-        {settings.phone ? (
-          <>
-            {' '}
-            o llama al <a href={`tel:${settings.phone.replace(/\s/g, '')}`}>{settings.phone}</a>.
-          </>
-        ) : (
-          '.'
-        )}
-      </p>
+      {settings.email || settings.phone ? (
+        <p>
+          Para consultas sobre estos términos o tu pedido,{' '}
+          {settings.email ? (
+            <>
+              escribe a <a href={`mailto:${settings.email}`}>{settings.email}</a>
+            </>
+          ) : null}
+          {settings.email && settings.phone ? ' o ' : null}
+          {settings.phone ? (
+            <>
+              llama al <a href={`tel:${settings.phone.replace(/\s/g, '')}`}>{settings.phone}</a>
+            </>
+          ) : null}
+          .
+        </p>
+      ) : null}
       <p>
         También puedes revisar nuestra{' '}
         <Link href="/privacy-policy" className="text-navy underline underline-offset-2">
