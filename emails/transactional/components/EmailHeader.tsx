@@ -7,6 +7,7 @@ import {
   emailSiteBaseUrl,
 } from '../site';
 import { MT, fontSans } from '../theme';
+import { BRAND } from '@/config/brand';
 
 type Props = {
   customerName?: string;
@@ -19,7 +20,7 @@ type Props = {
  * físico de la tienda (fondo negro/navy + logo amarillo + slogan). El cuerpo
  * del correo es claro por decisión del dueño.
  */
-export function MundoTechHeader({ customerName, compact }: Props) {
+export function EmailHeader({ customerName, compact }: Props) {
   const name = !compact ? customerName?.trim() : undefined;
 
   return (
@@ -35,13 +36,13 @@ export function MundoTechHeader({ customerName, compact }: Props) {
       <Link
         href={emailSiteBaseUrl()}
         style={{ textDecoration: 'none', display: 'inline-block' }}
-        title="MundoTech — Ir a la tienda"
+        title={`${BRAND.name} — Ir a la tienda`}
       >
         <Img
           src={emailLogoUrl()}
           width={EMAIL_LOGO_DISPLAY_WIDTH}
           height={EMAIL_LOGO_DISPLAY_HEIGHT}
-          alt="MundoTech — Conectados Contigo"
+          alt={`${BRAND.name} — Conectados Contigo`}
           style={{
             display: 'block',
             margin: '0 auto 10px',

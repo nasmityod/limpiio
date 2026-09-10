@@ -9,12 +9,13 @@ import {
   emailInstagramHandle,
   emailSiteBaseUrl,
 } from '../site';
+import { BRAND } from '@/config/brand';
 
 /**
  * Pie de correo con datos verificables de la tienda física. Que el cliente
  * pueda comprobar que existimos es la mejor señal anti-spam y anti-estafa.
  */
-export function MundoTechFooter() {
+export function EmailFooter() {
   const mail = emailContactAddress();
   const mailto = `mailto:${mail}`;
   const phones = emailStorePhones();
@@ -33,22 +34,28 @@ export function MundoTechFooter() {
       }}
     >
       <Text style={{ margin: '0 0 6px', fontSize: 13, fontWeight: 700, color: MT.textPrimary }}>
-        MundoTech — tienda física en Barquisimeto
+        {BRAND.name} — tienda física en Barquisimeto
       </Text>
-      <Text style={{ margin: '0 0 4px', fontSize: 12, lineHeight: 1.6, color: MT.textMuted }}>
-        {address}
-      </Text>
-      <Text style={{ margin: '0 0 10px', fontSize: 12, lineHeight: 1.6, color: MT.textMuted }}>
-        {phones} · Instagram {instagram}
-      </Text>
-      <Text style={{ margin: '0 0 12px' }}>
-        <Link
-          href={mailto}
-          style={{ color: MT.goldText, fontWeight: 700, textDecoration: 'none', fontSize: 13 }}
-        >
-          {mail}
-        </Link>
-      </Text>
+      {address ? (
+        <Text style={{ margin: '0 0 4px', fontSize: 12, lineHeight: 1.6, color: MT.textMuted }}>
+          {address}
+        </Text>
+      ) : null}
+      {phones || instagram ? (
+        <Text style={{ margin: '0 0 10px', fontSize: 12, lineHeight: 1.6, color: MT.textMuted }}>
+          {[phones, instagram ? `Instagram ${instagram}` : ''].filter(Boolean).join(' · ')}
+        </Text>
+      ) : null}
+      {mail ? (
+        <Text style={{ margin: '0 0 12px' }}>
+          <Link
+            href={mailto}
+            style={{ color: MT.goldText, fontWeight: 700, textDecoration: 'none', fontSize: 13 }}
+          >
+            {mail}
+          </Link>
+        </Text>
+      ) : null}
       {/* FASE 4.2: seguimiento público sin cuenta — número de pedido + cédula. */}
       <Text style={{ margin: '0 0 12px', fontSize: 12 }}>
         <Link

@@ -1,8 +1,9 @@
 import { Section, Text } from '@react-email/components';
 import * as React from 'react';
 import { PrimaryCta } from './components/PrimaryCta';
-import { MundoTechShell } from './MundoTechShell';
+import { EmailShell } from './EmailShell';
 import { MT, fontSans } from './theme';
+import { BRAND } from '@/config/brand';
 
 type Props = {
   resetUrl: string;
@@ -12,9 +13,9 @@ export function PasswordResetEmail({ resetUrl }: Props) {
   const displayUrl = resetUrl;
 
   return (
-    <MundoTechShell
-      preview="Restablece tu contraseña de MundoTech de forma segura."
-      title="Restablecer contraseña · MundoTech"
+    <EmailShell
+      preview={`Restablece tu contraseña de ${BRAND.name} de forma segura.`}
+      title={`Restablecer contraseña · ${BRAND.name}`}
     >
       <Section style={{ padding: '12px 24px 8px', fontFamily: fontSans }}>
         <Text
@@ -30,7 +31,7 @@ export function PasswordResetEmail({ resetUrl }: Props) {
         </Text>
         <Text style={{ margin: 0, fontSize: 16, lineHeight: 1.65, color: MT.textMuted }}>
           Recibimos una solicitud para restablecer la contraseña de tu cuenta en{' '}
-          <strong style={{ color: MT.textPrimary }}>MundoTech</strong>. Si fuiste tú, pulsa el botón para elegir una
+          <strong style={{ color: MT.textPrimary }}>{BRAND.name}</strong>. Si fuiste tú, pulsa el botón para elegir una
           nueva clave.
         </Text>
         <Text style={{ margin: '14px 0 0', fontSize: 14, lineHeight: 1.6, color: MT.textMuted }}>
@@ -50,6 +51,6 @@ export function PasswordResetEmail({ resetUrl }: Props) {
           El enlace expira en 15 minutos.
         </Text>
       </Section>
-    </MundoTechShell>
+    </EmailShell>
   );
 }

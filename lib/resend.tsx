@@ -1,41 +1,42 @@
-import { EmailChangeConfirmEmail } from '@/emails/mundotech/EmailChangeConfirmEmail';
-import { OrderCancelledEmail } from '@/emails/mundotech/OrderCancelledEmail';
-import { OrderConfirmationEmail } from '@/emails/mundotech/OrderConfirmationEmail';
-import { OrderDeliveredEmail } from '@/emails/mundotech/OrderDeliveredEmail';
-import { PasswordResetEmail } from '@/emails/mundotech/PasswordResetEmail';
-import { PaymentValidatedEmail } from '@/emails/mundotech/PaymentValidatedEmail';
-import { PaymentRejectedEmail } from '@/emails/mundotech/PaymentRejectedEmail';
+import { EmailChangeConfirmEmail } from '@/emails/transactional/EmailChangeConfirmEmail';
+import { OrderCancelledEmail } from '@/emails/transactional/OrderCancelledEmail';
+import { OrderConfirmationEmail } from '@/emails/transactional/OrderConfirmationEmail';
+import { OrderDeliveredEmail } from '@/emails/transactional/OrderDeliveredEmail';
+import { PasswordResetEmail } from '@/emails/transactional/PasswordResetEmail';
+import { PaymentValidatedEmail } from '@/emails/transactional/PaymentValidatedEmail';
+import { PaymentRejectedEmail } from '@/emails/transactional/PaymentRejectedEmail';
 import {
   ShippingNotificationEmail,
   type ShippingNotificationOptions,
-} from '@/emails/mundotech/ShippingNotificationEmail';
-import { RestockNotificationEmail } from '@/emails/mundotech/RestockNotificationEmail';
-import { AbandonedCartEmail } from '@/emails/mundotech/AbandonedCartEmail';
+} from '@/emails/transactional/ShippingNotificationEmail';
+import { RestockNotificationEmail } from '@/emails/transactional/RestockNotificationEmail';
+import { AbandonedCartEmail } from '@/emails/transactional/AbandonedCartEmail';
 import {
   ReviewRequestEmail,
   type ReviewRequestProduct,
-} from '@/emails/mundotech/ReviewRequestEmail';
-import type { OrderConfirmationPayload } from '@/emails/mundotech/types';
+} from '@/emails/transactional/ReviewRequestEmail';
+import type { OrderConfirmationPayload } from '@/emails/transactional/types';
 import type { AbandonedCartItem } from '@/lib/definitions';
-import { emailSiteBaseUrl, emailContactAddress } from '@/emails/mundotech/site';
-import { WelcomeEmail } from '@/emails/mundotech/WelcomeEmail';
+import { emailSiteBaseUrl, emailContactAddress } from '@/emails/transactional/site';
+import { BRAND, brandSubject } from '@/config/brand';
+import { WelcomeEmail } from '@/emails/transactional/WelcomeEmail';
 import { render } from '@react-email/render';
 import { Resend } from 'resend';
 import * as React from 'react';
 import { isE2eMode } from '@/lib/e2e-mode';
 import { logError, logWarn } from '@/lib/safe-logger';
 
-export type { OrderConfirmationPayload, OrderConfirmationLineItem } from '@/emails/mundotech/types';
+export type { OrderConfirmationPayload, OrderConfirmationLineItem } from '@/emails/transactional/types';
 
 /** @deprecated Use ShippingNotificationOptions — mantenido por compatibilidad con importaciones existentes. */
 export type ShippingEmailOptions = ShippingNotificationOptions;
 
 /** Nombre visible de la marca en el remitente. */
-const BRAND_SENDER_NAME = 'MundoTech';
+const BRAND_SENDER_NAME = BRAND.name;
 
 /**
  * Remitente de los correos. Se lee de `RESEND_FROM_ADDRESS` (dominio verificado en
- * Resend, p. ej. `noreply@mundotechve.com`). Si el valor ya trae nombre visible
+ * Resend, p. ej. `noreply@tu-dominio.com`). Si el valor ya trae nombre visible
  * (`Nombre <correo>`) se respeta; si es solo el correo, se antepone la marca.
  *
  * PRD-020: sin la variable NO hay fallback a dominios de terceros
@@ -103,7 +104,9 @@ async function sendBrandedEmail(params: {
     const { error } = await resend.emails.send({
       from: FROM_ADDRESS,
       to,
-      replyTo: REPLY_TO_ADDRESS,
+      // Sin correo de atención configurado se omite el Reply-To: mandar uno
+      // vacío haría fallar la petición a Resend.
+      ...(REPLY_TO_ADDRESS ? { replyTo: REPLY_TO_ADDRESS } : {}),
       subject,
       html,
       text,
@@ -158,8 +161,8 @@ export async function sendPaymentValidatedEmail(
     resend,
     to: trimmedEmail,
     subject: casheaInitial
-      ? 'MundoTech · Inicial de Cashea confirmada — tu pedido va en preparación'
-      : 'MundoTech · Pago confirmado — tu pedido va en preparación',
+      ? brandSubject('Inicial de Cashea confirmada — tu pedido va en preparación')
+      : brandSubject('Pago confirmado — tu pedido va en preparación'),
     logScope: 'payment-validated-email',
     element: (
       <PaymentValidatedEmail
@@ -201,7 +204,7 @@ export async function sendPaymentRejectedEmail(
   await sendBrandedEmail({
     resend,
     to: trimmedEmail,
-    subject: `MundoTech · No pudimos verificar el pago de tu pedido #${trimmedOrderRef}`,
+    subject: brandSubject(`No pudimos verificar el pago de tu pedido #${trimmedOrderRef}`),
     logScope: 'payment-rejected-email',
     element: (
       <PaymentRejectedEmail
@@ -235,7 +238,7 @@ export async function sendOrderConfirmationEmail(order: OrderConfirmationPayload
   await sendBrandedEmail({
     resend,
     to: trimmedEmail,
-    subject: `MundoTech · Recibimos tu pedido #${subjNo} — ya lo estamos revisando`,
+    subject: brandSubject(`Recibimos tu pedido #${subjNo} — ya lo estamos revisando`),
     logScope: 'order-confirmation-email',
     element: <OrderConfirmationEmail {...order} />,
   });
@@ -269,7 +272,7 @@ export async function sendShippingEmail(
   await sendBrandedEmail({
     resend,
     to: trimmedEmail,
-    subject: 'MundoTech · Tu pedido salió de la tienda — aquí va tu guía',
+    subject: brandSubject('Tu pedido salió de la tienda — aquí va tu guía'),
     logScope: 'shipping-email',
     element: (
       <ShippingNotificationEmail
@@ -304,7 +307,7 @@ export async function sendOrderDeliveredEmail(email: string, firstName: string, 
   await sendBrandedEmail({
     resend,
     to: trimmedEmail,
-    subject: 'MundoTech · Tu pedido llegó — revisa que todo esté perfecto',
+    subject: brandSubject('Tu pedido llegó — revisa que todo esté perfecto'),
     logScope: 'order-delivered-email',
     element: <OrderDeliveredEmail customerName={trimmedName} orderRef={ref} />,
   });
@@ -331,7 +334,7 @@ export async function sendWelcomeEmail(email: string, firstName: string): Promis
   await sendBrandedEmail({
     resend,
     to: trimmedEmail,
-    subject: '¡Bienvenido a MundoTech! Tu cuenta ya está lista',
+    subject: `¡Bienvenido a ${BRAND.name}! Tu cuenta ya está lista`,
     logScope: 'welcome-email',
     element: <WelcomeEmail customerName={trimmed} />,
   });
@@ -363,7 +366,7 @@ export async function sendRestockNotificationEmail(params: {
   await sendBrandedEmail({
     resend,
     to: trimmedEmail,
-    subject: `MundoTech · ¡${params.productName} volvió al stock!`,
+    subject: brandSubject(`¡${params.productName} volvió al stock!`),
     logScope: 'restock-email',
     element: (
       <RestockNotificationEmail
@@ -413,8 +416,8 @@ export async function sendAbandonedCartEmail(params: {
     resend,
     to:       trimmedEmail,
     subject: params.coupon
-      ? `MundoTech · Tu carrito te espera — con ${params.coupon.discountLabel}`
-      : 'MundoTech · Te guardamos el carrito tal como lo dejaste',
+      ? brandSubject(`Tu carrito te espera — con ${params.coupon.discountLabel}`)
+      : brandSubject('Te guardamos el carrito tal como lo dejaste'),
     logScope: 'abandoned-cart-email',
     element: (
       <AbandonedCartEmail
@@ -464,8 +467,8 @@ export async function sendOrderCancelledEmail(
     to: trimmedEmail,
     subject:
       typeof options.expiredAfterHours === 'number'
-        ? `MundoTech · Tu pedido #${ref} venció después de ${options.expiredAfterHours} horas`
-        : `MundoTech · Tu pedido #${ref} fue cancelado`,
+        ? brandSubject(`Tu pedido #${ref} venció después de ${options.expiredAfterHours} horas`)
+        : brandSubject(`Tu pedido #${ref} fue cancelado`),
     logScope: 'order-cancelled-email',
     element: (
       <OrderCancelledEmail
@@ -502,7 +505,7 @@ export async function sendEmailChangeConfirmEmail(params: {
   await sendBrandedEmail({
     resend,
     to: trimmedEmail,
-    subject: 'MundoTech · Confirma tu nuevo correo electrónico',
+    subject: brandSubject('Confirma tu nuevo correo electrónico'),
     logScope: 'email-change-confirm',
     element: (
       <EmailChangeConfirmEmail
@@ -538,7 +541,7 @@ export async function sendReviewRequestEmail(params: {
   await sendBrandedEmail({
     resend,
     to: trimmedEmail,
-    subject: 'MundoTech · ¿Qué tal tu compra? Cuéntanos en 1 minuto',
+    subject: brandSubject('¿Qué tal tu compra? Cuéntanos en 1 minuto'),
     logScope: 'review-request-email',
     element: (
       <ReviewRequestEmail
@@ -572,7 +575,7 @@ export async function sendPasswordResetEmail(email: string, token: string): Prom
   await sendBrandedEmail({
     resend,
     to: trimmedEmail,
-    subject: 'MundoTech · Restablecer tu contraseña',
+    subject: brandSubject('Restablecer tu contraseña'),
     logScope: 'password-reset-email',
     element: <PasswordResetEmail resetUrl={resetUrl} />,
   });

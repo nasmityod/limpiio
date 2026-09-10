@@ -4,12 +4,13 @@ import { roundMoney2 } from '@/lib/exchange-rate';
 import { DualMoneyInline } from './components/DualMoneyInline';
 import { PrimaryCta } from './components/PrimaryCta';
 import { StatusPill } from './components/StatusPill';
-import { MundoTechShell } from './MundoTechShell';
+import { EmailShell } from './EmailShell';
 import type { OrderConfirmationPayload } from './types';
 import { emailSiteBaseUrl, emailStoreAddress, emailStorePhones } from './site';
 import { orderPathSegment } from '@/lib/order-ref';
 import { orderShippingChargeLabelFromSnapshot } from '@/lib/shipping-charge';
 import { MT, fontSans } from './theme';
+import { BRAND, brandSubject } from '@/config/brand';
 
 function formatVariations(v: OrderConfirmationPayload['items'][0]['variations']): string | null {
   if (v == null) return null;
@@ -86,9 +87,9 @@ export function OrderConfirmationEmail(payload: OrderConfirmationPayload) {
   ];
 
   return (
-    <MundoTechShell
-      preview={`Pedido #${padded} confirmado — gracias por tu compra en MundoTech.`}
-      title={`MundoTech · Pedido #${padded}`}
+    <EmailShell
+      preview={`Pedido #${padded} confirmado — gracias por tu compra en ${BRAND.name}.`}
+      title={brandSubject(`Pedido #${padded}`)}
       headerCompact
     >
       {/* ── Hero (mockup): gracias + fecha VET ───────────────────────────── */}
@@ -483,6 +484,6 @@ export function OrderConfirmationEmail(payload: OrderConfirmationPayload) {
       )}
 
       <Section style={{ padding: '0 24px 28px', fontFamily: fontSans }} />
-    </MundoTechShell>
+    </EmailShell>
   );
 }

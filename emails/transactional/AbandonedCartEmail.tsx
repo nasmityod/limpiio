@@ -1,10 +1,11 @@
 import { Column, Img, Link, Row, Section, Text } from '@react-email/components';
 import * as React from 'react';
 import type { AbandonedCartItem } from '@/lib/definitions';
-import { MundoTechShell } from './MundoTechShell';
+import { EmailShell } from './EmailShell';
 import { PrimaryCta } from './components/PrimaryCta';
 import { MT, fontSans } from './theme';
 import { emailSiteBaseUrl } from './site';
+import { BRAND, brandSubject } from '@/config/brand';
 
 export interface AbandonedCartEmailProps {
   customerName:   string;
@@ -46,9 +47,9 @@ export function AbandonedCartEmail({
   const label     = itemCount === 1 ? '1 artículo' : `${itemCount} artículos`;
 
   return (
-    <MundoTechShell
-      preview={`¿Olvidaste algo? Tienes ${label} esperándote en MundoTech.`}
-      title="MundoTech · Tienes artículos en tu carrito"
+    <EmailShell
+      preview={`¿Olvidaste algo? Tienes ${label} esperándote en ${BRAND.name}.`}
+      title={brandSubject('Tienes artículos en tu carrito')}
       heroCustomerName={customerName}
     >
       {/* ── Hero ─────────────────────────────────────────────────────────── */}
@@ -274,6 +275,6 @@ export function AbandonedCartEmail({
           </Link>
         </Text>
       </Section>
-    </MundoTechShell>
+    </EmailShell>
   );
 }

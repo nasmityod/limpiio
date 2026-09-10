@@ -2,9 +2,10 @@ import { Section, Text } from '@react-email/components';
 import * as React from 'react';
 import { PrimaryCta } from './components/PrimaryCta';
 import { StatusPill } from './components/StatusPill';
-import { MundoTechShell } from './MundoTechShell';
+import { EmailShell } from './EmailShell';
 import { emailSiteBaseUrl } from './site';
 import { MT, fontSans } from './theme';
+import { BRAND } from '@/config/brand';
 
 export type ShippingNotificationOptions = {
   carrier?: string | null;
@@ -34,9 +35,9 @@ export function ShippingNotificationEmail({ customerName, trackingNumber, opts }
     explicitUrl && /^https?:\/\//i.test(explicitUrl) ? 'Rastrear envío' : 'Ver detalles del pedido';
 
   return (
-    <MundoTechShell
+    <EmailShell
       preview="Tu pedido va en camino — aquí está tu guía de seguimiento."
-      title="Pedido enviado — MundoTech"
+      title={`Pedido enviado — ${BRAND.name}`}
       heroCustomerName={customerName}
     >
       <Section style={{ padding: '12px 24px 8px', fontFamily: fontSans }}>
@@ -98,6 +99,6 @@ export function ShippingNotificationEmail({ customerName, trackingNumber, opts }
 
       <PrimaryCta href={trackHref} label={ctaLabel} />
       <Section style={{ padding: '0 24px 28px', fontFamily: fontSans }} />
-    </MundoTechShell>
+    </EmailShell>
   );
 }

@@ -7,7 +7,7 @@ import {
 } from '@/lib/abandoned-cart';
 import { mergeCart } from '@/lib/cart';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
-import { emailSiteBaseUrl } from '@/emails/mundotech/site';
+import { emailSiteBaseUrl } from '@/emails/transactional/site';
 import { logError } from '@/lib/safe-logger';
 
 function siteUrl(path: string): string {

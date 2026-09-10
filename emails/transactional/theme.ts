@@ -1,5 +1,5 @@
 /**
- * Paleta MundoTech para correos transaccionales — fondo CLARO (decisión del
+ * Paleta de marca para correos transaccionales — fondo CLARO (decisión del
  * dueño: nada de emails dark). La única zona oscura es la cabecera, que
  * reproduce el letrero físico de la tienda: banda negra con el logo amarillo.
  */

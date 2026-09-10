@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { sendReviewRequestEmail } from '@/lib/resend';
-import type { ReviewRequestProduct } from '@/emails/mundotech/ReviewRequestEmail';
+import type { ReviewRequestProduct } from '@/emails/transactional/ReviewRequestEmail';
 import { verifyBearerSecret } from '@/lib/security';
 import { logInfo, logError } from '@/lib/safe-logger';
 import { BRAND } from '@/config/brand';

@@ -1,8 +1,9 @@
 import { Section, Text, Img, Link } from '@react-email/components';
 import * as React from 'react';
 import { PrimaryCta } from './components/PrimaryCta';
-import { MundoTechShell } from './MundoTechShell';
+import { EmailShell } from './EmailShell';
 import { MT, fontSans } from './theme';
+import { BRAND } from '@/config/brand';
 
 export type ReviewRequestProduct = {
   name: string;
@@ -29,9 +30,9 @@ export function ReviewRequestEmail({ customerName, products }: Props) {
       : '¿Qué tal te fue con tu compra? Tu opinión ayuda a otros clientes.';
 
   return (
-    <MundoTechShell
+    <EmailShell
       preview={preview}
-      title="¿Cómo te fue con tu compra? — MundoTech"
+      title={`¿Cómo te fue con tu compra? — ${BRAND.name}`}
       heroCustomerName={customerName}
     >
       <Section style={{ padding: '12px 24px 8px', fontFamily: fontSans }}>
@@ -137,6 +138,6 @@ export function ReviewRequestEmail({ customerName, products }: Props) {
           — primero tú, después la reseña.
         </Text>
       </Section>
-    </MundoTechShell>
+    </EmailShell>
   );
 }

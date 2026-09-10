@@ -2,9 +2,10 @@ import { Link, Section, Text } from '@react-email/components';
 import * as React from 'react';
 import { PrimaryCta } from './components/PrimaryCta';
 import { StatusPill } from './components/StatusPill';
-import { MundoTechShell } from './MundoTechShell';
+import { EmailShell } from './EmailShell';
 import { emailSiteBaseUrl } from './site';
 import { MT, fontSans } from './theme';
+import { BRAND } from '@/config/brand';
 
 type Props = {
   customerName: string;
@@ -29,13 +30,13 @@ export function PaymentValidatedEmail({ customerName, orderDisplayId, orderUuid,
     : null;
 
   return (
-    <MundoTechShell
+    <EmailShell
       preview={
         casheaInitial
           ? 'Inicial de Cashea confirmada — estamos preparando tu pedido.'
           : 'Pago confirmado — estamos preparando tu pedido.'
       }
-      title={casheaInitial ? 'Inicial confirmada — MundoTech' : 'Pago confirmado — MundoTech'}
+      title={casheaInitial ? `Inicial confirmada — ${BRAND.name}` : `Pago confirmado — ${BRAND.name}`}
       heroCustomerName={customerName}
     >
       <Section style={{ padding: '12px 24px 8px', fontFamily: fontSans }}>
@@ -82,6 +83,6 @@ export function PaymentValidatedEmail({ customerName, orderDisplayId, orderUuid,
       )}
 
       <Section style={{ padding: '0 24px 28px', fontFamily: fontSans }} />
-    </MundoTechShell>
+    </EmailShell>
   );
 }

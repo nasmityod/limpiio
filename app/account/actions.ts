@@ -9,7 +9,7 @@ import { revalidatePath } from 'next/cache';
 import bcrypt from 'bcrypt';
 import { hashToken } from '@/lib/security';
 import { sendEmailChangeConfirmEmail } from '@/lib/resend';
-import { emailSiteBaseUrl } from '@/emails/mundotech/site';
+import { emailSiteBaseUrl } from '@/emails/transactional/site';
 import { logError } from '@/lib/safe-logger';
 
 interface UpdateResult {

@@ -1,41 +1,46 @@
+import { BRAND } from '@/config/brand';
+
 /**
  * URL pública usada en enlaces de correo (productos, cuenta, CTA).
- * PRD-111: el fallback hardcodeado a producción puede desalinear entornos.
- * Si NEXT_PUBLIC_SITE_URL no está definida, se usa localhost en desarrollo
- * y la URL de producción en producción. En staging DEBE definirse la variable.
+ * PRD-111: antes había un fallback hardcodeado a un dominio de producción
+ * concreto, que desalineaba entornos en silencio. Ahora la única fuente es
+ * `config/brand.ts`: si NEXT_PUBLIC_SITE_URL no está definida se usa
+ * localhost, y `lib/env-validation.ts` exige la variable en producción.
  */
 export function emailSiteBaseUrl(): string {
-  const explicit = process.env.NEXT_PUBLIC_SITE_URL?.trim();
-  if (explicit) return explicit;
-  return process.env.NODE_ENV === 'production'
-    ? 'https://mundotechve.com'
-    : 'http://localhost:3000';
+  return BRAND.siteUrl;
 }
 
+/**
+ * Correo de atención (Reply-To y contacto del pie).
+ * Cadena vacía si no se configuró: quien envía debe omitir el Reply-To en vez
+ * de mandar uno inválido — ver lib/resend.tsx.
+ */
 export function emailContactAddress(): string {
-  return process.env.NEXT_PUBLIC_CONTACT_EMAIL?.trim() || 'ventas@mundotechve.com';
+  return BRAND.contactEmail;
 }
 
-/** Datos verificables de la tienda física (overrideables por env). */
+/** Datos verificables de la tienda física (vacíos hasta configurarlos). */
 export function emailStoreAddress(): string {
-  return (
-    process.env.NEXT_PUBLIC_STORE_ADDRESS?.trim() ||
-    'Carrera 21 con esquina calle 21, Centro, Barquisimeto 3001, estado Lara'
-  );
+  return BRAND.address;
 }
 
 export function emailStorePhones(): string {
-  return process.env.NEXT_PUBLIC_CONTACT_PHONES?.trim() || '0412-1471338 · 0414-5709470';
+  return BRAND.phones;
 }
 
 export function emailInstagramHandle(): string {
-  return process.env.NEXT_PUBLIC_INSTAGRAM_HANDLE?.trim() || '@Mundotech39';
+  return BRAND.instagramHandle;
 }
 
 /** Versión del logo en correos — incrementar al reemplazar public/logo-dark.png. */
 export const EMAIL_LOGO_VERSION = '1';
 
-/** Dimensiones nativas de public/logo-dark.png (variante para fondo navy). */
+/**
+ * Dimensiones nativas de public/logo-dark.png (variante para fondo navy).
+ * OJO: si sustituyes el logo por uno con otra relación de aspecto, actualiza
+ * estos dos valores o la cabecera del correo saldrá deformada.
+ */
 export const EMAIL_LOGO_NATURAL_WIDTH = 480;
 export const EMAIL_LOGO_NATURAL_HEIGHT = 151;
 

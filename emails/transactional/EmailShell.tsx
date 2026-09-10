@@ -7,8 +7,8 @@ import {
   Section,
 } from '@react-email/components';
 import * as React from 'react';
-import { MundoTechFooter } from './components/MundoTechFooter';
-import { MundoTechHeader } from './components/MundoTechHeader';
+import { EmailFooter } from './components/EmailFooter';
+import { EmailHeader } from './components/EmailHeader';
 import { MT, fontSans } from './theme';
 
 type Props = {
@@ -18,12 +18,12 @@ type Props = {
   heroCustomerName?: string;
   /** Solo logo + eslogan (ej. confirmación de pedido estilo mockup). */
   headerCompact?: boolean;
-  /** Pie personalizado; por defecto usa MundoTechFooter. */
+  /** Pie personalizado; por defecto usa EmailFooter. */
   footer?: React.ReactNode;
   children: React.ReactNode;
 };
 
-export function MundoTechShell({
+export function EmailShell({
   preview,
   title,
   heroCustomerName,
@@ -96,12 +96,12 @@ export function MundoTechShell({
                       overflow: 'hidden',
                     }}
                   >
-                    <MundoTechHeader
+                    <EmailHeader
                       customerName={heroCustomerName}
                       compact={headerCompact}
                     />
                     {children}
-                    {footer ?? <MundoTechFooter />}
+                    {footer ?? <EmailFooter />}
                   </Section>
                 </Container>
               </td>

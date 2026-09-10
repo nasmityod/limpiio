@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { getServerSession } from 'next-auth/next';
-import { absoluteEmailUrl } from '@/emails/mundotech/site';
-import type { OrderConfirmationPayload } from '@/emails/mundotech/types';
+import { absoluteEmailUrl } from '@/emails/transactional/site';
+import type { OrderConfirmationPayload } from '@/emails/transactional/types';
 import { prisma } from '@/lib/prisma';
 import { requirePermission } from '@/lib/admin-access-server';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';

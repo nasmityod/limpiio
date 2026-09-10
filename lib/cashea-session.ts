@@ -36,7 +36,7 @@ import {
 import { hashToken } from '@/lib/security';
 import { d, dn } from '@/lib/decimal';
 import { roundMoney2 } from '@/lib/exchange-rate';
-import { emailSiteBaseUrl } from '@/emails/mundotech/site';
+import { emailSiteBaseUrl } from '@/emails/transactional/site';
 import { logInfo } from '@/lib/safe-logger';
 
 const CASHEA_SESSION_TX_MAX_RETRIES = 3;

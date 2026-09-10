@@ -2,9 +2,10 @@ import { Section, Text } from '@react-email/components';
 import * as React from 'react';
 import { PrimaryCta } from './components/PrimaryCta';
 import { StatusPill } from './components/StatusPill';
-import { MundoTechShell } from './MundoTechShell';
+import { EmailShell } from './EmailShell';
 import { emailSiteBaseUrl, emailStorePhones } from './site';
 import { MT, fontSans } from './theme';
+import { BRAND } from '@/config/brand';
 
 type Props = {
   customerName: string;
@@ -20,13 +21,13 @@ export function OrderCancelledEmail({ customerName, orderDisplayId, expiredAfter
   const isExpired = typeof expiredAfterHours === 'number';
 
   return (
-    <MundoTechShell
+    <EmailShell
       preview={
         isExpired
           ? `Tu pedido #${orderDisplayId} fue cancelado después de ${expiredAfterHours} horas pendiente.`
           : 'Tu pedido fue cancelado.'
       }
-      title="Pedido cancelado — MundoTech"
+      title={`Pedido cancelado — ${BRAND.name}`}
       heroCustomerName={customerName}
     >
       <Section style={{ padding: '12px 24px 8px', fontFamily: fontSans }}>
@@ -65,6 +66,6 @@ export function OrderCancelledEmail({ customerName, orderDisplayId, expiredAfter
       <PrimaryCta href={ordersPath} label="Ver mis pedidos" />
 
       <Section style={{ padding: '0 24px 28px', fontFamily: fontSans }} />
-    </MundoTechShell>
+    </EmailShell>
   );
 }

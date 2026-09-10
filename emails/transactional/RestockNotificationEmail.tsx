@@ -1,9 +1,10 @@
 import { Section, Text, Img, Link } from '@react-email/components';
 import * as React from 'react';
 import { PrimaryCta } from './components/PrimaryCta';
-import { MundoTechShell } from './MundoTechShell';
+import { EmailShell } from './EmailShell';
 import { emailSiteBaseUrl } from './site';
 import { MT, fontSans } from './theme';
+import { BRAND } from '@/config/brand';
 
 type Props = {
   productName: string;
@@ -22,9 +23,9 @@ export function RestockNotificationEmail({
   const shopUrl = `${base}/productos`;
 
   return (
-    <MundoTechShell
+    <EmailShell
       preview={`¡${productName} volvió al stock! Cómpralo antes de que se agote.`}
-      title={`${productName} volvió a estar disponible — MundoTech`}
+      title={`${productName} volvió a estar disponible — ${BRAND.name}`}
     >
       <Section style={{ padding: '20px 24px 8px', fontFamily: fontSans }}>
         <Text
@@ -148,6 +149,6 @@ export function RestockNotificationEmail({
           Explorar más productos
         </Link>
       </Section>
-    </MundoTechShell>
+    </EmailShell>
   );
 }

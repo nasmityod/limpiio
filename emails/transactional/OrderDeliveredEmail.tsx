@@ -2,9 +2,10 @@ import { Link, Section, Text } from '@react-email/components';
 import * as React from 'react';
 import { PrimaryCta } from './components/PrimaryCta';
 import { StatusPill } from './components/StatusPill';
-import { MundoTechShell } from './MundoTechShell';
+import { EmailShell } from './EmailShell';
 import { emailSiteBaseUrl } from './site';
 import { MT, fontSans } from './theme';
+import { BRAND } from '@/config/brand';
 
 type Props = {
   customerName: string;
@@ -18,9 +19,9 @@ export function OrderDeliveredEmail({ customerName, orderRef }: Props) {
   const shopUrl = `${base}/productos`;
 
   return (
-    <MundoTechShell
-      preview="Tu pedido fue entregado — gracias por confiar en MundoTech."
-      title="Pedido entregado — MundoTech"
+    <EmailShell
+      preview={`Tu pedido fue entregado — gracias por confiar en ${BRAND.name}.`}
+      title={`Pedido entregado — ${BRAND.name}`}
       heroCustomerName={customerName}
     >
       <Section style={{ padding: '12px 24px 8px', fontFamily: fontSans }}>
@@ -59,6 +60,6 @@ export function OrderDeliveredEmail({ customerName, orderRef }: Props) {
           Ver qué hay de nuevo en la tienda
         </Link>
       </Section>
-    </MundoTechShell>
+    </EmailShell>
   );
 }

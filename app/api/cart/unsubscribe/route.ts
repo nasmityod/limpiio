@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { markCartOptedOut, findAbandonedCartByRecoveryToken } from '@/lib/abandoned-cart';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { rejectInvalidMutationOrigin } from '@/lib/security';
-import { emailSiteBaseUrl } from '@/emails/mundotech/site';
+import { emailSiteBaseUrl } from '@/emails/transactional/site';
 
 /**
  * GET /api/cart/unsubscribe?token=<recoveryToken>

@@ -6,8 +6,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requirePermission } from '@/lib/admin-access-server';
-import { absoluteEmailUrl } from '@/emails/mundotech/site';
-import type { OrderConfirmationPayload } from '@/emails/mundotech/types';
+import { absoluteEmailUrl } from '@/emails/transactional/site';
+import type { OrderConfirmationPayload } from '@/emails/transactional/types';
 import { d, dn } from '@/lib/decimal';
 import { sendOrderConfirmationEmail } from '@/lib/resend';
 import { roundMoney2 } from '@/lib/exchange-rate';

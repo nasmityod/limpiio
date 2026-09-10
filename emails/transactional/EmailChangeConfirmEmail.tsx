@@ -1,8 +1,9 @@
 import { Section, Text } from '@react-email/components';
 import * as React from 'react';
 import { PrimaryCta } from './components/PrimaryCta';
-import { MundoTechShell } from './MundoTechShell';
+import { EmailShell } from './EmailShell';
 import { MT, fontSans } from './theme';
+import { BRAND } from '@/config/brand';
 
 type Props = {
   customerName: string;
@@ -12,8 +13,8 @@ type Props = {
 
 export function EmailChangeConfirmEmail({ customerName, confirmUrl, newEmail }: Props) {
   return (
-    <MundoTechShell
-      preview="Confirma tu nuevo correo electrónico en MundoTech."
+    <EmailShell
+      preview={`Confirma tu nuevo correo electrónico en ${BRAND.name}.`}
       title="Confirma tu nuevo correo"
       heroCustomerName={customerName}
     >
@@ -45,6 +46,6 @@ export function EmailChangeConfirmEmail({ customerName, confirmUrl, newEmail }: 
           Este enlace caduca en 1 hora. Si no lo solicitaste, no es necesario hacer nada.
         </Text>
       </Section>
-    </MundoTechShell>
+    </EmailShell>
   );
 }

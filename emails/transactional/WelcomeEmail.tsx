@@ -2,13 +2,16 @@ import { Link, Section, Text } from '@react-email/components';
 import * as React from 'react';
 import { PrimaryCta } from './components/PrimaryCta';
 import { WelcomeSocialFooter } from './components/WelcomeSocialFooter';
-import { MundoTechShell } from './MundoTechShell';
+import { EmailShell } from './EmailShell';
 import { emailSiteBaseUrl } from './site';
 import { MT, fontSans } from './theme';
+import { BRAND } from '@/config/brand';
 
-const CONTACT_EMAIL = 'hola@mundotechve.com';
-const WHATSAPP_URL = 'https://wa.me/584121471338';
-const WHATSAPP_DISPLAY = '+58 412-1471338';
+// Datos de contacto desde config/brand.ts: una tienda derivada nunca debe
+// enviar a sus clientes el correo ni el WhatsApp de otra.
+const CONTACT_EMAIL = BRAND.contactEmail;
+const WHATSAPP_URL = BRAND.social.whatsapp;
+const WHATSAPP_DISPLAY = BRAND.phones;
 
 type Props = {
   customerName: string;
@@ -19,9 +22,9 @@ export function WelcomeEmail({ customerName }: Props) {
   const shopUrl = `${base}/productos`;
 
   return (
-    <MundoTechShell
-      preview="¡Bienvenido a MundoTech! Gracias por registrarte."
-      title="Bienvenido a MundoTech"
+    <EmailShell
+      preview={`¡Bienvenido a ${BRAND.name}! Gracias por registrarte.`}
+      title={`Bienvenido a ${BRAND.name}`}
       headerCompact
       footer={<WelcomeSocialFooter />}
     >
@@ -30,7 +33,7 @@ export function WelcomeEmail({ customerName }: Props) {
           Hola <strong>{customerName}</strong>,
         </Text>
         <Text style={{ margin: '0 0 16px', fontSize: 22, fontWeight: 700, lineHeight: 1.3, color: MT.textPrimary }}>
-          ¡Bienvenido a MundoTech!
+          ¡Bienvenido a {BRAND.name}!
         </Text>
         <Text style={{ margin: '0 0 16px', fontSize: 15, lineHeight: 1.75, color: MT.textMuted }}>
           Gracias por registrarte. Desde ahora tienes acceso a beneficios exclusivos, lanzamientos
@@ -42,7 +45,7 @@ export function WelcomeEmail({ customerName }: Props) {
         </Text>
       </Section>
 
-      <PrimaryCta fullWidth href={shopUrl} label="Ir a MundoTech" />
+      <PrimaryCta fullWidth href={shopUrl} label={`Ir a ${BRAND.name}`} />
 
       <Section style={{ padding: '8px 24px 28px', backgroundColor: MT.cardBg, fontFamily: fontSans }}>
         <Text style={{ margin: '0 0 12px', fontSize: 15, lineHeight: 1.75, color: MT.textMuted }}>
@@ -65,9 +68,9 @@ export function WelcomeEmail({ customerName }: Props) {
           .
         </Text>
         <Text style={{ margin: 0, fontSize: 15, lineHeight: 1.75, color: MT.textMuted }}>
-          Gracias por elegir MundoTech. ¡Nos encanta tenerte con nosotros!
+          Gracias por elegir {BRAND.name}. ¡Nos encanta tenerte con nosotros!
         </Text>
       </Section>
-    </MundoTechShell>
+    </EmailShell>
   );
 }
