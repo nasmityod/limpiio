@@ -21,6 +21,11 @@ const RECOMMENDED_IN_PRODUCTION = ['RESEND_API_KEY', 'RESEND_FROM_ADDRESS'] as c
  */
 const REQUIRED_IN_PRODUCTION = [
   'CRON_SECRET',
+  // Sin esto, config/brand.ts cae al default neutro "Tienda": los asuntos de
+  // los correos salen como "Tienda · Recibimos tu pedido", el <title>, el
+  // JSON-LD y la imagen OG quedan genéricos. Nada se rompe de forma visible,
+  // así que el fallo se descubre cuando el primer cliente ya recibió el correo.
+  'NEXT_PUBLIC_BRAND_NAME',
   // Sin esto, config/brand.ts cae a http://localhost:3000 y los canonicals,
   // el sitemap, las tarjetas OG y los enlaces de los correos apuntarían a
   // localhost. Antes existía un fallback a un dominio concreto y el fallo
