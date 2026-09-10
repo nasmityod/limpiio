@@ -55,10 +55,11 @@ export default function Logo({
   const ratio = RATIO[resolvedVariant];
   const width = Math.round(dims.height * ratio);
   const brandLabel = storeName?.trim() || BRAND.name;
-  const alt =
-    slogan?.trim()
-      ? `${brandLabel} — ${slogan.trim()}`
-      : `${brandLabel} — Conectados Contigo`;
+  // El eslogan puede venir de StoreSettings (prop `slogan`, editable en Admin)
+  // o de BRAND.tagline (variable de entorno). Si no hay ninguno, el alt es solo
+  // la marca: sin separador « — » suelto al final.
+  const tagline = slogan?.trim() || BRAND.tagline;
+  const alt = tagline ? `${brandLabel} — ${tagline}` : brandLabel;
   const homeLabel = `${brandLabel} — Ir al inicio`;
 
   const img = (extra?: string) => (

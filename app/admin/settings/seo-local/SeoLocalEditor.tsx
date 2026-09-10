@@ -6,6 +6,7 @@ import {
   Crosshair, Tag, Globe2, ExternalLink, Plus, Trash2,
 } from 'lucide-react';
 import { updateSeoLocal } from '@/app/actions/seoLocalActions';
+import { BRAND } from '@/config/brand';
 import type { SeoLocal } from '@/lib/seo-local-schema';
 import { SEO_DAYS, DAY_LABEL_ES } from '@/lib/seo-local-schema';
 
@@ -128,7 +129,7 @@ export default function SeoLocalEditor({ initial }: SeoLocalEditorProps) {
           label="Eslogan"
           value={data.slogan}
           onChange={v => set('slogan', v)}
-          placeholder="Conectados Contigo"
+          placeholder={BRAND.tagline || 'Tu eslogan'}
           hint="Aparece en el JSON-LD y en la página de la tienda."
           error={errors.slogan}
         />

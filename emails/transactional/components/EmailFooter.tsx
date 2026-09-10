@@ -66,7 +66,8 @@ export function EmailFooter() {
         </Link>
       </Text>
       <Text style={{ margin: 0, fontSize: 11, color: MT.textMuted }}>
-        Conectados Contigo · Si tienes dudas, responde a este correo y te atendemos.
+        {BRAND.tagline ? `${BRAND.tagline} · ` : ''}
+        Si tienes dudas, responde a este correo y te atendemos.
       </Text>
     </Section>
     <Section

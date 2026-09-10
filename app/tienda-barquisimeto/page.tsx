@@ -13,6 +13,10 @@ import { BRAND } from '@/config/brand';
 
 const SITE_URL = BRAND.siteUrl;
 const PAGE_URL = `${SITE_URL}/tienda-barquisimeto`;
+/** Título de OG/Twitter. Sin eslogan configurado no deja un « — » colgando. */
+const SOCIAL_TITLE = BRAND.tagline
+  ? `${BRAND.name} Barquisimeto — ${BRAND.tagline}`
+  : `${BRAND.name} Barquisimeto`;
 
 export const revalidate = 300;
 
@@ -33,7 +37,7 @@ export const metadata: Metadata = {
   alternates: { canonical: PAGE_URL },
   // og:image heredada de app/opengraph-image.tsx (imagen de marca generada)
   openGraph: {
-    title: `${BRAND.name} Barquisimeto — Conectados Contigo`,
+    title: SOCIAL_TITLE,
     description:
       'Tu tienda en el Centro de Barquisimeto: tecnología, hogar, cocina, fitness y más. USD/Bs., retiro en tienda y envíos nacionales.',
     url: PAGE_URL,
@@ -43,7 +47,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: `${BRAND.name} Barquisimeto — Conectados Contigo`,
+    title: SOCIAL_TITLE,
     description:
       'Variedades en Barquisimeto: tecnología, hogar, cocina y más. USD/Bs., retiro en tienda y envíos nacionales.',
   },

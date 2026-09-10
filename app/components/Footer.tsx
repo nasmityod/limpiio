@@ -45,13 +45,13 @@ export default function Footer({ shellData }: { shellData: SiteShellData }) {
 
           {/* Marca + datos verificables */}
           <div className="md:col-span-5">
-            <Logo variant="dark" size="lg" href="/" />
-            <p className="mt-1 text-[10.5px] font-bold uppercase tracking-[0.24em] text-brand-yellow">
-              Conectados Contigo
-            </p>
+            <Logo variant="dark" size="lg" href="/" slogan={settings.tagline} />
+            {/* Un solo eslogan, el que el admin edita. Antes había además una
+                línea fija con el de la marca original, y esta la repetía sin
+                ese prefijo. */}
             {settings.tagline && (
-              <p className="text-on-dark text-sm leading-relaxed mt-3 max-w-sm">
-                {settings.tagline.replace(/^Conectados Contigo\s*[—–-]\s*/i, '').trim()}
+              <p className="mt-1 text-[10.5px] font-bold uppercase tracking-[0.24em] text-brand-yellow">
+                {settings.tagline}
               </p>
             )}
 

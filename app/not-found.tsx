@@ -6,6 +6,7 @@
 
 import type { Metadata } from "next";
 import Link from "next/link";
+import { BRAND } from "@/config/brand";
 import { prisma } from "@/lib/prisma";
 import { Search, Home, Tag, ArrowRight } from "lucide-react";
 
@@ -125,10 +126,9 @@ export default async function NotFound() {
 
       {/* Branding */}
       <p className="mt-14 text-xs text-slate-600">
-        <span className="font-black tracking-tight">
-          Mundo<span className="text-amber-700">Tech</span>
-        </span>{" "}
-        — Conectados Contigo · Carrera 21 con esquina calle 21, Centro, Barquisimeto 3001
+        <span className="font-black tracking-tight">{BRAND.name}</span>
+        {BRAND.tagline ? ` — ${BRAND.tagline}` : ''}
+        {" · Carrera 21 con esquina calle 21, Centro, Barquisimeto 3001"}
       </p>
     </div>
   );

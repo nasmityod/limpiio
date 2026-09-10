@@ -9,6 +9,7 @@ import {
 import { getSiteContent, updateSiteContent } from '@/app/actions/siteContentActions';
 import { DEFAULT_SITE_CONTENT, type SiteContent, type TrustIcon } from '@/lib/site-content-schema';
 import { whatsappHref } from '@/lib/social-links';
+import { BRAND } from '@/config/brand';
 import PhotoUploader from '@/components/admin/PhotoUploader';
 
 const ICON_OPTIONS: { value: TrustIcon; label: string; icon: LucideIcon }[] = [
@@ -221,7 +222,7 @@ export default function AdminPersonalizarPage() {
         <div className="rounded-xl overflow-hidden border border-gray-200">
           <div className="bg-black border-t-2 border-brand-yellow/60 px-4 py-2.5 text-center">
             <span className="text-[11px] font-black uppercase tracking-[0.22em] text-brand-yellow">
-              {brandStrip.slogan || 'CONECTADOS CONTIGO'}
+              {brandStrip.slogan || BRAND.tagline}
             </span>
             {brandStrip.note.trim() ? (
               <span className="ml-2 text-[11px] text-white/60">· {brandStrip.note}</span>

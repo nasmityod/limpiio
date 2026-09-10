@@ -89,7 +89,7 @@ function BadgePill({ label }: { label: string }) {
 
 /**
  * Resalta la última palabra del título en amarillo de marca
- * ("CONECTADOS CONTIGO" → CONTIGO dorado, como en el letrero físico).
+ * (p. ej. "DOS PALABRAS" → la segunda dorada, como en un letrero físico).
  */
 function AccentTitle({ title }: { title: string }) {
   const words = title.trim().split(/\s+/);
@@ -107,6 +107,17 @@ function AccentTitle({ title }: { title: string }) {
  * usa el contenido de respaldo editable en /admin/personalizar. La franja
  * inferior lleva el slogan real de la tienda y es visible siempre.
  */
+/** `Marca — Eslogan`, o solo la marca si no se configuró eslogan. */
+const BRAND_LINE = BRAND.tagline ? `${BRAND.name} — ${BRAND.tagline}` : BRAND.name;
+
+/**
+ * Encabezado sr-only del hero. Sin eslogan configurado no deja los dos puntos
+ * colgando: `Marca · tecnología y variedades…` en vez de `Marca: · …`.
+ */
+const HERO_SR_HEADING = `${
+  BRAND.tagline ? `${BRAND.name}: ${BRAND.tagline}` : BRAND.name
+} · tecnología y variedades en Barquisimeto`;
+
 export default function HomeHeroCyber({
   slides: dbSlides,
   fallback,
@@ -171,7 +182,7 @@ export default function HomeHeroCyber({
               );
               if (dist > 1) return null;
               const layerAlt =
-                s.title.replace(/\n/g, ' ') || s.badge || `${BRAND.name} — Conectados Contigo`;
+                s.title.replace(/\n/g, ' ') || s.badge || BRAND_LINE;
               const isActive = i === active;
               return (
                 <Image
@@ -200,9 +211,11 @@ export default function HomeHeroCyber({
             <div className="absolute bottom-0 left-0 h-px w-full bg-gradient-to-r from-transparent via-[#FFD700]/40 to-transparent" />
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-6" data-logo-surface="dark">
               <Logo variant="dark" size="lg" href="/" priority />
-              <p className="text-[11px] sm:text-[12px] font-black uppercase tracking-[0.22em] text-brand-yellow">
-                Conectados Contigo
-              </p>
+              {BRAND.tagline ? (
+                <p className="text-[11px] sm:text-[12px] font-black uppercase tracking-[0.22em] text-brand-yellow">
+                  {BRAND.tagline}
+                </p>
+              ) : null}
             </div>
           </div>
         )}
@@ -240,9 +253,7 @@ export default function HomeHeroCyber({
 
         {/* Fallback h1 for screen readers when the hero has no visible copy */}
         {!showCopy && (
-          <h1 className="sr-only">
-            {BRAND.name}: Conectados Contigo · tecnología y variedades en Barquisimeto
-          </h1>
+          <h1 className="sr-only">{HERO_SR_HEADING}</h1>
         )}
 
         {showCopy ? (
@@ -258,9 +269,7 @@ export default function HomeHeroCyber({
                   {fromDatabase ? slide.title : <AccentTitle title={slide.title} />}
                 </h1>
               ) : (
-                <h1 className="sr-only">
-                  {BRAND.name}: Conectados Contigo · tecnología y variedades en Barquisimeto
-                </h1>
+                <h1 className="sr-only">{HERO_SR_HEADING}</h1>
               )}
 
               {slide.sub.trim() ? (

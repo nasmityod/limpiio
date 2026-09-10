@@ -10,6 +10,14 @@ import { z } from 'zod';
 import { isInternalEditableLink, isSafeEditableImageUrl } from '@/lib/safe-link';
 import { BRAND } from '@/config/brand';
 
+/**
+ * Eslogan de la franja de marca. Se recorta a los 60 caracteres que admite el
+ * esquema por si la variable de entorno trae un descriptor más largo. La franja
+ * se oculta entera cuando queda vacío (HomeHeroCyber comprueba `slogan.trim()`),
+ * así que sin eslogan no hay banda vacía bajo el hero.
+ */
+const BRAND_STRIP_SLOGAN = BRAND.tagline.slice(0, 60);
+
 export const SITE_CONTENT_KEY = 'site_content';
 
 /** PRD-212 / PRD-257: CTAs del hero y del popup solo navegan dentro del sitio. */
@@ -51,7 +59,7 @@ export const siteContentSchema = z.object({
   /** Franja fina bajo el hero con el slogan real — visible siempre. */
   brandStrip: z.object({
     enabled: z.boolean().default(true),
-    slogan: z.string().max(60).default('CONECTADOS CONTIGO'),
+    slogan: z.string().max(60).default(BRAND_STRIP_SLOGAN),
     note: z.string().max(140).default(''),
   }),
   /** Botón flotante de WhatsApp en todas las páginas públicas. */
@@ -99,7 +107,7 @@ export type SiteContent = z.infer<typeof siteContentSchema>;
 export const DEFAULT_SITE_CONTENT: SiteContent = {
   heroFallback: {
     badge: 'Tienda física en Barquisimeto',
-    title: 'CONECTADOS CONTIGO',
+    title: BRAND.tagline.slice(0, 90),
     subtitle:
       'Tecnología, variedades y los productos virales del momento. Visítanos en Carrera 21 con esquina calle 21, Centro, Barquisimeto 3001 — o pide por la web y te lo enviamos a cualquier parte de Venezuela.',
     ctaText: 'Explorar todo el catálogo',
@@ -108,7 +116,7 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
   },
   brandStrip: {
     enabled: true,
-    slogan: 'CONECTADOS CONTIGO',
+    slogan: BRAND_STRIP_SLOGAN,
     note: 'Carrera 21 con esquina calle 21, Centro · Barquisimeto 3001 · 0412-1471338',
   },
   whatsapp: {

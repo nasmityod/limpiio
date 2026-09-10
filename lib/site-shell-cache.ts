@@ -175,8 +175,8 @@ export const getCachedSiteShellData = unstable_cache(
       });
 
       const fallbackSeo: SeoLocal = {
-        legalName: 'Mundo Tech',
-        slogan: 'Conectados Contigo',
+        legalName: BRAND.legalName,
+        slogan: BRAND.tagline,
         streetAddress: '',
         addressLocality: 'Barquisimeto',
         addressRegion: 'Lara',
@@ -207,7 +207,7 @@ export const getCachedSiteShellData = unstable_cache(
         seoLocal: fallbackSeo,
         siteContent: {
           heroFallback: { badge: '', title: '', subtitle: '', ctaText: 'Explorar catálogo', ctaLink: '/productos', imageUrl: '' },
-          brandStrip: { enabled: true, slogan: 'CONECTADOS CONTIGO', note: '' },
+          brandStrip: { enabled: true, slogan: BRAND.tagline.slice(0, 60), note: '' },
           whatsapp: { enabled: true, phone: '', message: '' },
           productTrust: [{ icon: 'shield', title: 'Tienda en línea', sub: '' }],
           popup: { enabled: false, badge: '', title: '', text: '', ctaText: '', ctaLink: '/productos', imageUrl: '', frequencyDays: 7, delaySeconds: 6, endsAt: '' },

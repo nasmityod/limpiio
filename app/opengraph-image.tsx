@@ -8,7 +8,11 @@ import { BRAND } from '@/config/brand';
  * navy + amarillo + eslogan.
  */
 export const runtime = 'edge';
-export const alt = `${BRAND.name} — Conectados Contigo · Tecnología en Barquisimeto, Venezuela`;
+
+/** `Marca — Eslogan`, o solo la marca si no se configuró eslogan. */
+const BRAND_LINE = BRAND.tagline ? `${BRAND.name} — ${BRAND.tagline}` : BRAND.name;
+
+export const alt = `${BRAND_LINE} · Tecnología en Barquisimeto, Venezuela`;
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 
@@ -42,19 +46,21 @@ export default async function OpengraphImage() {
           <span style={{ color: '#FFFFFF' }}>{BRAND.name}</span>
         </div>
 
-        <div
-          style={{
-            display: 'flex',
-            marginTop: 18,
-            fontSize: 34,
-            fontWeight: 700,
-            letterSpacing: '0.32em',
-            color: '#FFD700',
-            textTransform: 'uppercase',
-          }}
-        >
-          Conectados Contigo
-        </div>
+        {BRAND.tagline ? (
+          <div
+            style={{
+              display: 'flex',
+              marginTop: 18,
+              fontSize: 34,
+              fontWeight: 700,
+              letterSpacing: '0.32em',
+              color: '#FFD700',
+              textTransform: 'uppercase',
+            }}
+          >
+            {BRAND.tagline}
+          </div>
+        ) : null}
 
         <div
           style={{

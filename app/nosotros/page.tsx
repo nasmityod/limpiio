@@ -31,8 +31,12 @@ export const metadata: Metadata = {
   alternates: { canonical: PAGE_URL },
   openGraph: {
     title: `Quiénes somos — ${BRAND.name} Barquisimeto`,
-    description:
-      'Una tienda real, con local físico verificable en Barquisimeto. Conectados Contigo.',
+    description: [
+      'Una tienda real, con local físico verificable en Barquisimeto.',
+      BRAND.tagline ? `${BRAND.tagline}.` : '',
+    ]
+      .filter(Boolean)
+      .join(' '),
     url: PAGE_URL,
     locale: 'es_VE',
     type: 'website',
@@ -105,9 +109,11 @@ export default async function NosotrosPage() {
               <span className="text-white/80">Quiénes somos</span>
             </nav>
 
-            <p className="text-[11px] font-bold uppercase tracking-[0.26em] text-brand-yellow">
-              Conectados Contigo
-            </p>
+            {settings.tagline ? (
+              <p className="text-[11px] font-bold uppercase tracking-[0.26em] text-brand-yellow">
+                {settings.tagline}
+              </p>
+            ) : null}
             <h1 className="mt-3 max-w-2xl text-balance text-[1.7rem] sm:text-4xl lg:text-[2.6rem] font-bold leading-[1.12] tracking-tight text-white">
               Somos la tienda detrás del letrero amarillo en el centro de Barquisimeto.
             </h1>
@@ -162,11 +168,13 @@ export default async function NosotrosPage() {
                 cualquier cosa que veas en la web la puedes tocar, preguntar y
                 comparar antes de llevártela.
               </p>
-              <p className="font-medium text-navy">
-                «Conectados Contigo» no es un slogan decorativo: es la forma en
-                que atendemos — el mismo trato en el mostrador, por WhatsApp o
-                en un pedido web.
-              </p>
+              {settings.tagline ? (
+                <p className="font-medium text-navy">
+                  «{settings.tagline}» no es un slogan decorativo: es la forma en
+                  que atendemos — el mismo trato en el mostrador, por WhatsApp o
+                  en un pedido web.
+                </p>
+              ) : null}
             </div>
           </div>
 

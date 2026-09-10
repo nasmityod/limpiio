@@ -3,6 +3,7 @@
  * que se puedan usar tanto en Server Actions como en Client Components.
  */
 import { z } from 'zod';
+import { BRAND } from '@/config/brand';
 
 const dayEnum = z.enum(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
 export const SEO_DAYS: z.infer<typeof dayEnum>[] = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -39,8 +40,10 @@ export type SeoLocal = z.infer<typeof seoLocalSchema>;
 export const SEO_LOCAL_KEY = 'seo_local';
 
 export const DEFAULT_SEO_LOCAL: SeoLocal = {
-  legalName:       'Mundo Tech',
-  slogan:          'Conectados Contigo',
+  // Razón social y eslogan salen de config/brand.ts: eran los de la marca
+  // original y viajan al JSON-LD, así que una tienda derivada los heredaba.
+  legalName:       BRAND.legalName,
+  slogan:          BRAND.tagline,
   streetAddress:   'Carrera 21 con esquina calle 21, Centro',
   addressLocality: 'Barquisimeto',
   addressRegion:   'Lara',
@@ -91,8 +94,8 @@ export function buildLocalBusinessSchema(seo: SeoLocal, opts: LocalBusinessSchem
     '@context': 'https://schema.org',
     '@type': opts.type ?? 'LocalBusiness',
     name: opts.storeName,
-    legalName: seo.legalName,
-    slogan: seo.slogan,
+    legalName: seo.legalName || undefined,
+    slogan: seo.slogan || undefined,
     url: opts.pageUrl ?? opts.siteUrl,
     // `|| undefined`, no `?? undefined`: con la tienda recién instalada estos
     // llegan como cadena vacía y `telephone: ""` es peor que no declararlo.

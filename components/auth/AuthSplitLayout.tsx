@@ -19,7 +19,7 @@ interface AuthSplitLayoutProps {
 /**
  * Layout de autenticación "letrero de tienda": una sola tarjeta centrada.
  * La banda superior reproduce la fachada real de la tienda (navy + logo
- * amarillo + CONECTADOS CONTIGO) y el pie ancla la cuenta a un lugar físico
+ * amarillo + eslogan de la marca) y el pie ancla la cuenta a un lugar físico
  * verificable. Sin split-layout con ilustración — ese es el patrón que
  * cualquier generador escupe por defecto.
  */
@@ -84,9 +84,11 @@ export default function AuthSplitLayout({
             <div className="absolute inset-0 circuit-bg opacity-40" aria-hidden />
             <div className="relative">
               <Logo variant="dark" size="lg" href="/" />
-              <p className="mt-1 text-[10.5px] font-bold uppercase tracking-[0.24em] text-brand-yellow">
-                Conectados Contigo
-              </p>
+              {BRAND.tagline ? (
+                <p className="mt-1 text-[10.5px] font-bold uppercase tracking-[0.24em] text-brand-yellow">
+                  {BRAND.tagline}
+                </p>
+              ) : null}
               <p className="mt-2.5 max-w-sm text-[12.5px] leading-relaxed text-white/70">
                 {tagline}
               </p>

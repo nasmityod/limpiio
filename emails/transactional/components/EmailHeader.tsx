@@ -42,7 +42,7 @@ export function EmailHeader({ customerName, compact }: Props) {
           src={emailLogoUrl()}
           width={EMAIL_LOGO_DISPLAY_WIDTH}
           height={EMAIL_LOGO_DISPLAY_HEIGHT}
-          alt={`${BRAND.name} — Conectados Contigo`}
+          alt={BRAND.tagline ? `${BRAND.name} — ${BRAND.tagline}` : BRAND.name}
           style={{
             display: 'block',
             margin: '0 auto 10px',
@@ -51,18 +51,20 @@ export function EmailHeader({ customerName, compact }: Props) {
           }}
         />
       </Link>
-      <Text
-        style={{
-          margin: 0,
-          fontSize: 12,
-          letterSpacing: '0.18em',
-          textTransform: 'uppercase',
-          color: MT.gold,
-          fontWeight: 700,
-        }}
-      >
-        Conectados Contigo
-      </Text>
+      {BRAND.tagline ? (
+        <Text
+          style={{
+            margin: 0,
+            fontSize: 12,
+            letterSpacing: '0.18em',
+            textTransform: 'uppercase',
+            color: MT.gold,
+            fontWeight: 700,
+          }}
+        >
+          {BRAND.tagline}
+        </Text>
+      ) : null}
       {name ? (
         <Text
           style={{
