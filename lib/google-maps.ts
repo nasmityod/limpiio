@@ -7,9 +7,11 @@
  *
  * NEXT_PUBLIC_GOOGLE_MAPS_EMBED_URL: mismo flujo pero “Insertar un mapa” y pega solo el src del iframe.
  */
+import { BRAND } from '@/config/brand';
+
 
 export const GOOGLE_MAPS_LOCATION_QUERY =
-  'Mundo Tech, Carrera 21 con esquina calle 21, Centro, Barquisimeto 3001, Lara, Venezuela';
+  `${BRAND.legalName}, Carrera 21 con esquina calle 21, Centro, Barquisimeto 3001, Lara, Venezuela`;
 
 export function googleMapsBusinessUrl(query?: string): string {
   const custom = process.env.NEXT_PUBLIC_GOOGLE_MAPS_BUSINESS_URL?.trim();

@@ -122,7 +122,7 @@ export default function SeoLocalEditor({ initial }: SeoLocalEditorProps) {
           label="Nombre legal"
           value={data.legalName}
           onChange={v => set('legalName', v)}
-          placeholder="Mundo Tech, C.A."
+          placeholder={BRAND.legalName ? `${BRAND.legalName}, C.A.` : 'Razón social, C.A.'}
           error={errors.legalName}
         />
         <Field

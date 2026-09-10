@@ -153,8 +153,7 @@ export default function CategoryDrawer({ open, onClose }: CategoryDrawerProps) {
                 onClick={onClose}
                 className="text-lg font-bold tracking-tight text-navy flex items-center gap-0.5"
               >
-                <span>Mundo</span>
-                <span className="text-navy">Tech</span>
+                <span>{BRAND.name}</span>
               </Link>
               <button
                 type="button"

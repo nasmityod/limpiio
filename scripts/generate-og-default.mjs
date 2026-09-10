@@ -13,6 +13,18 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT = resolve(__dirname, '../public/og-default.png');
 
+/**
+ * Este script no puede importar config/brand.ts (es TS), asi que lee las
+ * mismas variables con los mismos defaults neutros. Ejecutalo con el .env
+ * cargado para que la imagen salga con tu marca:
+ *   node --env-file=.env scripts/generate-og-default.mjs
+ */
+const escapeXml = (value) =>
+  value.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
+const BRAND_NAME = escapeXml((process.env.NEXT_PUBLIC_BRAND_NAME || 'Tienda').trim());
+const BRAND_TAGLINE = escapeXml((process.env.NEXT_PUBLIC_BRAND_TAGLINE || '').trim());
+
 const svg = `
 <svg width="1200" height="630" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">
   <rect width="1200" height="630" fill="#0B1220"/>
@@ -38,13 +50,15 @@ const svg = `
   <!-- marca -->
   <text x="600" y="300" text-anchor="middle"
         font-family="Arial, Helvetica, sans-serif" font-size="104" font-weight="800">
-    <tspan fill="#FFFFFF">Mundo</tspan><tspan fill="#FFD700">Tech</tspan>
+    <tspan fill="#FFFFFF">${BRAND_NAME}</tspan>
   </text>
 
-  <!-- slogan -->
-  <text x="600" y="372" text-anchor="middle"
+  <!-- slogan (se omite si no hay eslogan configurado) -->
+  ${BRAND_TAGLINE
+    ? `<text x="600" y="372" text-anchor="middle"
         font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="700"
-        letter-spacing="10" fill="#FFD700">CONECTADOS CONTIGO</text>
+        letter-spacing="10" fill="#FFD700">${BRAND_TAGLINE}</text>`
+    : ''}
 
   <!-- ubicación -->
   <text x="600" y="448" text-anchor="middle"

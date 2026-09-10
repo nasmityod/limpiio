@@ -9,6 +9,7 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { AlertTriangle, RefreshCw, Home, MessageCircle } from "lucide-react";
+import { BRAND } from "@/config/brand";
 import {
   APP_CHUNK_RELOAD_KEY,
   isChunkLoadError,
@@ -93,9 +94,7 @@ export default function GlobalError({ error, reset }: ErrorProps) {
 
         {/* Branding sutil */}
         <p className="mt-10 text-xs text-slate-600">
-          <span className="font-black tracking-tight">
-            Mundo<span className="text-amber-700">Tech</span>
-          </span>{" "}
+          <span className="font-black tracking-tight">{BRAND.name}</span>{" "}
           — Si el problema persiste, contáctanos.
         </p>
       </div>
