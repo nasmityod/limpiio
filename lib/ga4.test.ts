@@ -114,7 +114,7 @@ const sampleItem = {
   id: 'prod-123',
   name: 'Teclado Mecánico RGB',
   category: 'Tecnología',
-  brand: 'MundoTech',
+  brand: 'Marca Demo',
   price: 45.99,
   quantity: 2,
 };
@@ -156,7 +156,7 @@ describe('toGa4Item', () => {
       item_id: 'prod-123',
       item_name: 'Teclado Mecánico RGB',
       item_category: 'Tecnología',
-      item_brand: 'MundoTech',
+      item_brand: 'Marca Demo',
       price: 45.99,
       quantity: 2,
     });

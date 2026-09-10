@@ -126,9 +126,9 @@ test.describe('RBAC — Settings general @RBAC', () => {
     await loginAs(page, E2E_RBAC.settingsGeneral);
     const res = await page.request.put('/api/settings/general', {
       data: {
-        storeName: 'MundoTech E2E',
+        storeName: 'Tienda E2E',
         phone: '0412-0000000',
-        email: 'e2e@mundotechtest.com',
+        email: 'e2e@example.test',
         pagoMovil: { bank: 'X', phone: '0412', idNumber: 'V-1' },
       },
     });
@@ -168,9 +168,9 @@ test.describe('RBAC — Settings finanzas @RBAC', () => {
     await loginAs(page, E2E_RBAC.finanzas);
     const res = await page.request.put('/api/settings/general', {
       data: {
-        storeName: 'MundoTech E2E',
+        storeName: 'Tienda E2E',
         phone: '0412-0000000',
-        email: 'e2e@mundotechtest.com',
+        email: 'e2e@example.test',
       },
     });
     expect(res.status()).toBe(403);

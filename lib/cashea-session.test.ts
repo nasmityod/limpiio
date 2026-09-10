@@ -61,14 +61,14 @@ function setFullValidConfig(): void {
   process.env.CASHEA_PRIVATE_API_KEY = 'super-secret-cashea-key';
   process.env.CASHEA_EXTERNAL_CLIENT_ID = 'client-123';
   process.env.CASHEA_STORE_ID = '42';
-  process.env.CASHEA_STORE_NAME = 'MundoTech';
-  process.env.CASHEA_MERCHANT_NAME = 'MundoTech VE';
+  process.env.CASHEA_STORE_NAME = 'Tienda Demo';
+  process.env.CASHEA_MERCHANT_NAME = 'Tienda Demo VE';
   process.env.CASHEA_SDK_VERSION = '1.1.19';
   process.env.CASHEA_RESERVATION_MINUTES = '60';
   process.env.CASHEA_CURRENCY = 'USD';
   process.env.CASHEA_DELIVERY_PRICE = '0';
   process.env.NEXT_PUBLIC_CASHEA_PUBLIC_API_KEY = 'test-public-key';
-  process.env.NEXT_PUBLIC_SITE_URL = 'https://mundotechve.com';
+  process.env.NEXT_PUBLIC_SITE_URL = 'https://tienda.example';
 }
 
 function baseBody(overrides: Record<string, unknown> = {}) {

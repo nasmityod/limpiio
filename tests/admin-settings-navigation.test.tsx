@@ -37,11 +37,11 @@ vi.mock('@/components/admin/PhotoUploader', () => ({
 }));
 
 const general: GeneralSettingsDto = {
-  storeName: 'MundoTech',
+  storeName: 'Tienda Demo',
   tagline: 'Tag',
   phone: '04121234567',
   phone2: '',
-  email: 'ventas@mundotechve.com',
+  email: 'ventas@tienda.example',
   address: 'Lara',
   instagram: '',
   facebook: '',
@@ -155,7 +155,7 @@ describe('admin settings navigation', () => {
 
     const storeName = screen.getByLabelText('Nombre de la tienda') as HTMLInputElement;
     await act(async () => {
-      fireEvent.change(storeName, { target: { value: 'MundoTech Editado' } });
+      fireEvent.change(storeName, { target: { value: 'Tienda Demo Editada' } });
     });
 
     const storeTab = screen.getByRole('tab', { name: /Tienda y envíos/i });
@@ -170,7 +170,7 @@ describe('admin settings navigation', () => {
       fireEvent.click(screen.getByRole('tab', { name: /Tienda y envíos/i }));
     });
     expect((screen.getByLabelText('Nombre de la tienda') as HTMLInputElement).value).toBe(
-      'MundoTech Editado',
+      'Tienda Demo Editada',
     );
   });
 

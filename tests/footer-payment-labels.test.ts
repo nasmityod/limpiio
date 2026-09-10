@@ -134,7 +134,7 @@ describe('SiteShellData payment surface', () => {
     const dto = {
       paymentMethodLabels: ['Pago Móvil', 'Transferencia'],
       settings: {
-        storeName: 'MundoTech',
+        storeName: 'Tienda Demo',
         tagline: '',
         phone: '',
         phone2: '',

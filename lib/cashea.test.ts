@@ -40,8 +40,8 @@ function setFullValidConfig(): void {
   process.env.CASHEA_PRIVATE_API_KEY = SECRET_KEY;
   process.env.CASHEA_EXTERNAL_CLIENT_ID = 'client-123';
   process.env.CASHEA_STORE_ID = '42';
-  process.env.CASHEA_STORE_NAME = 'MundoTech';
-  process.env.CASHEA_MERCHANT_NAME = 'MundoTech VE';
+  process.env.CASHEA_STORE_NAME = 'Tienda Demo';
+  process.env.CASHEA_MERCHANT_NAME = 'Tienda Demo VE';
   process.env.CASHEA_SDK_VERSION = '1.1.19';
   process.env.CASHEA_RESERVATION_MINUTES = '60';
   process.env.CASHEA_CURRENCY = 'USD';
@@ -106,7 +106,7 @@ describe('buildCasheaPayload', () => {
 
     const payload = buildCasheaPayload({
       identificationNumber: 'V12345678',
-      redirectUrl: 'https://mundotechve.com/checkout/cashea/return?token=abc',
+      redirectUrl: 'https://tienda.example/checkout/cashea/return?token=abc',
       shippingMethod: 'mrw',
       products: [sampleProduct({ price: 10 }), sampleProduct({ id: 'prod-2', price: 5 })],
     });
@@ -114,9 +114,9 @@ describe('buildCasheaPayload', () => {
     expect(payload.deliveryPrice).toBe(0);
     expect(payload.deliveryMethod).toBe('MRW');
     expect(payload.externalClientId).toBe('client-123');
-    expect(payload.merchantName).toBe('MundoTech VE');
+    expect(payload.merchantName).toBe('Tienda Demo VE');
     expect(payload.orders).toHaveLength(1);
-    expect(payload.orders[0].store).toEqual({ id: 42, name: 'MundoTech', enabled: true });
+    expect(payload.orders[0].store).toEqual({ id: 42, name: 'Tienda Demo', enabled: true });
     expect(payload.orders[0].products.map((p) => p.price)).toEqual([10, 5]);
     expect(payload.invoiceId).toBeUndefined();
     // Nunca incluye un campo de descuento de cupón a nivel de payload.
@@ -129,7 +129,7 @@ describe('buildCasheaPayload', () => {
 
     const payload = buildCasheaPayload({
       identificationNumber: 'V12345678',
-      redirectUrl: 'https://mundotechve.com/checkout/cashea/return?token=abc',
+      redirectUrl: 'https://tienda.example/checkout/cashea/return?token=abc',
       shippingMethod: 'tienda',
       products: [sampleProduct()],
       invoiceId: 'INV-001',
@@ -144,7 +144,7 @@ describe('buildCasheaPayload', () => {
     expect(() =>
       buildCasheaPayload({
         identificationNumber: 'V12345678',
-        redirectUrl: 'https://mundotechve.com/checkout/cashea/return?token=abc',
+        redirectUrl: 'https://tienda.example/checkout/cashea/return?token=abc',
         shippingMethod: 'tienda',
         products: [sampleProduct()],
       }),

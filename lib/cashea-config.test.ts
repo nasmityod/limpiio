@@ -68,8 +68,8 @@ function setFullValidConfig(): void {
   process.env.CASHEA_PRIVATE_API_KEY = 'test-private-key';
   process.env.CASHEA_EXTERNAL_CLIENT_ID = 'client-123';
   process.env.CASHEA_STORE_ID = '42';
-  process.env.CASHEA_STORE_NAME = 'MundoTech';
-  process.env.CASHEA_MERCHANT_NAME = 'MundoTech VE';
+  process.env.CASHEA_STORE_NAME = 'Tienda Demo';
+  process.env.CASHEA_MERCHANT_NAME = 'Tienda Demo VE';
   process.env.CASHEA_SDK_VERSION = '1.1.19';
   process.env.CASHEA_RESERVATION_MINUTES = '60';
   process.env.CASHEA_CURRENCY = 'USD';
@@ -89,8 +89,8 @@ describe('getCasheaConfig — flag on completo (ok)', () => {
     expect(config.privateApiKey).toBe('test-private-key');
     expect(config.externalClientId).toBe('client-123');
     expect(config.storeId).toBe(42);
-    expect(config.storeName).toBe('MundoTech');
-    expect(config.merchantName).toBe('MundoTech VE');
+    expect(config.storeName).toBe('Tienda Demo');
+    expect(config.merchantName).toBe('Tienda Demo VE');
     expect(config.publicApiKey).toBe('test-public-key');
     expect(config.currency).toBe('USD');
     expect(config.deliveryPrice).toBe(0);

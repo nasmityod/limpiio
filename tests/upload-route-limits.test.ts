@@ -69,7 +69,7 @@ function makeRequest(file: File, purpose = 'product'): Request {
   const fd = new FormData();
   fd.append('file', file);
   fd.append('purpose', purpose);
-  return new Request('https://mundotechve.com/api/upload', { method: 'POST', body: fd });
+  return new Request('https://tienda.example/api/upload', { method: 'POST', body: fd });
 }
 
 beforeEach(() => {

@@ -1,6 +1,6 @@
 /**
  * e2e/specs/cashea.spec.ts — Fase 9 ("Fase 9 — Seguridad/CSP y pruebas E2E"
- * en docs/MundoTech-Cashea-Orquestacion-Cursor.md).
+ * en docs/cashea-orquestacion.md).
  *
  * @full
  *
@@ -21,7 +21,7 @@
  *   verifyCasheaOrder con TODO explícito y tipado.
  *
  * IMPORTANTE — límite conocido y documentado (Sección 4/12 del documento
- * maestro; ver también nota 3 de docs/MundoTech-Cashea-Orquestacion-Cursor.md
+ * maestro; ver también nota 3 de docs/cashea-orquestacion.md
  * Sección 0): `verifyCasheaOrder` SIEMPRE lanza `CasheaVerificationNotImplemented`
  * hasta que Cashea confirme el mecanismo real (Fase 10, bloqueada por la
  * Sección 12). Por lo tanto NINGÚN pedido puede llegar a `CONFIRMED` todavía,
@@ -43,7 +43,7 @@
  *     CASHEA_ENV=sandbox CASHEA_API_BASE_URL=https://e2e-cashea.invalid/api \
  *     CASHEA_PRIVATE_API_KEY=e2e-fake-private-key \
  *     CASHEA_EXTERNAL_CLIENT_ID=e2e-client CASHEA_STORE_ID=1 \
- *     CASHEA_STORE_NAME="MundoTech E2E" CASHEA_MERCHANT_NAME="MundoTech E2E" \
+ *     CASHEA_STORE_NAME="Tienda E2E" CASHEA_MERCHANT_NAME="Tienda E2E" \
  *     CASHEA_SDK_VERSION=1.1.19 CASHEA_CURRENCY=USD \
  *     NEXT_PUBLIC_CASHEA_PUBLIC_API_KEY=e2e-fake-public-key
  *   npm run test:e2e -- e2e/specs/cashea.spec.ts

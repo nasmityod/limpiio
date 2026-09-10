@@ -3,8 +3,8 @@ import path from 'node:path';
 import { execSync } from 'node:child_process';
 
 /**
- * Playwright E2E para MundoTech.
- * - Nunca apunta a producción — aborta si baseURL contiene mundotechve.com.
+ * Playwright E2E de la tienda.
+ * - Nunca apunta a producción — aborta si baseURL contiene E2E_FORBIDDEN_HOST.
  * - BD: DATABASE_URL de E2E debe contener "_e2e" o "test" (scripts/e2e-reset-db.ts).
  * - E2E_MODE=1: emails/R2 mockeados sin red externa (lib/resend.tsx, lib/r2.ts).
  * - Traces/capturas: solo al fallar.
@@ -12,8 +12,8 @@ import { execSync } from 'node:child_process';
  *
  * Ejecución local (BD directa en 5432, puerto aislado — no reutilizar dev/producción):
  *
- *   DATABASE_URL=postgresql://USER:PASS@localhost:5432/mundotech_e2e \
- *   DIRECT_URL=postgresql://USER:PASS@localhost:5432/mundotech_e2e \
+ *   DATABASE_URL=postgresql://USER:PASS@localhost:5432/app_e2e \
+ *   DIRECT_URL=postgresql://USER:PASS@localhost:5432/app_e2e \
  *   E2E_MODE=1 CHECKOUT_MODE=full \
  *   PLAYWRIGHT_BASE_URL=http://localhost:34567 \
  *   npm run db:e2e:reset && npx playwright test --grep-invert "@whatsapp"
@@ -27,9 +27,19 @@ import { execSync } from 'node:child_process';
  */
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:34567';
 
-if (BASE_URL.includes('mundotechve.com')) {
+/**
+ * Host de producción que las pruebas E2E NUNCA deben tocar. Se declara por
+ * entorno (E2E_FORBIDDEN_HOST) para que la protección viaje con cada instancia
+ * en vez de estar fijada al dominio de una tienda concreta.
+ * Defínela en el .env de cada despliegue: sin ella esta comprobación no puede
+ * saber cuál es tu dominio de producción y queda inactiva (la guarda de puerto
+ * de abajo sigue operativa).
+ */
+const FORBIDDEN_HOST = process.env.E2E_FORBIDDEN_HOST?.trim();
+
+if (FORBIDDEN_HOST && BASE_URL.includes(FORBIDDEN_HOST)) {
   throw new Error(
-    '[E2E SAFETY] BASE_URL contiene mundotechve.com. ' +
+    `[E2E SAFETY] BASE_URL contiene ${FORBIDDEN_HOST}. ` +
       'Nunca apuntes pruebas E2E a producción. Usa localhost o un VPS de staging.',
   );
 }

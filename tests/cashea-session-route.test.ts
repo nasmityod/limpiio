@@ -60,7 +60,7 @@ beforeEach(() => {
   createCasheaSessionMock.mockResolvedValue({
     orderId: 'order-1',
     publicApiKey: 'test-public-key',
-    payload: { redirectUrl: 'https://mundotechve.com/checkout/cashea/return?token=abc' },
+    payload: { redirectUrl: 'https://tienda.example/checkout/cashea/return?token=abc' },
     returnToken: 'abc',
   });
 });

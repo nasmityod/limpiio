@@ -14,12 +14,12 @@ function samplePayload(): CasheaPayload {
     identificationNumber: 'V12345678',
     externalClientId: 'client-123',
     deliveryMethod: 'STORE_PICKUP',
-    merchantName: 'MundoTech VE',
-    redirectUrl: 'https://mundotechve.com/checkout/cashea/return?token=abc',
+    merchantName: 'Tienda Demo VE',
+    redirectUrl: 'https://tienda.example/checkout/cashea/return?token=abc',
     deliveryPrice: 0,
     orders: [
       {
-        store: { id: 42, name: 'MundoTech', enabled: true },
+        store: { id: 42, name: 'Tienda Demo', enabled: true },
         products: [
           {
             id: 'prod-1',
