@@ -11,8 +11,8 @@ const SRC: Record<'light' | 'dark', string> = {
 };
 
 // Per-variant aspect ratios from processed PNGs:
-//   logo-light.png (MUNDO negro, para fondo claro)   478×133 → 3.5940
-//   logo-dark.png  (MUNDO blanco, para fondo navy)   480×151 → 3.1788
+//   logo-light.png (texto oscuro, para fondo claro)  478×133 → 3.5940
+//   logo-dark.png  (texto claro, para fondo navy)    480×151 → 3.1788
 const RATIO: Record<'light' | 'dark', number> = {
   light: 478 / 133,   // ≈ 3.5940
   dark:  480 / 151,   // ≈ 3.1788
