@@ -6,6 +6,15 @@ Tienda online — Next.js 16 (App Router) + Prisma 7 + PostgreSQL + NextAuth 4 +
 
 > README operativo (PRD-059): cómo levantar el proyecto, migrar la base de datos y desplegar sin sorpresas.
 
+## Derivar una tienda desde esta base
+
+Este repositorio es una **base sin marca**: nombre, dominio, contactos y redes se resuelven desde
+[`config/brand.ts`](config/brand.ts) (variables `NEXT_PUBLIC_*`) y desde el panel de Admin, con defaults
+neutros. Antes de levantar una tienda nueva lee **primero**
+[`docs/desmarcado/ACCIONES-MANUALES.md`](docs/desmarcado/ACCIONES-MANUALES.md): es la lista de lo que hay
+que rellenar a mano (variables obligatorias en producción, activos de marca, servidor, DNS, panel). El
+porqué de cada decisión está en [`docs/desmarcado/REPORTE-DESMARCADO.md`](docs/desmarcado/REPORTE-DESMARCADO.md).
+
 ---
 
 ## Requisitos
@@ -309,6 +318,9 @@ Equivalente con BFG: `bfg --delete-files db.json` (mismo flujo de clon fresco + 
 | `app/api/cron/*` | Crons autenticados con `CRON_SECRET` |
 | `instrumentation.ts` / `instrumentation-client.ts` | Sentry server/cliente (opt-in por DSN) |
 | `docs/ENTREGABLE-CRON-BCV-VPS-V2.md` | Runbook crons + tasa BCV en VPS |
+| `docs/desmarcado/ACCIONES-MANUALES.md` | **Primer documento a leer para derivar una tienda**: lo que se configura a mano |
+| `docs/desmarcado/REPORTE-DESMARCADO.md` | Registro del desmarcado: decisiones, contratos de runtime, puertas de verificación |
+| `docs/desmarcado/grep-control.sh` | Grep de control: `count` debe dar 0 en el código (`split` es revisión manual) |
 | `docs/ANALISIS-PRODUCCION-*.md` | Auditoría de producción segmentada (PRD-001–290) |
 
 ---
