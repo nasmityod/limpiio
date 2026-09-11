@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { MapPin, ShieldCheck } from 'lucide-react';
-import { whatsappHref } from '@/lib/social-links';
+import { brandWhatsappHref } from '@/lib/social-links';
 import Logo from '@/components/Logo';
 import { useReducedMotion, reducedTransition } from '@/lib/motion';
 import { BRAND } from '@/config/brand';
@@ -45,8 +45,9 @@ export default function AuthSplitLayout({
 }: AuthSplitLayoutProps) {
   const prefersReduced = useReducedMotion();
   const { tagline } = COPY[variant];
-  const waHref = whatsappHref(
-    '0412-1471338',
+  // Desde NEXT_PUBLIC_WHATSAPP_URL: este componente es cliente y no recibe
+  // StoreSettings. Sin la variable, waHref es null y el párrafo no se pinta.
+  const waHref = brandWhatsappHref(
     `Hola ${BRAND.name}, necesito ayuda con mi cuenta en la página web.`,
   );
 

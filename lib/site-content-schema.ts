@@ -4,7 +4,9 @@
  * popup). La persistencia (server-only) vive en lib/site-content.ts.
  *
  * Los defaults usan los datos verificados del material físico de la tienda
- * (letrero, tarjetas, marketing) — nunca placeholders.
+ * (letrero, tarjetas, marketing) — nunca placeholders. Excepción: el teléfono
+ * de WhatsApp sale VACÍO y se rellena en Admin → Personalizar, para que una
+ * tienda derivada no arranque enviando clientes al número de otra empresa.
  */
 import { z } from 'zod';
 import { isInternalEditableLink, isSafeEditableImageUrl } from '@/lib/safe-link';
@@ -62,10 +64,12 @@ export const siteContentSchema = z.object({
     slogan: z.string().max(60).default(BRAND_STRIP_SLOGAN),
     note: z.string().max(140).default(''),
   }),
-  /** Botón flotante de WhatsApp en todas las páginas públicas. */
+  /** Botón flotante de WhatsApp en todas las páginas públicas. Sin teléfono
+   *  (default) el FAB, el enlace del pie y la previsualización del admin no se
+   *  muestran: `whatsappHref` devuelve null y cada consumidor omite el bloque. */
   whatsapp: z.object({
     enabled: z.boolean().default(true),
-    phone: z.string().max(20).default('0412-1471338'),
+    phone: z.string().max(20).default(''),
     message: z.string().max(300).default(''),
   }),
   /** Badges de confianza de la ficha de producto (3 ítems). */
@@ -117,11 +121,11 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
   brandStrip: {
     enabled: true,
     slogan: BRAND_STRIP_SLOGAN,
-    note: 'Carrera 21 con esquina calle 21, Centro · Barquisimeto 3001 · 0412-1471338',
+    note: 'Carrera 21 con esquina calle 21, Centro · Barquisimeto 3001',
   },
   whatsapp: {
     enabled: true,
-    phone: '0412-1471338',
+    phone: '',
     message: `¡Hola ${BRAND.name}! Vengo de la página web y quiero preguntar por un producto.`,
   },
   productTrust: [

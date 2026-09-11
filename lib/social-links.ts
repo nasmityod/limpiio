@@ -9,7 +9,7 @@ import { BRAND } from '@/config/brand';
 export const SOCIAL_LINKS = {
   instagram: BRAND.social.instagram,
   facebook: BRAND.social.facebook,
-  /** wa.me con código país sin + (ej. 584121471338) */
+  /** URL wa.me completa, con código de país y sin `+` (NEXT_PUBLIC_WHATSAPP_URL). */
   whatsapp: BRAND.social.whatsapp,
 } as const;
 
@@ -28,4 +28,22 @@ export function whatsappHref(phone: string, message?: string): string | null {
   const base = `https://wa.me/58${digits}`;
   if (!message?.trim()) return base;
   return `${base}?text=${encodeURIComponent(message.trim())}`;
+}
+
+/**
+ * Enlace al WhatsApp de la tienda a partir de `NEXT_PUBLIC_WHATSAPP_URL`
+ * (`BRAND.social.whatsapp`), con mensaje precargado opcional. Es la capa que
+ * corresponde cuando el componente no recibe `StoreSettings` sin añadir una
+ * consulta (componentes cliente como `AuthSplitLayout`, plantillas de correo).
+ *
+ * Devuelve `null` con la variable vacía: quien la consume debe omitir el
+ * enlace entero, igual que con `whatsappHref`. Así una tienda derivada sin
+ * configurar no manda a nadie al WhatsApp de otra empresa ni a una URL rota.
+ */
+export function brandWhatsappHref(message?: string): string | null {
+  const base = SOCIAL_LINKS.whatsapp;
+  if (!base) return null;
+  const text = message?.trim();
+  if (!text) return base;
+  return `${base}${base.includes('?') ? '&' : '?'}text=${encodeURIComponent(text)}`;
 }
