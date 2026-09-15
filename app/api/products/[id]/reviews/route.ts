@@ -29,9 +29,13 @@ export async function GET(
 
   try {
     const { id } = await params;
+    // SEC-2026-09: el `userId` de cada reseña solo viaja al propio autor
+    // (lib/reviews.ts#reviewToClient); la sesión decide quién es.
+    const session = await getServerSession(authOptions);
+    const viewerUserId = session?.user?.id || null;
     const [summary, reviews] = await Promise.all([
       getReviewSummary(id),
-      getApprovedReviews(id),
+      getApprovedReviews(id, 50, viewerUserId),
     ]);
     // PRD-141: sin caché — al publicar/moderar una reseña (o al dejar la propia)
     // el cliente debe verla de inmediato; el costo por request es bajo (groupBy +
@@ -145,7 +149,7 @@ export async function POST(
 
     return NextResponse.json(
       {
-        review: reviewToClient(review),
+        review: reviewToClient(review, userId),
         moderated: !approved,
         message: approved
           ? '¡Gracias por tu reseña!'

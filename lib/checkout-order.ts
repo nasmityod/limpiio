@@ -1,6 +1,6 @@
 import type { Prisma } from '@prisma/client';
 import { z } from 'zod';
-import { loadExchangeRateUsdBsFromTx, roundMoney2 } from '@/lib/exchange-rate';
+import { loadExchangeRateUsdBsFromTx, roundMoney2, ExchangeRateUnavailableError } from '@/lib/exchange-rate';
 import type { OrderStatus } from '@/lib/definitions';
 import { CheckoutError } from '@/lib/checkout-error';
 import { d } from '@/lib/decimal';
@@ -23,30 +23,40 @@ import {
   type PaymentSettingsSlice,
 } from '@/lib/payment-methods';
 import { resolveShippingChargeType } from '@/lib/shipping-charge';
+import { sanitizeOrderItemImageUrl } from '@/lib/r2-public-url';
+
+/** SEC-2026-09 (#8): textos libres con tope — antes eran `z.string()` sin `max()` (columnas `text`). */
+const shortText = (max: number) => z.string().trim().max(max);
+const optionalText = (max: number) => z.string().trim().max(max).optional().nullable();
 
 export const orderItemSchema = z.object({
-  productId: z.string().min(1),
-  quantity: z.number().int().positive(),
-  imageUrl: z.string().optional().nullable(),
+  productId: z.string().min(1).max(64),
+  quantity: z.number().int().positive().max(9999),
+  imageUrl: z
+    .string()
+    .max(600)
+    .optional()
+    .nullable()
+    .transform((v) => sanitizeOrderItemImageUrl(v)),
 });
 
 export const checkoutSchema = z.object({
-  customerId: z.string().optional().default('guest'),
-  customerName: z.string().min(1, 'El nombre del cliente es requerido.'),
-  customerEmail: z.string().email().optional().nullable(),
-  customerPhone: z.string().optional().nullable(),
-  customerIdNumber: z.string().optional().nullable(),
+  customerId: z.string().max(64).optional().default('guest'),
+  customerName: shortText(120).min(1, 'El nombre del cliente es requerido.'),
+  customerEmail: z.string().trim().email().max(254).optional().nullable(),
+  customerPhone: optionalText(40),
+  customerIdNumber: optionalText(30),
   /**
    * PRD-128: cómo retira el cliente. Para 'tienda' el servidor reemplaza la
    * dirección por la configurada en readSettings() (nunca el copy del cliente).
    */
   shippingMethod: z.enum(['tienda', 'mrw', 'zoom', 'tealca']).optional().nullable(),
   shippingDetails: z.object({
-    address: z.string().min(1),
-    city: z.string().min(1),
-    state: z.string().min(1),
-    zipCode: z.string().optional().default('N/A'),
-    country: z.string().optional().default('Venezuela'),
+    address: shortText(400).min(1),
+    city: shortText(100).min(1),
+    state: shortText(100).min(1),
+    zipCode: shortText(20).optional().default('N/A'),
+    country: shortText(60).optional().default('Venezuela'),
   }),
   paymentMethodId: z
     .string()
@@ -55,10 +65,10 @@ export const checkoutSchema = z.object({
     .max(80)
     .regex(/^[a-z0-9:_-]+$/, 'Método de pago inválido.'),
   paymentCurrency: z.string().trim().toUpperCase().max(10).optional().nullable(),
-  paymentBank: z.string().optional().nullable(),
-  paymentHolderIdNumber: z.string().optional().nullable(),
-  paymentHolderPhone: z.string().optional().nullable(),
-  paymentReference: z.string().optional().nullable(),
+  paymentBank: optionalText(80),
+  paymentHolderIdNumber: optionalText(30),
+  paymentHolderPhone: optionalText(40),
+  paymentReference: optionalText(80),
   /** SESIÓN 05: token de upload obtenido de /api/checkout/upload-session. */
   paymentUploadToken: z
     .string()
@@ -371,7 +381,18 @@ export async function executeCheckoutInTransactionWithMethod(
     resolvedPaymentProofKey = uploadRecord.objectKey;
   }
 
-  const rate = await loadExchangeRateUsdBsFromTx(tx);
+  let rate: number;
+  try {
+    rate = await loadExchangeRateUsdBsFromTx(tx);
+  } catch (err) {
+    if (err instanceof ExchangeRateUnavailableError) {
+      throw new CheckoutError(
+        'La tienda no tiene una tasa de cambio activa en este momento. Intenta de nuevo en unos minutos.',
+        503,
+      );
+    }
+    throw err;
+  }
 
   // Política de redondeo (PRD-201): el precio unitario se congela en Bs con 2
   // decimales y el total del pedido es EXACTAMENTE la suma de las líneas

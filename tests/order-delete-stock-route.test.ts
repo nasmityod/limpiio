@@ -16,11 +16,17 @@ const txDeleteMock = vi.fn();
 const txUpdateManyMock = vi.fn();
 const txProductUpdateManyMock = vi.fn();
 const txCouponRedemptionFindUniqueMock = vi.fn();
+const txPaymentUploadUpdateManyMock = vi.fn();
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     $transaction: transactionMock,
   },
+}));
+
+const deletePrivateProofMock = vi.fn();
+vi.mock('@/lib/r2', () => ({
+  deletePrivateProof: deletePrivateProofMock,
 }));
 
 vi.mock('@/lib/safe-logger', () => ({
@@ -44,6 +50,7 @@ function makeTx() {
       update: vi.fn(),
     },
     coupon: { updateMany: vi.fn() },
+    paymentUpload: { updateMany: txPaymentUploadUpdateManyMock },
   };
 }
 
@@ -56,6 +63,8 @@ beforeEach(() => {
   txProductUpdateManyMock.mockResolvedValue({ count: 1 });
   txUpdateManyMock.mockResolvedValue({ count: 1 });
   txDeleteMock.mockResolvedValue({});
+  txPaymentUploadUpdateManyMock.mockResolvedValue({ count: 0 });
+  deletePrivateProofMock.mockResolvedValue(undefined);
 });
 
 describe('DELETE /api/orders/[id]', () => {
@@ -125,5 +134,46 @@ describe('DELETE /api/orders/[id]', () => {
         params: Promise.resolve({ id: 'order-1' }),
       }),
     ).rejects.toThrow('delete failed');
+  });
+});
+
+describe('SEC-2026-09 (#22): retención del comprobante al borrar', () => {
+  it('marca el PaymentUpload como DELETED y borra el objeto privado de R2', async () => {
+    txFindUniqueMock.mockResolvedValue({
+      id: 'order-9',
+      status: 'Cancelado',
+      stockDeducted: false,
+      paymentProofKey: 'proofs/abc-123.webp',
+      items: [],
+    });
+
+    const res = await DELETE(
+      new Request('http://localhost/api/orders/order-9', { method: 'DELETE' }),
+      { params: Promise.resolve({ id: 'order-9' }) },
+    );
+
+    expect(res.status).toBe(200);
+    expect(txPaymentUploadUpdateManyMock).toHaveBeenCalledWith({
+      where: { orderId: 'order-9' },
+      data: { status: 'DELETED' },
+    });
+    expect(deletePrivateProofMock).toHaveBeenCalledWith('proofs/abc-123.webp');
+  });
+
+  it('sin comprobante no toca R2', async () => {
+    txFindUniqueMock.mockResolvedValue({
+      id: 'order-10',
+      status: 'Cancelado',
+      stockDeducted: false,
+      paymentProofKey: null,
+      items: [],
+    });
+
+    await DELETE(
+      new Request('http://localhost/api/orders/order-10', { method: 'DELETE' }),
+      { params: Promise.resolve({ id: 'order-10' }) },
+    );
+
+    expect(deletePrivateProofMock).not.toHaveBeenCalled();
   });
 });

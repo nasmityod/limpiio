@@ -7,7 +7,12 @@ import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { requirePermission } from '@/lib/admin-access-server';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { rejectInvalidMutationOrigin } from '@/lib/security';
-import { reviewToClient, reviewInputSchema, readReviewsAutoApprove } from '@/lib/reviews';
+import {
+  reviewToClient,
+  reviewInputSchema,
+  readReviewsAutoApprove,
+  deleteReviewPhotosFromR2,
+} from '@/lib/reviews';
 import { VALID_REVIEW_STATUSES } from '@/lib/definitions';
 import { logError } from '@/lib/safe-logger';
 
@@ -35,14 +40,7 @@ const authorPatchSchema = reviewInputSchema.pick({
   photos: true,
 });
 
-async function handleModeratorPatch(
-  request: Request,
-  id: string,
-  body: unknown,
-) {
-  const originCheck = rejectInvalidMutationOrigin(request);
-  if (originCheck) return originCheck;
-
+async function handleModeratorPatch(id: string, body: unknown) {
   const auth = await requirePermission('REVIEWS');
   if (!auth.authorized) return auth.response;
 
@@ -75,10 +73,23 @@ async function handleModeratorPatch(
   }
 }
 
+/**
+ * PATCH /api/reviews/[id]
+ * - Autor (sesión dueña de la reseña) → edita rating/título/comentario/fotos.
+ * - Moderador (permiso REVIEWS) → status / adminReply.
+ *
+ * SEC-2026-09 (#2): el guard de origen se evalúa UNA vez al inicio y con la
+ * semántica correcta. Antes la rama de autor hacía
+ * `if (!rejectInvalidMutationOrigin(request))` — invertido — y devolvía 403 a
+ * toda petición same-origin legítima mientras dejaba pasar las cross-origin.
+ */
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const originCheck = rejectInvalidMutationOrigin(request);
+  if (originCheck) return originCheck;
+
   const session = await getServerSession(authOptions);
   const userId = session?.user?.id;
   if (!userId || userId === 'guest') {
@@ -90,7 +101,7 @@ export async function PATCH(
 
   const existing = await prisma.review.findUnique({
     where: { id },
-    select: { id: true, userId: true, verifiedPurchase: true, productId: true },
+    select: { id: true, userId: true, verifiedPurchase: true, productId: true, photos: true },
   });
 
   if (!existing) {
@@ -101,9 +112,6 @@ export async function PATCH(
   const authorParsed = authorPatchSchema.safeParse(body);
 
   if (isAuthor && authorParsed.success) {
-    if (!rejectInvalidMutationOrigin(request)) {
-      return NextResponse.json({ error: 'Origen no permitido.' }, { status: 403 });
-    }
     const ip = getClientIp(request);
     if (await rateLimit(`reviews:author-edit:${ip}`, { limit: 8, windowMs: 60_000 })) {
       return NextResponse.json({ error: 'Demasiadas solicitudes. Espera un momento.' }, { status: 429 });
@@ -112,6 +120,7 @@ export async function PATCH(
     try {
       const autoApprove = await readReviewsAutoApprove();
       const approved = autoApprove && existing.verifiedPurchase;
+      const nextPhotos = authorParsed.data.photos ?? [];
 
       const review = await prisma.review.update({
         where: { id },
@@ -119,15 +128,20 @@ export async function PATCH(
           rating: authorParsed.data.rating,
           title: authorParsed.data.title?.trim() || null,
           comment: authorParsed.data.comment.trim(),
-          photos: authorParsed.data.photos ?? [],
+          photos: nextPhotos,
           status: approved ? 'APPROVED' : 'PENDING',
         },
       });
 
+      // SEC-2026-09 (#21): las fotos retiradas de la reseña se borran de R2 —
+      // antes quedaban huérfanas para siempre en el CDN público.
+      const removed = (existing.photos ?? []).filter((u) => !nextPhotos.includes(u));
+      await deleteReviewPhotosFromR2(removed);
+
       await revalidateProductReviews(review.productId);
 
       return NextResponse.json({
-        review: reviewToClient(review),
+        review: reviewToClient(review, userId),
         moderated: !approved,
         message: approved
           ? 'Reseña actualizada.'
@@ -139,13 +153,16 @@ export async function PATCH(
     }
   }
 
-  return handleModeratorPatch(request, id, body);
+  return handleModeratorPatch(id, body);
 }
 
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const originCheck = rejectInvalidMutationOrigin(request);
+  if (originCheck) return originCheck;
+
   const session = await getServerSession(authOptions);
   const userId = session?.user?.id;
   if (!userId || userId === 'guest') {
@@ -157,7 +174,7 @@ export async function DELETE(
   try {
     const existing = await prisma.review.findUnique({
       where: { id },
-      select: { id: true, userId: true, productId: true },
+      select: { id: true, userId: true, productId: true, photos: true },
     });
 
     if (!existing) {
@@ -165,26 +182,22 @@ export async function DELETE(
     }
 
     if (existing.userId === userId) {
-      if (!rejectInvalidMutationOrigin(request)) {
-        return NextResponse.json({ error: 'Origen no permitido.' }, { status: 403 });
-      }
       const ip = getClientIp(request);
       if (await rateLimit(`reviews:author-delete:${ip}`, { limit: 8, windowMs: 60_000 })) {
         return NextResponse.json({ error: 'Demasiadas solicitudes. Espera un momento.' }, { status: 429 });
       }
 
-      await prisma.review.deleteMany({ where: { id, userId } });
+      const deleted = await prisma.review.deleteMany({ where: { id, userId } });
+      if (deleted.count > 0) await deleteReviewPhotosFromR2(existing.photos ?? []);
       await revalidateProductReviews(existing.productId);
       return NextResponse.json({ success: true });
     }
 
-    const originCheck = rejectInvalidMutationOrigin(request);
-    if (originCheck) return originCheck;
-
     const auth = await requirePermission('REVIEWS');
     if (!auth.authorized) return auth.response;
 
-    await prisma.review.deleteMany({ where: { id } });
+    const deleted = await prisma.review.deleteMany({ where: { id } });
+    if (deleted.count > 0) await deleteReviewPhotosFromR2(existing.photos ?? []);
     await revalidateProductReviews(existing.productId);
     return NextResponse.json({ success: true });
   } catch (error) {

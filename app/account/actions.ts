@@ -8,7 +8,7 @@ import { prisma } from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import bcrypt from 'bcrypt';
 import { hashToken } from '@/lib/security';
-import { sendEmailChangeConfirmEmail } from '@/lib/resend';
+import { sendEmailChangeConfirmEmail, sendEmailChangeNoticeEmail } from '@/lib/resend';
 import { emailSiteBaseUrl } from '@/emails/transactional/site';
 import { logError } from '@/lib/safe-logger';
 
@@ -115,6 +115,18 @@ export async function updateUserDetails(data: { name: string; email: string }): 
       });
     } catch (emailError) {
       logError('email_change_confirm_failed', emailError, { operation: 'email_change' });
+    }
+
+    // SEC-2026-09: aviso al correo ANTERIOR (best-effort) — con una sesión robada,
+    // cambiar el email y luego pedir un reset era un ATO silencioso.
+    try {
+      await sendEmailChangeNoticeEmail({
+        to: currentUser.email,
+        customerName: currentUser.name || parsed.data.name || 'Cliente',
+        newEmail: parsed.data.email,
+      });
+    } catch (noticeError) {
+      logError('email_change_notice_failed', noticeError, { operation: 'email_change' });
     }
 
     revalidatePath('/account/details');

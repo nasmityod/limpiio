@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { upsertAbandonedCart, markCartRecovered } from '@/lib/abandoned-cart';
-import { rateLimit } from '@/lib/rate-limit';
+import { rateLimit, hashForBucket } from '@/lib/rate-limit';
 import { getActionClientIp } from '@/lib/security';
 import { logWarn, logError } from '@/lib/safe-logger';
 import type { AbandonedCartItem } from '@/lib/definitions';
@@ -62,6 +62,13 @@ export async function saveCartSnapshotAction(
     const ip = await getActionClientIp();
     if (await rateLimit(`cart-snapshot:${ip}`, { limit: 10, windowMs: 10 * 60_000 })) {
       logWarn('abandoned_cart_snapshot_rate_limited', { operation: 'save_cart_snapshot' });
+      return;
+    }
+    // SEC-2026-09 (#8): sin sesión el email lo escribe el cliente; tope por
+    // destinatario para que la tienda no sirva de relay de remarketing hacia
+    // un correo ajeno (2 emails + cupón por cada carrito falso).
+    if (!hasSession && (await rateLimit(`cart-snapshot:email:${hashForBucket(email)}`, { limit: 5, windowMs: 24 * 60 * 60_000 }))) {
+      logWarn('abandoned_cart_snapshot_email_rate_limited', { operation: 'save_cart_snapshot' });
       return;
     }
 

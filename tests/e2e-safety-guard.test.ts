@@ -189,4 +189,12 @@ describe('guarda de BD E2E (capa independiente)', () => {
     expect(validateE2eDatabaseUrl('postgresql://u:p@localhost:5432/tienda').ok).toBe(false);
     expect(validateE2eDatabaseUrl('').ok).toBe(false);
   });
+
+  it('SEC-2026-09: "test" debe ser token delimitado, no substring', () => {
+    // Un host de producción como ep-latest-123.neon.tech contenía "test".
+    expect(validateE2eDatabaseUrl('postgresql://u:p@ep-latest-123.neon.tech:5432/tienda').ok).toBe(false);
+    expect(validateE2eDatabaseUrl('postgresql://u:p@localhost:5432/contest').ok).toBe(false);
+    expect(validateE2eDatabaseUrl('postgresql://u:p@localhost:5432/tienda_test').ok).toBe(true);
+    expect(validateE2eDatabaseUrl('postgresql://u:p@db-test.internal:5432/tienda').ok).toBe(true);
+  });
 });

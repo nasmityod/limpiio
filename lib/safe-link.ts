@@ -44,6 +44,34 @@ export function isInternalEditableLink(value: string): boolean {
 }
 
 /**
+ * SEC-2026-09 (#4): href para atributos `href`/`src` de contenido editable en
+ * RENDER. Devuelve la URL si es ruta interna o https absoluta; `null` en
+ * cualquier otro caso (`javascript:`, `data:`, http:, basura). Úsalo en cada
+ * `<a href={settings.x}>` / `<iframe src>` además de validar al guardar: las
+ * páginas cacheadas llevan CSP con `unsafe-inline` y un `javascript:` ahí
+ * ejecuta en la sesión de quien haga clic (incluido el superadmin).
+ */
+export function safeHref(value: string | null | undefined): string | null {
+  const v = (value ?? '').trim();
+  if (!v) return null;
+  return isSafeEditableLink(v) ? v : null;
+}
+
+/** Solo embeds de Google Maps (https://www.google.com/maps/embed…) para el iframe de la tienda. */
+export function isGoogleMapsEmbedUrl(value: string): boolean {
+  try {
+    const u = new URL(value.trim());
+    return (
+      u.protocol === 'https:' &&
+      (u.hostname === 'www.google.com' || u.hostname === 'maps.google.com') &&
+      u.pathname.startsWith('/maps')
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Imagen editable: vacía, ruta interna (`/...`) o URL https válida.
  * Evita strings basura que rompen next/image en runtime (PRD-259).
  */

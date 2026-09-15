@@ -24,12 +24,28 @@ export async function register() {
   }
 
   if (process.env.SENTRY_DSN) {
+    const { sanitizeText } = await import('./lib/safe-logger');
     Sentry.init({
       dsn: process.env.SENTRY_DSN,
       environment: process.env.VERCEL_ENV ?? process.env.NODE_ENV,
       // Muestreo bajo de traces: suficiente para detectar endpoints lentos
       // sin consumir cuota; los errores se capturan siempre.
       tracesSampleRate: 0.1,
+      sendDefaultPii: false,
+      // SEC-2026-09: los mensajes de error (Prisma, CheckoutError, fetch) pasan por
+      // el mismo saneado que safe-logger antes de salir hacia Sentry.
+      beforeSend(event) {
+        if (event.message) event.message = sanitizeText(event.message);
+        for (const ex of event.exception?.values ?? []) {
+          if (ex.value) ex.value = sanitizeText(ex.value);
+        }
+        if (event.request) {
+          delete event.request.cookies;
+          delete event.request.headers;
+          delete event.request.data;
+        }
+        return event;
+      },
     });
   }
 }

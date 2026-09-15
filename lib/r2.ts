@@ -208,9 +208,25 @@ export async function uploadToR2({
   return `${publicBaseUrl}/${key}`;
 }
 
+/**
+ * Prefijos del bucket público que la app puede borrar. SEC-2026-09 (#20):
+ * `deleteFromR2` aceptaba cualquier key derivada de una URL del CDN — un admin
+ * con CATALOG podía borrar `backups/*` o los banners vía `DELETE /api/upload-video`
+ * o quitando una URL ajena de la galería de un producto. `proofs/` vive en el
+ * bucket privado y `backups/` nunca debe ser borrable desde la app.
+ */
+const R2_DELETABLE_PREFIXES = ['products/', 'banners/', 'assets/', 'reviews/'] as const;
+
+export function isDeletableR2Key(key: string): boolean {
+  if (!key || key.includes('..') || key.startsWith('/')) return false;
+  return R2_DELETABLE_PREFIXES.some((p) => key.startsWith(p));
+}
+
 export async function deleteFromR2(key: string): Promise<void> {
+  if (!isDeletableR2Key(key)) {
+    throw new Error(`[r2] Key fuera de las carpetas borrables: ${key.slice(0, 40)}`);
+  }
   if (isE2eMode()) {
-    void key;
     return;
   }
   const { bucket } = getConfig();

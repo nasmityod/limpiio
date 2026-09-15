@@ -5,6 +5,7 @@ import { createHash, timingSafeEqual } from 'crypto';
 import { isIP } from 'node:net';
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
+import { normalizeIpForBucket } from '@/lib/rate-limit';
 import type { ZodIssue } from 'zod';
 
 /**
@@ -24,6 +25,10 @@ export function hashToken(raw: string): string {
  * Si falta o es inválido, devuelve "unknown".
  */
 export async function getActionClientIp(): Promise<string> {
+  return normalizeIpForBucket(await getRawActionClientIp());
+}
+
+async function getRawActionClientIp(): Promise<string> {
   const h = await headers();
   const env = (process.env.DEPLOYMENT_ENV ?? '').toLowerCase();
 

@@ -134,6 +134,13 @@ async function upstashWindow(
       logError('upstash_unexpected_response', new Error('Unexpected Upstash response'), { provider: 'upstash' });
       return null;
     }
+    // SEC-2026-09: si PEXPIRE falla (p. ej. backend sin soporte de `NX`), la
+    // clave nunca expira y el bucket queda bloqueado para siempre. Se registra
+    // y se cae al fallback en memoria (misma política, con expiración real).
+    if (data?.[1]?.error) {
+      logError('upstash_pexpire_failed', new Error(String(data[1].error)), { provider: 'upstash' });
+      return null;
+    }
 
     const limited = count > config.limit;
     // Con Upstash no podemos calcular retryAfter preciso sin TTL;
@@ -196,6 +203,47 @@ export async function rateLimit(key: string, config: RateLimitConfig): Promise<b
 // ── IP del cliente ────────────────────────────────────────────────────────
 
 /**
+ * SEC-2026-09 (#24): normaliza la IP para usarla como clave de bucket.
+ * IPv4 → tal cual. IPv6 → prefijo /64 (los proveedores asignan al menos un
+ * /64 por cliente, así que rotar dentro de él es gratis y saltaba todos los
+ * límites por IP: login, registro, pedidos guest, cupones…).
+ */
+export function normalizeIpForBucket(ip: string): string {
+  const family = isIP(ip);
+  if (family !== 6) return ip;
+  // IPv4 mapeada (::ffff:1.2.3.4): bucket por la IPv4 real, nunca por el /64
+  // común a todas las mapeadas (eso metería a todos los clientes en un bucket).
+  const mapped = ip.match(/^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/i);
+  if (mapped && isIP(mapped[1]) === 4) return mapped[1];
+  const expanded = expandIpv6(ip);
+  if (!expanded) return ip;
+  return `${expanded.slice(0, 4).join(':')}::/64`;
+}
+
+/** Expande una IPv6 (con `::` y/o sufijo IPv4) a 8 grupos hex. */
+function expandIpv6(ip: string): string[] | null {
+  let addr = ip;
+  // Sufijo IPv4 embebido (::ffff:1.2.3.4) → dos grupos hex.
+  const v4 = addr.match(/(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (v4) {
+    const [a, b, c, d] = v4.slice(1).map(Number);
+    const hi = ((a << 8) | b).toString(16);
+    const lo = ((c << 8) | d).toString(16);
+    addr = addr.slice(0, -v4[0].length) + `${hi}:${lo}`;
+  }
+  const [head, tail = ''] = addr.split('::');
+  const headParts = head ? head.split(':') : [];
+  const tailParts = tail ? tail.split(':') : [];
+  if (addr.includes('::')) {
+    const missing = 8 - headParts.length - tailParts.length;
+    if (missing < 0) return null;
+    return [...headParts, ...Array<string>(missing).fill('0'), ...tailParts].map((g) => g.padStart(4, '0'));
+  }
+  if (headParts.length !== 8) return null;
+  return headParts.map((g) => g.padStart(4, '0'));
+}
+
+/**
  * Extrae la IP del cliente de forma segura según DEPLOYMENT_ENV.
  *
  * - cloudflare → exclusivamente `cf-connecting-ip` (validado con isIP).
@@ -208,6 +256,10 @@ export async function rateLimit(key: string, config: RateLimitConfig): Promise<b
  * configurado la app ya lanzó en validateEnv() y no debería llegar aquí.
  */
 export function getClientIp(request: Request): string {
+  return normalizeIpForBucket(getRawClientIp(request));
+}
+
+function getRawClientIp(request: Request): string {
   const env = (process.env.DEPLOYMENT_ENV ?? '').toLowerCase();
 
   if (env === 'cloudflare') {

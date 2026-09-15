@@ -54,6 +54,9 @@ export function trackMetaPageView(): boolean {
   try {
     const fbq = getFbq();
     if (!fbq) return false;
+    // SEC-2026-09 (#23): el Pixel manda document.location tal cual; en páginas
+    // con ?token= (bearer del pedido guest, reset de contraseña) no se trackea.
+    if (/[?&]token=/.test(window.location.search)) return false;
     fbq('track', 'PageView');
     return true;
   } catch {

@@ -78,22 +78,22 @@ export async function registerUserAction({ name, email, password }: Record<strin
     const hashedPassword = await bcrypt.hash(password, 12);
 
     // 5. Crear el usuario (rol normalizado en mayúsculas, consistente con isAdminRole)
-    // FASE 4.1: en la misma transacción se vinculan los pedidos invitados
-    // previos hechos con este email (customerId null → nueva cuenta).
-    await prisma.$transaction(async (tx) => {
-      const created = await tx.user.create({
-        data: {
-          name: name.trim(),
-          email: normalizedEmail,
-          password: hashedPassword,
-          role: 'CLIENT',
-        },
-        select: { id: true },
-      });
-      await tx.order.updateMany({
-        where: { customerId: null, customerEmail: { equals: normalizedEmail, mode: 'insensitive' } },
-        data: { customerId: created.id },
-      });
+    //
+    // SEC-2026-09 (#3): ya NO se vinculan aquí los pedidos invitados hechos
+    // con este email. El registro no verifica que quien se registra controle
+    // el correo, así que un atacante que registrara `victima@x.com` heredaba
+    // nombre, teléfono, cédula, dirección e historial de compras de la víctima
+    // (y la insignia «compra verificada»). La vinculación de pedidos guest
+    // exige prueba de posesión: el token del pedido (registerFromOrderAction)
+    // o un flujo de verificación de correo.
+    await prisma.user.create({
+      data: {
+        name: name.trim().slice(0, 120),
+        email: normalizedEmail,
+        password: hashedPassword,
+        role: 'CLIENT',
+      },
+      select: { id: true },
     });
 
     // Correo de bienvenida (fallos no revierten el registro; se registran en logs)
@@ -111,8 +111,11 @@ export async function registerUserAction({ name, email, password }: Record<strin
  * FASE 4.1 (MEJORA 1.2): registro post-compra "en 1 clic" desde /checkout/success.
  *
  * El invitado consume el token guest (?token=) como bearer no adivinable.
- * Al crear la cuenta se vinculan automáticamente el pedido del token y
- * cualquier pedido previo invitado con el mismo email (customerId null).
+ * SEC-2026-09 (#3): el token prueba la posesión de UN pedido, no del correo —
+ * el email del pedido lo escribió quien hizo el checkout, sin verificar. Por
+ * eso solo se vincula ese pedido; los demás pedidos guest con el mismo email
+ * NO se transfieren (un atacante podía comprar con el email de la víctima y
+ * usar su propio token para absorber el historial ajeno).
  */
 const REGISTER_FROM_ORDER_GENERIC_FAILURE =
   'No pudimos crear la cuenta desde este pedido. Verifica el enlace o solicita uno nuevo.';
@@ -181,7 +184,7 @@ export async function registerFromOrderAction(
 
       const user = await tx.user.create({
         data: {
-          name: order.customerName.trim() || null,
+          name: order.customerName.trim().slice(0, 120) || null,
           email: normalizedEmail,
           password: hashedPassword,
           role: 'CLIENT',
@@ -189,17 +192,10 @@ export async function registerFromOrderAction(
         select: { id: true },
       });
 
-      await tx.order.updateMany({
-        where: { customerId: null, customerEmail: { equals: normalizedEmail, mode: 'insensitive' } },
+      // Solo el pedido cuyo token se acaba de consumir (prueba de posesión).
+      await tx.order.update({
+        where: { id: order.id },
         data: { customerId: user.id },
-      });
-
-      await tx.order.updateMany({
-        where: { customerEmail: { equals: normalizedEmail, mode: 'insensitive' } },
-        data: {
-          guestAccessTokenHash: null,
-          guestAccessTokenExpiresAt: null,
-        },
       });
 
       return user;

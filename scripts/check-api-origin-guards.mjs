@@ -76,6 +76,31 @@ function isExported(node, sourceFile) {
 }
 
 /**
+ * SEC-2026-09 (#2): detecta el patrón INVERTIDO `if (!rejectInvalidMutationOrigin(...))`.
+ * El helper devuelve null cuando el origen es válido, así que negarlo rechaza a
+ * los usuarios legítimos y deja pasar a los cross-origin.
+ */
+function findInvertedOriginGuard(node) {
+  let found = false;
+  function visit(n) {
+    if (found) return;
+    if (
+      ts.isPrefixUnaryExpression(n) &&
+      n.operator === ts.SyntaxKind.ExclamationToken &&
+      ts.isCallExpression(n.operand) &&
+      ts.isIdentifier(n.operand.expression) &&
+      n.operand.expression.text === 'rejectInvalidMutationOrigin'
+    ) {
+      found = true;
+      return;
+    }
+    ts.forEachChild(n, visit);
+  }
+  visit(node);
+  return found;
+}
+
+/**
  * Busca una llamada a rejectInvalidMutationOrigin dentro del AST de una función.
  */
 function hasRejectInvalidMutationOrigin(node) {
@@ -102,6 +127,7 @@ function hasRejectInvalidMutationOrigin(node) {
 function main() {
   const routeFiles = findRouteFiles(API_DIR);
   const missing = [];
+  const inverted = [];
 
   for (const filePath of routeFiles) {
     const relativePath = filePath.startsWith(resolve(__dirname, '..') + sep)
@@ -127,13 +153,18 @@ function main() {
 
       if (!hasRejectInvalidMutationOrigin(funcDecl)) {
         missing.push(key);
+      } else if (findInvertedOriginGuard(funcDecl)) {
+        inverted.push(key);
       }
     }
   }
 
-  if (missing.length > 0) {
+  if (missing.length > 0 || inverted.length > 0) {
     for (const item of missing) {
       console.log(`MISSING_ORIGIN_GUARD ${item}`);
+    }
+    for (const item of inverted) {
+      console.log(`INVERTED_ORIGIN_GUARD ${item} — usa: const originCheck = rejectInvalidMutationOrigin(request); if (originCheck) return originCheck;`);
     }
     process.exitCode = 1;
     return;

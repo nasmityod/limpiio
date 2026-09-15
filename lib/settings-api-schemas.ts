@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { isR2PublicHttpsUrl } from '@/lib/r2-public-url';
+import { isSafeEditableLink, safeHref } from '@/lib/safe-link';
 import {
   normalizeWhatsAppPhone,
   isValidWhatsAppPhone,
@@ -11,6 +12,20 @@ import {
   type PaymentMethodConfig,
 } from '@/lib/payment-methods';
 
+/**
+ * SEC-2026-09 (#4): enlaces de redes sociales — vacío, ruta interna o https.
+ * Antes eran `z.string()` libre y el Footer los ponía en `href` de todas las
+ * páginas; un `javascript:` ahí ejecutaba con la CSP `unsafe-inline` de las
+ * rutas cacheadas.
+ */
+const socialLinkSchema = z
+  .string()
+  .trim()
+  .max(300)
+  .optional()
+  .default('')
+  .refine(isSafeEditableLink, 'Usa una URL https (p. ej. https://instagram.com/tu-tienda) o déjalo vacío.');
+
 /** Subset expuesto con STORE_SETTINGS (GET/PUT general). */
 export const generalSettingsApiSchema = z.object({
   storeName:          z.string().min(1),
@@ -19,8 +34,8 @@ export const generalSettingsApiSchema = z.object({
   phone2:             z.string().optional().default(''),
   email:              z.string().email(),
   address:            z.string().optional().default(''),
-  instagram:          z.string().optional().default(''),
-  facebook:           z.string().optional().default(''),
+  instagram:          socialLinkSchema,
+  facebook:           socialLinkSchema,
   labelWidthMm:       z.coerce.number().min(40).max(300).default(100),
   labelHeightMm:      z.coerce.number().min(40).max(400).default(150),
   whatsappOrderPhone: z
@@ -88,8 +103,9 @@ export function pickGeneralSettingsDto(settings: GeneralSettingsDto & Partial<Fi
     phone2: settings.phone2 ?? '',
     email: settings.email,
     address: settings.address ?? '',
-    instagram: settings.instagram ?? '',
-    facebook: settings.facebook ?? '',
+    // Valores legacy no-https se muestran vacíos en vez de tumbar el panel.
+    instagram: safeHref(settings.instagram) ?? '',
+    facebook: safeHref(settings.facebook) ?? '',
     labelWidthMm: settings.labelWidthMm ?? 100,
     labelHeightMm: settings.labelHeightMm ?? 150,
     whatsappOrderPhone: settings.whatsappOrderPhone ?? '',

@@ -19,6 +19,33 @@ interface ActionResult {
 const MAX_ADDRESSES_PER_USER = 20;
 
 /**
+ * SEC-2026-09: tope de longitud por campo. Las validaciones eran solo de
+ * presencia (`?.trim()`), así que un usuario podía guardar megabytes por
+ * dirección (columnas `text`) y arrastrarlos al checkout y al panel.
+ */
+const ADDRESS_FIELD_MAX: Record<string, number> = {
+  alias: 60,
+  firstName: 80,
+  lastName: 80,
+  idNumber: 30,
+  phoneNumber: 40,
+  mrwState: 80,
+  mrwOffice: 160,
+  officeAddress: 300,
+  officeCity: 100,
+};
+
+function validateAddressLengths(data: SavedAddressInput): string | null {
+  for (const [field, max] of Object.entries(ADDRESS_FIELD_MAX)) {
+    const value = (data as unknown as Record<string, unknown>)[field];
+    if (typeof value === 'string' && value.length > max) {
+      return `El campo  supera el máximo de  caracteres.`;
+    }
+  }
+  return null;
+}
+
+/**
  * PRD-210: valida estado y oficina MRW contra la lista blanca oficial de
  * lib/mrw-offices.ts — evita oficinas inventadas persistidas en BD.
  * Devuelve un mensaje de error o null si es válido.
@@ -142,6 +169,8 @@ export async function createSavedAddress(
     const label = { tienda: '', mrw: 'MRW', zoom: 'ZOOM', tealca: 'TEALCA' }[data.shippingMethod] ?? '';
     return { success: false, message: `Selecciona una oficina ${label}.` };
   }
+  const lengthError = validateAddressLengths(data);
+  if (lengthError) return { success: false, message: lengthError };
   const mrwError = validateMrwSelection(data);
   if (mrwError) return { success: false, message: mrwError };
   const zoomError = validateZoomSelection(data);
@@ -216,6 +245,8 @@ export async function updateSavedAddress(
     const label = { tienda: '', mrw: 'MRW', zoom: 'ZOOM', tealca: 'TEALCA' }[data.shippingMethod] ?? '';
     return { success: false, message: `Selecciona una oficina ${label}.` };
   }
+  const lengthError = validateAddressLengths(data);
+  if (lengthError) return { success: false, message: lengthError };
   const mrwError = validateMrwSelection(data);
   if (mrwError) return { success: false, message: mrwError };
   const zoomError = validateZoomSelection(data);

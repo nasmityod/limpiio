@@ -63,7 +63,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json(
       {
-        reviews: reviews.map(reviewToClient),
+        reviews: reviews.map((r) => reviewToClient(r, 'admin')),
         counts: countMap,
         autoApprove,
         total,

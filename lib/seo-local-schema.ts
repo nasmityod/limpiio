@@ -4,6 +4,25 @@
  */
 import { z } from 'zod';
 import { BRAND } from '@/config/brand';
+import { isGoogleMapsEmbedUrl } from '@/lib/safe-link';
+
+/** https absoluta (máx. 600) o cadena vacía. */
+const httpsUrlOrEmpty = z
+  .string()
+  .trim()
+  .max(600)
+  .refine(
+    (v) => {
+      if (v === '') return true;
+      try {
+        return new URL(v).protocol === 'https:';
+      } catch {
+        return false;
+      }
+    },
+    'Usa una URL https válida o déjalo vacío.',
+  )
+  .optional();
 
 const dayEnum = z.enum(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']);
 export const SEO_DAYS: z.infer<typeof dayEnum>[] = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -22,8 +41,13 @@ export const seoLocalSchema = z.object({
     latitude:  z.number().min(-90).max(90),
     longitude: z.number().min(-180).max(180),
   }),
-  googleMapsUrl:   z.string().url().or(z.literal('')).optional(),
-  googleMapsEmbed: z.string().url().or(z.literal('')).optional(),
+  // SEC-2026-09 (#4): `z.url()` acepta `javascript:` y `data:`; estos valores van a
+  // <a href> e <iframe src> en páginas con CSP `unsafe-inline`. Solo https.
+  googleMapsUrl:   httpsUrlOrEmpty,
+  googleMapsEmbed: httpsUrlOrEmpty.refine(
+    (v) => v === '' || v === undefined || isGoogleMapsEmbedUrl(v),
+    'Debe ser un embed de Google Maps (https://www.google.com/maps/embed…).',
+  ),
   openingHours: z.array(z.object({
     days:   z.array(dayEnum).min(1),
     opens:  z.string().regex(timeRegex, 'Formato HH:MM'),
@@ -32,7 +56,7 @@ export const seoLocalSchema = z.object({
   paymentAccepted: z.array(z.string()).default(['Cash', 'Transferencia', 'Pago Móvil']),
   priceRange:      z.string().default('$$'),
   whatsapp:        z.string().optional().default(''),
-  tiktok:          z.string().url().or(z.literal('')).optional(),
+  tiktok:          httpsUrlOrEmpty,
 });
 
 export type SeoLocal = z.infer<typeof seoLocalSchema>;

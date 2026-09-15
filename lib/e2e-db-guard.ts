@@ -11,7 +11,9 @@ export type E2eDbGuardResult =
 function isAllowedE2eIdentifier(identifier: string): boolean {
   const lower = identifier.trim().toLowerCase();
   if (!lower) return false;
-  return lower.includes('_e2e') || lower.includes('test');
+  // SEC-2026-09: token delimitado, no substring — «latest», «contest» o «fastest»
+  // contenían "test" y hacían pasar un host/BD real como entorno de pruebas.
+  return /(^|[_.-])(e2e|test|testing)([_.-]|$)/.test(lower);
 }
 
 /**

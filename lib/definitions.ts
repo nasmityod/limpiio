@@ -2,6 +2,7 @@
 // ESPECIFICACIONES TÉCNICAS DE PRODUCTO
 // ─────────────────────────────────────────────────────────────
 import { isStorePickupOrderAddress } from '@/lib/shipping-charge';
+import { sanitizeOrderItemImageUrl } from '@/lib/r2-public-url';
 
 export interface ProductSpec {
   name:  string;
@@ -580,9 +581,30 @@ export function prismaOrderToOrder(o: {
       productName: i.productName,
       quantity:    i.quantity,
       price:       d(i.price),
-      imageUrl:    i.imageUrl ?? undefined,
+      imageUrl:    sanitizeOrderItemImageUrl(i.imageUrl) ?? undefined,
       freeShipping: i.freeShipping === true,
     })),
+  };
+}
+
+/**
+ * SEC-2026-09 (#5): vista del pedido para el CLIENTE dueño. Parte del `Order`
+ * completo y anula los campos internos del panel: `notes` («Notas internas —
+ * no se envían al cliente»), `paymentVerifiedBy` (correo del operador que
+ * validó), `paymentProofKey`/`paymentProofUrl` (ubicación del comprobante en
+ * el bucket privado) y los códigos de respuesta de Cashea. Antes viajaban
+ * enteros en `GET /api/orders/[id]`, en el payload RSC de `/account/orders/[id]`
+ * y en `/checkout/success`.
+ */
+export function toCustomerOrderDto(order: Order): Order {
+  return {
+    ...order,
+    notes: null,
+    paymentVerifiedBy: null,
+    paymentProofKey: null,
+    paymentProofUrl: null,
+    casheaLastResponseCode: null,
+    casheaAttemptCount: null,
   };
 }
 

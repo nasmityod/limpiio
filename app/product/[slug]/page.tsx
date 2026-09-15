@@ -177,8 +177,10 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 }
 
 async function getProduct(slug: string) {
+  // SEC-2026-09 (#18): un producto despublicado (isActive=false) no debe seguir
+  // sirviéndose por su URL — el panel promete «ya no se muestra en la tienda».
   return prisma.product.findFirst({
-    where: { OR: [{ slug }, { id: slug }] },
+    where: { isActive: true, OR: [{ slug }, { id: slug }] },
     select: PRODUCT_DETAIL_SELECT,
   });
 }
@@ -190,6 +192,7 @@ async function getRelatedProducts(category: string, excludeId: string) {
         category,
         id: { not: excludeId },
         stock: { gt: 0 },
+        isActive: true, // SEC-2026-09 (#18)
       },
       take: 5,
       orderBy: { createdAt: 'desc' },

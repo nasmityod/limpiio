@@ -2,7 +2,7 @@
 
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
-import { requirePermissionAction } from '@/lib/admin-access-server';
+import { requirePermissionAction, requireBackofficeAction } from '@/lib/admin-access-server';
 import {
   DEFAULT_EXCHANGE_RATE_USD_BS,
   EXCHANGE_RATE_APP_CONFIG_KEY,
@@ -57,7 +57,14 @@ const pricingParamsSchema = z.object({
   factor: z.coerce.number().positive('La tasa actual debe ser mayor que cero.').max(100, 'Tasa actual fuera de rango.'),
 });
 
+/**
+ * SEC-2026-09 (#6): solo personal del panel. Es una Server Action pública por
+ * construcción y la importan componentes cliente; sin guard, cualquiera leía el
+ * margen global y el factor BCV→Binance, y con `price = cost × (1+margen) × factor`
+ * derivaba el costo de todo el catálogo (campo marcado «nunca exponer»).
+ */
 export async function getPricingParams(): Promise<{ marginPct: number; factor: number }> {
+  await requireBackofficeAction();
   try {
     const rows = await prisma.appConfig.findMany({
       where: { key: { in: [PROFIT_MARGIN_APP_CONFIG_KEY, BCV_BINANCE_FACTOR_APP_CONFIG_KEY] } },
@@ -110,6 +117,7 @@ const marginPresetsSchema = z
   .length(4, 'Deben ser exactamente 4 valores.');
 
 export async function getMarginPresets(): Promise<number[]> {
+  await requireBackofficeAction(); // SEC-2026-09 (#6)
   try {
     const record = await prisma.appConfig.findUnique({ where: { key: MARGIN_PRESETS_APP_CONFIG_KEY } });
     if (!record?.value) return DEFAULT_MARGIN_PRESETS;

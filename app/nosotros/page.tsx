@@ -17,6 +17,8 @@ import { googleMapsBusinessUrl, googleMapsEmbedUrl } from '@/lib/google-maps';
 import { readSeoLocal, describeOpeningHours } from '@/lib/seo-local';
 import { readSettings } from '@/lib/data-store';
 import { whatsappHref } from '@/lib/social-links';
+import { safeHref, isGoogleMapsEmbedUrl } from '@/lib/safe-link';
+import JsonLd from '@/app/components/JsonLd';
 import { BRAND } from '@/config/brand';
 
 const SITE_URL = BRAND.siteUrl;
@@ -47,8 +49,14 @@ export default async function NosotrosPage() {
   const [seo, settings] = await Promise.all([readSeoLocal(), readSettings()]);
 
   const mapQuery = `${seo.legalName}, ${seo.streetAddress}, ${seo.addressLocality}, ${seo.addressRegion}, Venezuela`;
-  const mapOpenUrl = seo.googleMapsUrl || googleMapsBusinessUrl(mapQuery);
-  const mapEmbedUrl = seo.googleMapsEmbed || googleMapsEmbedUrl(mapQuery);
+  // SEC-2026-09 (#4): las URLs de SEO local se editan desde el panel (SITE_CONTENT);
+  // `z.url()` acepta `javascript:` y esta página se sirve con CSP `unsafe-inline`.
+  const mapOpenUrl = safeHref(seo.googleMapsUrl) ?? googleMapsBusinessUrl(mapQuery);
+  const mapEmbedUrl =
+    seo.googleMapsEmbed && isGoogleMapsEmbedUrl(seo.googleMapsEmbed)
+      ? seo.googleMapsEmbed
+      : googleMapsEmbedUrl(mapQuery);
+  const instagramHref = safeHref(settings.instagram);
   const hours = describeOpeningHours(seo);
   const waHref = whatsappHref(settings.phone, `Hola ${BRAND.name}, leí su página "Quiénes somos" y quiero hacerles una pregunta.`);
 
@@ -86,14 +94,8 @@ export default async function NosotrosPage() {
 
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(aboutSchema) }}
-      />
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbSchema) }}
-      />
+      {/* SEC-2026-09 (#4): <JsonLd> escapa `<` — storeName/slogan/dirección son editables desde el panel. */}
+      <JsonLd data={[aboutSchema, breadcrumbSchema]} />
 
       <div className="pb-14 w-full max-w-full space-y-10 sm:space-y-14">
 
@@ -248,11 +250,11 @@ export default async function NosotrosPage() {
                   </p>
                 </div>
               )}
-              {settings.instagram ? (
+              {instagramHref ? (
                 <div className="flex items-start gap-3">
                   <InstagramGlyph size={17} className="mt-0.5 flex-shrink-0 text-brand-yellowDk" />
                   <a
-                    href={settings.instagram}
+                    href={instagramHref}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="font-semibold text-navy underline decoration-brand-yellow decoration-2 underline-offset-2"

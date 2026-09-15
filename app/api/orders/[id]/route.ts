@@ -2,13 +2,15 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { prismaOrderToOrder } from '@/lib/definitions';
+import { prismaOrderToOrder, toCustomerOrderDto } from '@/lib/definitions';
 import { requirePermission } from '@/lib/admin-access-server';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { applyOrderCancellationEffectsInTransaction } from '@/lib/checkout-order';
 import { trackingUrlSchema, trackingPhotoUrlSchema } from '@/lib/tracking-url-validation';
 import { rejectInvalidMutationOrigin } from '@/lib/security';
+import { deletePrivateProof } from '@/lib/r2';
+import { logError } from '@/lib/safe-logger';
 
 export async function GET(
   _request: Request,
@@ -39,7 +41,8 @@ export async function GET(
     if (!order) {
       return NextResponse.json({ message: 'No autorizado.' }, { status: 403 });
     }
-    return NextResponse.json(prismaOrderToOrder(order));
+    // SEC-2026-09 (#5): el dueño recibe la vista de cliente (sin notas internas ni datos del operador).
+    return NextResponse.json(toCustomerOrderDto(prismaOrderToOrder(order)));
   }
 
   const auth = await requirePermission('ORDERS');
@@ -140,8 +143,9 @@ export async function DELETE(
 
   const { id } = await params;
 
+  let proofKey: string | null = null;
   try {
-    await prisma.$transaction(async (tx) => {
+    proofKey = await prisma.$transaction(async (tx) => {
       const order = await tx.order.findUnique({
         where: { id },
         include: { items: true },
@@ -158,13 +162,33 @@ export async function DELETE(
         items: order.items,
         stockDeducted: order.stockDeducted,
       });
+      // SEC-2026-09 (#22): el comprobante vinculado se marca DELETED en la misma
+      // tx; antes quedaba LINKED con orderId=null (SetNull) y ningún cron lo
+      // purgaba — la captura bancaria del cliente vivía para siempre en R2.
+      await tx.paymentUpload.updateMany({
+        where: { orderId: order.id },
+        data: { status: 'DELETED' },
+      });
       await tx.order.delete({ where: { id } });
+      return order.paymentProofKey ?? null;
     });
   } catch (err) {
     if (err instanceof Error && err.name === 'OrderNotFoundError') {
       return NextResponse.json({ error: 'Pedido no encontrado.' }, { status: 404 });
     }
     throw err;
+  }
+
+  if (proofKey) {
+    try {
+      await deletePrivateProof(proofKey);
+    } catch (err) {
+      logError('order_delete_proof_cleanup_failed', err, {
+        operation: 'delete_order',
+        provider: 'r2',
+        orderId: id,
+      });
+    }
   }
 
   return NextResponse.json({ success: true });

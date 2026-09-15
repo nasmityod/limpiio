@@ -7,7 +7,7 @@ import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { rateLimitCritical, getClientIp, hashForBucket } from '@/lib/rate-limit';
 import { rejectInvalidMutationOrigin, buildRateLimitedResponse } from '@/lib/security';
 import { validateCouponForCheckout } from '@/lib/coupons';
-import { loadExchangeRateUsdBsFromTx, roundMoney2 } from '@/lib/exchange-rate';
+import { loadExchangeRateUsdBsFromTx, roundMoney2, ExchangeRateUnavailableError } from '@/lib/exchange-rate';
 import { d } from '@/lib/decimal';
 
 const schema = z.object({
@@ -87,7 +87,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ valid: false, reason: result.reason });
     }
 
-    const rate = await loadExchangeRateUsdBsFromTx(prisma);
+    let rate: number;
+    try {
+      rate = await loadExchangeRateUsdBsFromTx(prisma);
+    } catch (err) {
+      if (err instanceof ExchangeRateUnavailableError) {
+        return NextResponse.json(
+          { valid: false, reason: 'La tienda no tiene una tasa de cambio activa. Intenta más tarde.' },
+          { status: 503 },
+        );
+      }
+      throw err;
+    }
     const discountUsd = result.discountUsd;
     const discountBs = roundMoney2(discountUsd * rate);
     const newTotalUsd = roundMoney2(Math.max(0, subtotalUsd - discountUsd));

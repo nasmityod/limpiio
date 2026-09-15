@@ -33,6 +33,8 @@ import {
 import { logError, logWarn } from '@/lib/safe-logger';
 
 const CHECKOUT_TX_MAX_RETRIES = 3;
+/** SEC-2026-09 (#7): pedidos `Pendiente` sin pago que una cuenta puede tener abiertos a la vez (modo full). */
+const MAX_OPEN_UNPAID_ORDERS_PER_USER = 3;
 
 /** Reintenta transacciones ante conflictos de serialización de Postgres (P2034 / 40001). */
 function isSerializationFailure(error: unknown): boolean {
@@ -191,6 +193,25 @@ export async function POST(request: Request) {
       'Demasiadas solicitudes. Espera un momento antes de intentarlo de nuevo.');
   }
 
+  // SEC-2026-09 (#7): en modo full el stock se descuenta al crear el pedido y
+  // no vuelve hasta el auto-cancel (48 h). Sin tope, una cuenta gratuita podía
+  // dejar todo el catálogo «reservado» con pedidos en efectivo que nunca paga.
+  if (!isGuest && CHECKOUT_MODE === 'full') {
+    const openUnpaid = await prisma.order.count({
+      where: { customerId: userId!, status: 'Pendiente', paidAt: null },
+    });
+    if (openUnpaid >= MAX_OPEN_UNPAID_ORDERS_PER_USER) {
+      return NextResponse.json(
+        {
+          message:
+            `Tienes ${openUnpaid} pedidos pendientes de pago. Espera a que los validemos ` +
+            'o escríbenos por WhatsApp antes de crear otro.',
+        },
+        { status: 409 },
+      );
+    }
+  }
+
   try {
     const body = await request.json();
     // Forzar el canal desde el servidor — no confiar en el cliente.
@@ -204,6 +225,21 @@ export async function POST(request: Request) {
         { message: 'Datos de pedido inválidos.', errors: safeZodIssues(parsed.error.issues) },
         { status: 400 }
       );
+    }
+
+    // SEC-2026-09 (#8): el correo de confirmación sale al email que el guest
+    // escriba. Además del límite por IP, tope por destinatario para que un
+    // atacante no use la tienda como relay hacia una víctima concreta.
+    if (isGuest && parsed.data.customerEmail) {
+      const emailKey = hashForBucket(parsed.data.customerEmail.trim().toLowerCase());
+      const emailResult = await rateLimitCritical(`orders:post:email:${emailKey}`, {
+        limit: 3,
+        windowMs: 60 * 60_000,
+      });
+      if (emailResult.limited) {
+        return buildRateLimitedResponse(emailResult.retryAfterSeconds,
+          'Ya registramos varios pedidos para ese correo hace poco. Espera un momento.');
+      }
     }
 
     // Canal WhatsApp sin número de pedidos válido configurado: no se crea el

@@ -1,7 +1,7 @@
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { prisma } from '@/lib/prisma';
-import { prismaOrderToOrder, type Order, type OrderItem } from '@/lib/definitions';
+import { prismaOrderToOrder, toCustomerOrderDto, type Order, type OrderItem } from '@/lib/definitions';
 import { parseOrderRef, type OrderRef } from '@/lib/order-ref';
 import OrderDetailClient from '@/components/account/OrderDetailClient';
 
@@ -25,10 +25,13 @@ async function getEnrichedOrder(ref: OrderRef): Promise<EnrichedOrder | null> {
   });
   if (!row) return null;
 
-  const order = prismaOrderToOrder({
-    ...row,
-    items: row.items.map(({ product: _product, ...item }) => item),
-  });
+  // SEC-2026-09 (#5): vista de cliente — sin notas internas, operador ni key del comprobante.
+  const order = toCustomerOrderDto(
+    prismaOrderToOrder({
+      ...row,
+      items: row.items.map(({ product: _product, ...item }) => item),
+    }),
+  );
   const slugByProductId = new Map(
     row.items.map((i) => [i.productId, i.product.slug?.trim() || i.productId]),
   );

@@ -26,6 +26,9 @@ function passwordFingerprint(passwordHash: string): string {
 /** Cada cuánto re-validar el JWT contra la BD (rol, email, contraseña vigente). */
 const JWT_REVALIDATE_MS = 5 * 60_000;
 
+/** Hash bcrypt (coste 12) de una contraseña aleatoria: solo para igualar tiempos. */
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync(randomBytes(16).toString('hex'), 12);
+
 export const authOptions: AuthOptions = {
   providers: [
     ...(googleId && googleSecret
@@ -54,7 +57,12 @@ export const authOptions: AuthOptions = {
           where: { email },
         });
 
-        if (!user) return null;
+        if (!user) {
+          // SEC-2026-09: mismo coste que un login real (bcrypt ~250 ms) para
+          // que la respuesta no revele por tiempo si el correo existe.
+          await bcrypt.compare(credentials.password, DUMMY_PASSWORD_HASH);
+          return null;
+        }
 
         const isPasswordValid = await bcrypt.compare(credentials.password, user.password);
         if (!isPasswordValid) return null;
@@ -73,6 +81,17 @@ export const authOptions: AuthOptions = {
     strategy: 'jwt',
   },
   callbacks: {
+    /**
+     * SEC-2026-09: Google solo entra con `email_verified === true`. El callback
+     * `jwt` hace upsert por email: una cuenta Google con un correo NO verificado
+     * (p. ej. un correo corporativo ajeno) se habría fusionado con la cuenta
+     * local de ese correo — incluida una cuenta ADMIN.
+     */
+    async signIn({ account, profile }) {
+      if (account?.provider !== 'google') return true;
+      const verified = (profile as { email_verified?: unknown } | undefined)?.email_verified;
+      return verified === true;
+    },
     async jwt({
       token,
       user,
@@ -190,6 +209,29 @@ function emailBucket(email: string): string {
 }
 
 /**
+ * SEC-2026-09 (#15): lee el email del body según su content-type. NextAuth
+ * acepta `application/json` además de `application/x-www-form-urlencoded`
+ * (next-auth/next/utils.js#getBody); antes solo se intentaba `formData()`, que
+ * lanza con JSON, y el `catch` dejaba pasar la petición SIN el bucket por email —
+ * un atacante que rotara IPs evitaba el límite por correo mandando JSON.
+ */
+async function readCredentialsEmail(req: Request): Promise<string> {
+  const contentType = (req.headers.get('content-type') ?? '').toLowerCase();
+  const clone = req.clone();
+  if (contentType.includes('application/json')) {
+    const body = (await clone.json()) as { email?: unknown } | null;
+    return typeof body?.email === 'string' ? body.email : '';
+  }
+  if (contentType.includes('application/x-www-form-urlencoded') || contentType.includes('multipart/form-data')) {
+    const form = await clone.formData();
+    const value = form.get('email');
+    return typeof value === 'string' ? value : '';
+  }
+  // Content-type desconocido: NextAuth tampoco parseará credenciales de ahí.
+  return '';
+}
+
+/**
  * Wrapper con rate limiting CRÍTICO sobre el handler de NextAuth.
  * - 10 POST por IP por minuto (fuerza bruta general sobre Credentials).
  * - PRD-242: bucket secundario por email en /callback/credentials — un
@@ -206,8 +248,7 @@ async function handler(req: Request, ctx: unknown) {
 
     if (new URL(req.url).pathname.endsWith('/callback/credentials')) {
       try {
-        const form = await req.clone().formData();
-        const email = String(form.get('email') ?? '').trim().toLowerCase();
+        const email = (await readCredentialsEmail(req)).trim().toLowerCase();
         if (email) {
           const emailResult = await rateLimitCritical(`auth:email:${emailBucket(email)}`, {
             limit: 10,

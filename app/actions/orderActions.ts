@@ -9,6 +9,16 @@ import { sendPaymentValidatedEmail, sendPaymentRejectedEmail } from '@/lib/resen
 import { applyOrderCancellationEffectsInTransaction, deductOrderStockInTransaction } from '@/lib/checkout-order';
 import { CheckoutError } from '@/lib/checkout-error';
 
+/**
+ * SEC-2026-09 (#10): `paymentVerifiedBy` se rellena con el correo del operador.
+ * Antes era `const adminEmail = null` hardcodeado y la trazabilidad de quién
+ * validó o rechazó cada pago se perdía (approve-binance sí la guardaba).
+ */
+async function resolveOperatorEmail(userId: string): Promise<string | null> {
+  const u = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+  return u?.email ?? null;
+}
+
 function firstNameFromCustomerName(displayName: string): string {
   const t = displayName.trim();
   if (!t) return 'Cliente';
@@ -28,9 +38,10 @@ export type ValidateOrderPaymentResult =
  * estado esperado; si otro admin lo cambió en paralelo, no hay last-write-wins.
  */
 export async function validateOrderPayment(orderId: string): Promise<ValidateOrderPaymentResult> {
-  const adminEmail: string | null = null;
+  let adminEmail: string | null = null;
   try {
-    await requirePermissionAction('PAYMENTS');
+    const access = await requirePermissionAction('PAYMENTS');
+    adminEmail = await resolveOperatorEmail(access.userId);
   } catch {
     return { success: false, message: 'No autorizado.' };
   }
@@ -254,9 +265,10 @@ export async function rejectOrderPayment(
   orderId: string,
   reason: string
 ): Promise<ValidateOrderPaymentResult> {
-  const adminEmail: string | null = null;
+  let adminEmail: string | null = null;
   try {
-    await requirePermissionAction('PAYMENTS');
+    const access = await requirePermissionAction('PAYMENTS');
+    adminEmail = await resolveOperatorEmail(access.userId);
   } catch {
     return { success: false, message: 'No autorizado.' };
   }

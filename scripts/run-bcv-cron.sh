@@ -25,7 +25,11 @@ if [[ -z "${CRON_SECRET:-}" ]]; then
 fi
 
 response_file="$(mktemp)"
-trap 'rm -f "$response_file"' EXIT
+# SEC-2026-09: el Bearer viaja en un fichero 600 (curl -H @file), no en argv (visible en `ps`).
+header_file="$(mktemp)"
+trap 'rm -f "$response_file" "$header_file"' EXIT
+chmod 600 "$header_file"
+printf 'Authorization: Bearer %s\n' "$CRON_SECRET" > "$header_file"
 
 set +e
 http_code="$(
@@ -33,7 +37,7 @@ http_code="$(
     --max-time 30 \
     -o "$response_file" \
     -w '%{http_code}' \
-    -H "Authorization: Bearer $CRON_SECRET" \
+    -H "@$header_file" \
     "$ENDPOINT"
 )"
 curl_exit=$?

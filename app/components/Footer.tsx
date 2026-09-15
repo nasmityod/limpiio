@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Phone, MapPin, Mail, Clock } from 'lucide-react';
 import type { SiteShellData } from '@/lib/site-shell-cache';
 import { whatsappHref } from '@/lib/social-links';
+import { safeHref } from '@/lib/safe-link';
 import { resolveFooterPhoneLinks } from '@/lib/footer-phones';
 import Logo from '@/components/Logo';
 import { BRAND } from '@/config/brand';
@@ -25,6 +26,8 @@ const InstagramGlyph = ({ size = 15 }: { size?: number }) => (
 export default function Footer({ shellData }: { shellData: SiteShellData }) {
   const { settings, siteContent: content, categoryPaths, openingHours, paymentMethodLabels } =
     shellData;
+  // SEC-2026-09 (#4): solo https o ruta interna — nunca `javascript:` en el pie de todas las páginas.
+  const instagramHref = safeHref(settings.instagram);
 
   const waHref = whatsappHref(
     content.whatsapp.phone || settings.phone,
@@ -135,9 +138,9 @@ export default function Footer({ shellData }: { shellData: SiteShellData }) {
           <div className="md:col-span-3">
             <h3 className="text-sm font-bold uppercase tracking-widest text-gray-300 mb-4">Síguenos</h3>
             <div className="flex gap-3 mb-6">
-              {settings.instagram ? (
+              {instagramHref ? (
                 <a
-                  href={settings.instagram}
+                  href={instagramHref}
                   target="_blank"
                   rel="noreferrer"
                   aria-label={`Instagram de ${BRAND.name}`}

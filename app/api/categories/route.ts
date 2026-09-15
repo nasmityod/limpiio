@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { logError } from '@/lib/safe-logger';
 import { z } from 'zod';
+import { sanitizeOrderItemImageUrl } from '@/lib/r2-public-url';
 import { prisma } from '@/lib/prisma';
 import { requirePermission } from '@/lib/admin-access-server';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
@@ -11,7 +12,14 @@ import { CACHE_TAG_CATEGORIES, CACHE_TAG_SITE_SHELL } from '@/lib/site-shell-cac
 const categorySchema = z.object({
   name:        z.string().trim().min(1).max(80),
   slug:        z.string().trim().min(1).max(120).regex(/^[a-z0-9-]+$/, 'Slug inválido (minúsculas, números y guiones).'),
-  imageUrl:    z.string().max(600).nullish(),
+  // SEC-2026-09 (#11): solo ruta interna o CDN R2 — un host ajeno rompe `next/image`
+  // en CategoryRow (home) para todos los visitantes.
+  imageUrl:    z
+    .string()
+    .trim()
+    .max(600)
+    .nullish()
+    .refine((v) => v == null || v === '' || sanitizeOrderItemImageUrl(v) !== null, 'imageUrl debe ser una ruta interna o una URL del CDN de la tienda.'),
   isFeatured:  z.boolean().optional(),
   order:       z.number().int().min(0).max(9999).optional(),
   // P85: campos SEO opcionales — texto plano (sin HTML). Null = usar fallbacks.

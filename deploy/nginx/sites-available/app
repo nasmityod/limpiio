@@ -35,9 +35,20 @@ server {
     return 301 https://$host$request_uri;
 }
 
+# SEC-2026-09: www → apex. NEXTAUTH_URL / NEXT_PUBLIC_SITE_URL apuntan al apex;
+# servir la app también en www rompe las cookies de NextAuth y hace que
+# verifySameOrigin rechace (403) todas las mutaciones hechas desde ese host.
 server {
     listen 443 ssl http2;
-    server_name TU_DOMINIO.com www.TU_DOMINIO.com;
+    server_name www.TU_DOMINIO.com;
+    ssl_certificate     /etc/ssl/cloudflare/storefront.pem;
+    ssl_certificate_key /etc/ssl/cloudflare/storefront.key;
+    return 301 https://TU_DOMINIO.com$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name TU_DOMINIO.com;
 
     # Certificados de origen Cloudflare para esta instancia (nombrados por APP_SLUG).
     ssl_certificate     /etc/ssl/cloudflare/storefront.pem;

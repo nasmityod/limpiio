@@ -3,7 +3,8 @@
 #
 #   1. pg_dump (formato custom -F c, ya comprimido) usando DIRECT_URL del .env
 #      del repo (conexión directa, NUNCA el pooler).
-#   2. Sube el dump a R2 bajo backups/ (scripts/lib/backup-r2.mjs).
+#   2. Sube el dump al bucket PRIVADO de R2 (R2_PRIVATE_BUCKET_NAME) bajo
+#      backups/ (scripts/lib/backup-r2.mjs). NUNCA al bucket público del CDN.
 #   3. Retención: borra objetos de R2 con más de 30 días.
 #   4. Conserva además una copia local (últimos 7 días) como caché rápida.
 #
@@ -40,7 +41,11 @@ TS="$(date +%Y%m%d_%H%M%S)"
 DUMP="$LOCAL_DIR/${APP_SLUG}_${TS}.dump"
 
 echo "[backup] $(date -Is) pg_dump → $DUMP"
-pg_dump --dbname="$DIRECT_URL" -F c -f "$DUMP"
+# SEC-2026-09: la URI (con contraseña) viaja por entorno, no por argv —
+# `pg_dump --dbname=postgres://user:pass@…` era visible en `ps` para cualquier
+# usuario local del VPS. libpq acepta una URI completa en PGDATABASE.
+PGDATABASE="$DIRECT_URL" pg_dump -F c -f "$DUMP"
+chmod 600 "$DUMP"
 
 echo "[backup] subiendo a R2 + retención 30 días…"
 cd "$ROOT"

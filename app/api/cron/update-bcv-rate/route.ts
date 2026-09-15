@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getExchangeRate } from '@/app/actions/configActions';
 import { fetchBcvRate } from '@/lib/bcv-rate';
-import { EXCHANGE_RATE_BCV_DATE_KEY } from '@/lib/exchange-rate';
+import { EXCHANGE_RATE_BCV_DATE_KEY, hasStoredExchangeRate } from '@/lib/exchange-rate';
 import { persistExchangeRateWithBcvDate } from '@/lib/persist-exchange-rate';
 import { prisma } from '@/lib/prisma';
 import { verifyBearerSecret } from '@/lib/security';
@@ -65,9 +65,13 @@ export async function GET(request: Request): Promise<NextResponse> {
       return NextResponse.json({ ok: true, sinCambios: true });
     }
 
+    // SEC-2026-09 (#16): sin tasa persistida válida no hay «salto» que medir —
+    // comparar contra el default de compilación (36,5) bloqueaba el cron para
+    // siempre en una instancia nueva o tras un restore (deadlock de arranque).
+    const hasStored = await hasStoredExchangeRate(prisma);
     const actual = await getExchangeRate();
-    const jumpRatio = Math.abs(fetched.rate - actual) / actual;
-    if (jumpRatio > MAX_RATE_JUMP_RATIO) {
+    const jumpRatio = hasStored ? Math.abs(fetched.rate - actual) / actual : 0;
+    if (hasStored && jumpRatio > MAX_RATE_JUMP_RATIO) {
       logError('cron_bcv_suspicious_jump', new Error(`Rate jump ${(jumpRatio * 100).toFixed(1)}%`), { operation: 'bcv_rate_update' });
       return NextResponse.json(
         {

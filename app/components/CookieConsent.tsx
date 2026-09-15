@@ -134,7 +134,13 @@ export default function CookieConsent({ initialConsent = null }: Props) {
                 wait_for_update: 500
               });
               gtag('js', new Date());
-              gtag('config', '${GA_ID}', { anonymize_ip: true });
+              // SEC-2026-09 (#23): page_location sin query — las URLs con ?token=
+              // (guest del pedido, reset de contraseña, baja de carrito) no deben
+              // llegar a Google Analytics.
+              gtag('config', '${GA_ID}', {
+                anonymize_ip: true,
+                page_location: location.origin + location.pathname
+              });
             `}
           </Script>
         </>

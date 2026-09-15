@@ -1,5 +1,6 @@
 import Image from 'next/image';
 import Link from 'next/link';
+import { sanitizeOrderItemImageUrl } from '@/lib/r2-public-url';
 
 export interface CategoryRowItem {
   name: string;
@@ -14,16 +15,19 @@ export default function CategoryRow({ categories }: { categories: CategoryRowIte
     <section className="mt-8 sm:mt-10">
       <h2 className="mb-3 sm:mb-4 text-lg sm:text-2xl font-black text-navy">Categorías</h2>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3 sm:gap-4">
-        {categories.map((c) => (
+        {categories.map((c) => {
+          // SEC-2026-09 (#11): filas legacy con un host ajeno no deben tumbar la home.
+          const imageSrc = sanitizeOrderItemImageUrl(c.imageUrl);
+          return (
           <Link
             key={c.slug}
             href={`/categoria/${c.slug}`}
             className="group relative block overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5"
           >
             <div className="relative aspect-[4/3] w-full overflow-hidden bg-slate-100">
-              {c.imageUrl ? (
+              {imageSrc ? (
                 <Image
-                  src={c.imageUrl}
+                  src={imageSrc}
                   alt={c.name}
                   fill
                   sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 16vw"
@@ -41,7 +45,8 @@ export default function CategoryRow({ categories }: { categories: CategoryRowIte
               <p className="truncate text-[13px] sm:text-sm font-semibold text-navy">{c.name}</p>
             </div>
           </Link>
-        ))}
+          );
+        })}
       </div>
     </section>
   );

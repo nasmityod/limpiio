@@ -42,6 +42,12 @@ export async function GET(request: Request): Promise<NextResponse> {
         status: { in: [...AUTO_CANCELLABLE_STATUSES] },
         createdAt: { lte: cutoff },
         paidAt: null,
+        // SEC-2026-09 (#17): un pedido con comprobante subido o referencia de pago
+        // AFIRMA haber pagado; cancelarlo por inactividad del equipo (fin de semana
+        // largo sin validar) devolvía stock y mandaba «no pudimos verificar tu pago»
+        // a alguien que sí pagó. Esos pedidos los cierra un humano (rechazar pago).
+        paymentProofKey: null,
+        OR: [{ paymentReference: null }, { paymentReference: '' }],
         // Fase 8 (docs/cashea-orquestacion.md): los pedidos
         // Cashea (casheaStatus no nulo) NUNCA se autocancelan a las 48h por
         // este cron — su ciclo de vida (EXPIRED, recuperación manual,
@@ -72,6 +78,8 @@ export async function GET(request: Request): Promise<NextResponse> {
             createdAt: true,
             status: true,
             paidAt: true,
+            paymentProofKey: true,
+            paymentReference: true,
             customerName: true,
             customerEmail: true,
             stockDeducted: true,
@@ -95,7 +103,9 @@ export async function GET(request: Request): Promise<NextResponse> {
         if (
           !AUTO_CANCELLABLE_STATUSES.includes(current.status as (typeof AUTO_CANCELLABLE_STATUSES)[number]) ||
           current.createdAt > cutoff ||
-          current.paidAt !== null
+          current.paidAt !== null ||
+          current.paymentProofKey !== null ||
+          (current.paymentReference ?? '').trim() !== ''
         ) {
           return null;
         }

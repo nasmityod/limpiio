@@ -12,6 +12,7 @@ import {
   type AdminPermission,
 } from '@/lib/admin-permissions';
 import { Prisma } from '@prisma/client';
+import { logInfo } from '@/lib/safe-logger';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TIPOS
@@ -273,25 +274,31 @@ const createUserSchema = z.object({
 export async function createAdminUser(
   input: unknown
 ): Promise<{ success: boolean; message: string }> {
-  await requireSuperAdminAction();
+  const actor = await requireSuperAdminAction();
   const parsed = createUserSchema.safeParse(input);
   if (!parsed.success) {
     return { success: false, message: parsed.error.issues[0]?.message ?? 'Datos inválidos.' };
   }
-  const exists = await prisma.user.findUnique({ where: { email: parsed.data.email } });
+  // SEC-2026-09: el lookup usaba el email sin normalizar y el create lo
+  // guardaba en minúsculas → `User@Mail.com` pasaba el check y reventaba en el UNIQUE.
+  const email = parsed.data.email.trim().toLowerCase();
+  const exists = await prisma.user.findUnique({ where: { email } });
   if (exists) return { success: false, message: 'Ese email ya está registrado.' };
 
   const hashed = await bcrypt.hash(parsed.data.password, 12);
-  await prisma.user.create({
+  const created = await prisma.user.create({
     data: {
       name:             parsed.data.name,
-      email:            parsed.data.email.toLowerCase(),
+      email,
       password:         hashed,
       role:             'CLIENT',
       isSuperAdmin:     false,
       adminPermissions: [],
     },
+    select: { id: true },
   });
+  // SEC-2026-09: rastro de auditoría (antes solo se registraban cambios de permisos).
+  logInfo('superadmin_user_created', { operation: 'create_admin_user', requestId: `${actor.userId}:${created.id}` });
   revalidatePath('/admin/settings/users');
   return { success: true, message: 'Usuario creado. Asigna los permisos a continuación.' };
 }
@@ -332,6 +339,8 @@ export async function resetUserPassword(
     where: { id: parsed.data.userId },
     data:  { password: hashed, passwordChangedAt: new Date() },
   });
+  // SEC-2026-09: un reset de contraseña por el superadmin debe dejar rastro.
+  logInfo('superadmin_password_reset', { operation: 'reset_user_password', requestId: `${actor.userId}:${parsed.data.userId}` });
   return { success: true, message: 'Contraseña actualizada.' };
 }
 
@@ -419,6 +428,7 @@ export async function deleteAdminUser(
     return { success: false, message: 'Error al eliminar el usuario. Inténtalo de nuevo.' };
   }
 
+  logInfo('superadmin_user_deleted', { operation: 'delete_admin_user', requestId: `${access.userId}:${userId}` });
   revalidatePath('/admin/settings/users');
   return { success: true, message: 'Usuario eliminado.' };
 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { requirePermission } from '@/lib/admin-access-server';
+import { requirePermission, requireBackofficeAccess } from '@/lib/admin-access-server';
+import type { AdminPermission } from '@/lib/admin-permissions';
 import { rateLimit } from '@/lib/rate-limit';
 import { rejectInvalidMutationOrigin } from '@/lib/security';
 import { detectImageMimeFromBuffer, isAllowedAdminUploadMime } from '@/lib/detect-image-mime';
@@ -33,14 +34,14 @@ const purposeSchema = z.enum([
 
 const UPLOAD_BY_PURPOSE: Record<
   z.infer<typeof purposeSchema>,
-  { folder: R2Folder; maxWidth: number }
+  { folder: R2Folder; maxWidth: number; permission: AdminPermission }
 > = {
-  banner:   { folder: 'banners',  maxWidth: 1920 },
-  product:  { folder: 'products', maxWidth: 1200 },
-  products: { folder: 'products', maxWidth: 1200 },
-  category: { folder: 'assets',   maxWidth: 1920 },
-  tracking: { folder: 'assets',   maxWidth: 1600 },
-  'binance-qr': { folder: 'assets', maxWidth: 800 },
+  banner:   { folder: 'banners',  maxWidth: 1920, permission: 'SITE_CONTENT' },
+  product:  { folder: 'products', maxWidth: 1200, permission: 'CATALOG' },
+  products: { folder: 'products', maxWidth: 1200, permission: 'CATALOG' },
+  category: { folder: 'assets',   maxWidth: 1920, permission: 'CATALOG' },
+  tracking: { folder: 'assets',   maxWidth: 1600, permission: 'ORDERS' },
+  'binance-qr': { folder: 'assets', maxWidth: 800, permission: 'FINANCIAL_SETTINGS' },
 };
 
 export async function POST(request: Request) {
@@ -48,7 +49,12 @@ export async function POST(request: Request) {
   const originCheck = rejectInvalidMutationOrigin(request);
   if (originCheck) return originCheck;
 
-  const auth = await requirePermission('CATALOG');
+  // SEC-2026-09 (#19): el permiso depende del `purpose`. Antes era CATALOG para
+  // todo: un operador con ORDERS no podía adjuntar la foto de la guía, un editor
+  // con SITE_CONTENT no podía subir banners ni FINANCIAL_SETTINGS el QR Binance.
+  // Se exige sesión de backoffice antes de leer el body (barato) y el permiso
+  // concreto una vez conocido el purpose.
+  const auth = await requireBackofficeAccess();
   if (!auth.authorized) return auth.response;
 
   // PRD-046: rate limit por admin — frena abuso del cupo de storage si la
@@ -91,7 +97,10 @@ export async function POST(request: Request) {
       );
     }
     const purpose = parsedPurpose.data;
-    const { folder, maxWidth } = UPLOAD_BY_PURPOSE[purpose];
+    const { folder, maxWidth, permission } = UPLOAD_BY_PURPOSE[purpose];
+
+    const permissionCheck = await requirePermission(permission);
+    if (!permissionCheck.authorized) return permissionCheck.response;
 
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);

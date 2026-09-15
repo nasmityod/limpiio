@@ -9,6 +9,7 @@ import { readSeoLocal, buildLocalBusinessSchema, describeOpeningHours } from '@/
 import { readSettings } from '@/lib/data-store';
 import { resolveCategoryPathFromProductCategory } from '@/lib/resolve-category-path';
 import JsonLd from '@/app/components/JsonLd';
+import { safeHref, isGoogleMapsEmbedUrl } from '@/lib/safe-link';
 import { BRAND } from '@/config/brand';
 
 const SITE_URL = BRAND.siteUrl;
@@ -99,8 +100,12 @@ export default async function TiendaBarquisimetoPage() {
   const sameAs = [settings.instagram, settings.facebook].filter(Boolean) as string[];
 
   const mapQuery = `${seo.legalName}, ${seo.streetAddress}, ${seo.addressLocality}, ${seo.addressRegion}, Venezuela`;
-  const mapOpenUrl  = seo.googleMapsUrl   || googleMapsBusinessUrl(mapQuery);
-  const mapEmbedUrl = seo.googleMapsEmbed || googleMapsEmbedUrl(mapQuery);
+  // SEC-2026-09 (#4): URLs editables desde el panel — solo https / embed real de Google Maps.
+  const mapOpenUrl  = safeHref(seo.googleMapsUrl) ?? googleMapsBusinessUrl(mapQuery);
+  const mapEmbedUrl =
+    seo.googleMapsEmbed && isGoogleMapsEmbedUrl(seo.googleMapsEmbed)
+      ? seo.googleMapsEmbed
+      : googleMapsEmbedUrl(mapQuery);
   const hours = describeOpeningHours(seo);
 
   const localBusinessSchema = {

@@ -66,6 +66,7 @@ const ORDER_SELECT = {
   casheaOrderId: true,
   casheaAttemptCount: true,
   casheaConfirmedAt: true,
+  casheaInitialAmount: true,
   customerName: true,
   customerEmail: true,
   customer: { select: { email: true, name: true } },
@@ -137,6 +138,21 @@ export async function processCasheaConfirmation(orderId: string): Promise<Cashea
 
     if (!verification.confirmed) {
       await revertToReturnedAfterFailedVerification(order.id, 'NOT_CONFIRMED');
+      return { outcome: 'pending_not_confirmed', casheaStatus: 'RETURNED' };
+    }
+
+    // SEC-2026-09: `casheaOrderId` puede venir del parámetro `idNumber` de la URL
+    // de retorno (controlado por el cliente). Si Cashea informa un monto inicial
+    // y no coincide con el reservado para ESTE pedido, no se confirma: alguien
+    // podría apuntar la verificación a otra orden Cashea ya pagada.
+    const expected = order.casheaInitialAmount == null ? null : Number(order.casheaInitialAmount);
+    if (
+      verification.initialAmount != null &&
+      expected != null &&
+      Math.abs(verification.initialAmount - expected) > 0.01
+    ) {
+      logWarn('cashea_reconcile_amount_mismatch', { operation: 'cashea_reconcile', orderId: order.id });
+      await revertToReturnedAfterFailedVerification(order.id, 'AMOUNT_MISMATCH');
       return { outcome: 'pending_not_confirmed', casheaStatus: 'RETURNED' };
     }
 

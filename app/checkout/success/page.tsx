@@ -8,9 +8,9 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-import { isAdminRole } from '@/lib/is-admin-role';
+import { requirePermission } from '@/lib/admin-access-server';
 import { isWhatsAppCheckout } from '@/lib/checkout-mode';
-import { Order, OrderItem, prismaOrderToOrder, toGuestOrderConfirmationDto } from '@/lib/definitions';
+import { Order, OrderItem, prismaOrderToOrder, toCustomerOrderDto, toGuestOrderConfirmationDto } from '@/lib/definitions';
 import { prisma } from '@/lib/prisma';
 import { hashToken } from '@/lib/security';
 import SuccessClientPage from './SuccessClientPage';
@@ -33,7 +33,8 @@ async function getEnrichedOrder(orderId: string): Promise<EnrichedOrder | null> 
   });
   if (!row) return null;
 
-  const order = prismaOrderToOrder(row);
+  // SEC-2026-09 (#5): vista de cliente (sin notas internas ni datos del operador).
+  const order = toCustomerOrderDto(prismaOrderToOrder(row));
   const enrichedItems: EnrichedOrderItem[] = order.items.map(item => ({
     ...item,
     imageUrl: item.imageUrl || '/placeholder.png',
@@ -89,9 +90,12 @@ export default async function SuccessPageWrapper({
   }
 
   const isOwner = order.customerId === session.user.id;
-  const isAdmin = isAdminRole((session.user as { role?: string }).role);
+  // SEC-2026-09 (#14): el acceso de staff se decide por el permiso ORDERS en BD,
+  // no por `role` del JWT — cualquier cuenta con un permiso cualquiera (p. ej.
+  // solo REVIEWS) tenía role=ADMIN y veía cualquier pedido por su id.
+  const canSeeAnyOrder = !isOwner && (await requirePermission('ORDERS')).authorized;
 
-  if (!isOwner && !isAdmin) {
+  if (!isOwner && !canSeeAnyOrder) {
     return <InvalidOrderMessage />;
   }
 

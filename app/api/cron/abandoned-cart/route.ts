@@ -69,7 +69,10 @@ async function createRecoveryCoupon(): Promise<string | null> {
           maxDiscount: RECOVERY_COUPON.maxDiscount,
           minPurchase: 0,
           maxUses: 1,
-          perUserLimit: 1,
+          // SEC-2026-09 (#13): sin perUserLimit — con maxUses:1 ya es de un solo uso y
+          // lib/coupons.ts rechaza a los invitados cualquier cupón con perUserLimit,
+          // así que en modo whatsapp el código del email nunca se podía canjear.
+          perUserLimit: null,
           expiresAt: new Date(Date.now() + RECOVERY_COUPON.expiryDays * 24 * 60 * 60 * 1000),
           active: true,
         },

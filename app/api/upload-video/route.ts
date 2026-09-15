@@ -158,8 +158,9 @@ async function processVideoJob(
 }
 
 export async function POST(request: Request) {
-  if (!rejectInvalidMutationOrigin(request)) {
-    return NextResponse.json({ error: 'Origen no permitido.' }, { status: 403 });
+  {
+    const originCheck = rejectInvalidMutationOrigin(request);
+    if (originCheck) return originCheck;
   }
 
   const auth = await requirePermission('CATALOG');
@@ -249,8 +250,9 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  if (!rejectInvalidMutationOrigin(request)) {
-    return NextResponse.json({ error: 'Origen no permitido.' }, { status: 403 });
+  {
+    const originCheck = rejectInvalidMutationOrigin(request);
+    if (originCheck) return originCheck;
   }
 
   const auth = await requirePermission('CATALOG');

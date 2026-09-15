@@ -13,6 +13,7 @@ import {
 } from '@/lib/shipping-estimates';
 import { writeShippingEstimates } from '@/lib/shipping-estimates-db';
 import { z } from 'zod';
+import { isSafeEditableLink } from '@/lib/safe-link';
 import {
   normalizeWhatsAppPhone,
   isValidWhatsAppPhone,
@@ -57,8 +58,9 @@ const generalSettingsSchema = z.object({
   phone2:             z.string().optional().default(''),
   email:              z.string().email('Email inválido.'),
   address:            z.string().optional().default(''),
-  instagram:          z.string().optional().default(''),
-  facebook:           z.string().optional().default(''),
+  // SEC-2026-09 (#4): mismo criterio que generalSettingsApiSchema — vacío, ruta interna o https.
+  instagram:          z.string().trim().max(300).optional().default('').refine(isSafeEditableLink, 'Usa una URL https o déjalo vacío.'),
+  facebook:           z.string().trim().max(300).optional().default('').refine(isSafeEditableLink, 'Usa una URL https o déjalo vacío.'),
   labelWidthMm:       z.coerce.number().min(40).max(300).default(100),
   labelHeightMm:      z.coerce.number().min(40).max(400).default(150),
   whatsappOrderPhone: z

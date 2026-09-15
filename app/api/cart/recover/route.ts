@@ -55,6 +55,15 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     );
   }
 
+  // SEC-2026-09 (#12): el enlace solo rehidrata el carrito de SU dueño. Sin
+  // esta comprobación, cualquier token ajeno pegado en un enlace fusionaba
+  // ítems en el carrito de quien estuviera logueado (GET con efectos + SameSite=Lax).
+  const sessionEmail = session?.user?.email?.trim().toLowerCase() ?? '';
+  const cartEmail = abandoned.email.trim().toLowerCase();
+  if (!sessionEmail || sessionEmail !== cartEmail) {
+    return NextResponse.redirect(siteUrl('/cart?recover=invalid'));
+  }
+
   const snapshotItems = parseAbandonedCartItems(abandoned.items);
   if (snapshotItems.length === 0) {
     return NextResponse.redirect(siteUrl('/cart?recover=empty'));

@@ -79,7 +79,9 @@ export async function GET(request: Request) {
     Artículos: o.items.map(i => `${i.quantity}× ${i.productName}`).join(' | '),
   }));
 
-  const csv = Papa.unparse(rows, { quotes: true });
+  // SEC-2026-09 (#9): escapeFormulae — los textos vienen del cliente (nombre, ciudad, referencia)
+  // y Excel evalúa `=HYPERLINK(...)`/DDE aunque el campo vaya entre comillas.
+  const csv = Papa.unparse(rows, { quotes: true, escapeFormulae: true });
   const stamp = new Date().toISOString().slice(0, 10);
 
   // BOM para que Excel respete acentos (mismo criterio que lib/csv-export.ts)

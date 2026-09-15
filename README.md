@@ -302,6 +302,8 @@ Equivalente con BFG: `bfg --delete-files db.json` (mismo flujo de clon fresco + 
 | `scripts/backup-postgres.sh` | Backup diario PostgreSQL → R2 con retención 30 días |
 | `scripts/lib/backup-r2.mjs` | Upload de dump a R2 + retención + marca `AppConfig` |
 | `scripts/install-crontab.sh` | Instala/actualiza crontab de root desde `deploy/crontab.vps` |
+| `scripts/run-cron-endpoint.sh` | Invoca `/api/cron/<nombre>` con el Bearer por fichero (sin secreto en argv) — lo usa `deploy/crontab.vps` |
+| `scripts/purge-public-backups.mjs` | Purga de emergencia de `backups/*` en el bucket público (SEC-2026-09 #1) |
 | `scripts/verify-private-r2.mjs` | Prueba de integración R2 privado (crea/lee/borra) |
 | `scripts/e2e-reset-db.ts` | Reset/seed de BD E2E con guard destructivo |
 | `scripts/check-security-versions.mjs` | Verifica versiones mínimas de seguridad |
@@ -330,7 +332,7 @@ Equivalente con BFG: `bfg --delete-files db.json` (mismo flujo de clon fresco + 
 El script [`scripts/backup-postgres.sh`](scripts/backup-postgres.sh) realiza backup diario:
 
 1. `pg_dump -F c` usando `DIRECT_URL` (conexión directa, no pooler).
-2. Sube el dump a R2 (`scripts/lib/backup-r2.mjs`) bajo `backups/` con retención de 30 días.
+2. Sube el dump al bucket **privado** de R2 (`R2_PRIVATE_BUCKET_NAME`, `scripts/lib/backup-r2.mjs`) bajo `backups/` con retención de 30 días. Nunca al bucket público del CDN — ver [`docs/SECURITY-FIXES-2026-09.md`](docs/SECURITY-FIXES-2026-09.md).
 3. Conserva copia local en `/home/deploy/backups/` (últimos 7 días).
 4. Registra `backup_last_success_at` en `AppConfig` (visible en admin → health).
 

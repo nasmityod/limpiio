@@ -6,7 +6,12 @@
  * Uso (lo invoca scripts/backup-postgres.sh):
  *   node scripts/lib/backup-r2.mjs /ruta/al/dump.dump
  *
- * Credenciales: usa las mismas R2_* del .env del repo (ya existentes).
+ * SEC-2026-09 (#1): los dumps van al bucket PRIVADO (R2_PRIVATE_BUCKET_NAME,
+ * credenciales R2_PRIVATE_*). Antes se subían a R2_BUCKET_NAME — el mismo
+ * bucket que sirve las imágenes por R2_PUBLIC_BASE_URL — y R2 no tiene ACL por
+ * prefijo: un dump completo de la BD (usuarios, hashes, pedidos, cuentas
+ * bancarias) quedaba descargable en https://cdn.<dominio>/backups/<slug>_<fecha>.dump
+ * con nombre predecible. Nunca volver a usar el bucket público aquí.
  * Al terminar con éxito registra la marca en AppConfig (backup_last_success_at)
  * para que el dashboard admin muestre "último backup".
  */
@@ -27,7 +32,13 @@ dotenv.config({ path: new URL('../../.env', import.meta.url).pathname });
 const RETENTION_DAYS = 30;
 const PREFIX = 'backups/';
 
-const { R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME } = process.env;
+const {
+  R2_ENDPOINT,
+  R2_PRIVATE_ACCESS_KEY_ID,
+  R2_PRIVATE_SECRET_ACCESS_KEY,
+  R2_PRIVATE_BUCKET_NAME,
+  R2_BUCKET_NAME,
+} = process.env;
 
 function fail(msg) {
   console.error(`[backup-r2] ${msg}`);
@@ -36,16 +47,27 @@ function fail(msg) {
 
 const file = process.argv[2];
 if (!file) fail('falta la ruta del dump. Uso: node backup-r2.mjs <dump>');
-if (!R2_ENDPOINT || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_BUCKET_NAME) {
-  fail('faltan variables R2_* en el .env del repo.');
+if (
+  !R2_ENDPOINT ||
+  !R2_PRIVATE_ACCESS_KEY_ID ||
+  !R2_PRIVATE_SECRET_ACCESS_KEY ||
+  !R2_PRIVATE_BUCKET_NAME
+) {
+  fail('faltan variables R2_PRIVATE_* en el .env del repo (los backups SOLO van al bucket privado).');
 }
+if (R2_BUCKET_NAME && R2_BUCKET_NAME === R2_PRIVATE_BUCKET_NAME) {
+  fail('R2_PRIVATE_BUCKET_NAME no puede ser el mismo bucket público de R2_BUCKET_NAME.');
+}
+
+/** Bucket de destino: SIEMPRE el privado. */
+const BACKUP_BUCKET = R2_PRIVATE_BUCKET_NAME;
 
 const s3 = new S3Client({
   region: 'auto',
   endpoint: R2_ENDPOINT,
   credentials: {
-    accessKeyId: R2_ACCESS_KEY_ID,
-    secretAccessKey: R2_SECRET_ACCESS_KEY,
+    accessKeyId: R2_PRIVATE_ACCESS_KEY_ID,
+    secretAccessKey: R2_PRIVATE_SECRET_ACCESS_KEY,
   },
 });
 
@@ -56,7 +78,7 @@ async function upload() {
   const key = `${PREFIX}${basename(file)}`;
   await s3.send(
     new PutObjectCommand({
-      Bucket: R2_BUCKET_NAME,
+      Bucket: BACKUP_BUCKET,
       Key: key,
       Body: createReadStream(file),
       ContentLength: size,
@@ -74,7 +96,7 @@ async function applyRetention() {
   do {
     const page = await s3.send(
       new ListObjectsV2Command({
-        Bucket: R2_BUCKET_NAME,
+        Bucket: BACKUP_BUCKET,
         Prefix: PREFIX,
         ContinuationToken: continuationToken,
       }),
@@ -95,7 +117,7 @@ async function applyRetention() {
   for (let i = 0; i < stale.length; i += 1000) {
     await s3.send(
       new DeleteObjectsCommand({
-        Bucket: R2_BUCKET_NAME,
+        Bucket: BACKUP_BUCKET,
         Delete: { Objects: stale.slice(i, i + 1000) },
       }),
     );

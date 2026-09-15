@@ -1,4 +1,5 @@
 import { EmailChangeConfirmEmail } from '@/emails/transactional/EmailChangeConfirmEmail';
+import { EmailChangeNoticeEmail } from '@/emails/transactional/EmailChangeNoticeEmail';
 import { OrderCancelledEmail } from '@/emails/transactional/OrderCancelledEmail';
 import { OrderConfirmationEmail } from '@/emails/transactional/OrderConfirmationEmail';
 import { OrderDeliveredEmail } from '@/emails/transactional/OrderDeliveredEmail';
@@ -578,5 +579,38 @@ export async function sendPasswordResetEmail(email: string, token: string): Prom
     subject: brandSubject('Restablecer tu contraseña'),
     logScope: 'password-reset-email',
     element: <PasswordResetEmail resetUrl={resetUrl} />,
+  });
+}
+
+/**
+ * SEC-2026-09: aviso al correo ANTERIOR de que se solicitó un cambio de email.
+ * Best-effort: nunca bloquea el flujo de cambio.
+ */
+export async function sendEmailChangeNoticeEmail(params: {
+  to: string;
+  customerName: string;
+  newEmail: string;
+}): Promise<void> {
+  const resend = getResend();
+  if (!resend) {
+    logWarn('resend_api_key_missing', { provider: 'resend', operation: 'email-change-notice' });
+    return;
+  }
+  const trimmedEmail = params.to.trim();
+  if (!trimmedEmail) return;
+
+  const base = emailSiteBaseUrl().replace(/\/$/, '');
+  await sendBrandedEmail({
+    resend,
+    to: trimmedEmail,
+    subject: brandSubject('Se solicitó cambiar el correo de tu cuenta'),
+    logScope: 'email-change-notice',
+    element: (
+      <EmailChangeNoticeEmail
+        customerName={params.customerName.trim() || 'Cliente'}
+        newEmail={params.newEmail}
+        resetUrl={`${base}/forgot-password`}
+      />
+    ),
   });
 }

@@ -51,7 +51,7 @@ export async function getProductSnapshots(ids: string[]): Promise<ProductSnapsho
 
   try {
     const rows = await prisma.product.findMany({
-      where: { id: { in: parsed.data } },
+      where: { id: { in: parsed.data }, isActive: true }, // SEC-2026-09 (#18)
       select: {
         id: true,
         slug: true,

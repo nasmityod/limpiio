@@ -11,7 +11,6 @@ const LEGACY_ALLOWLIST = new Set([
   'lib/api-auth.ts',
   'middleware.ts',
   'lib/is-admin-role.ts',
-  'app/checkout/success/page.tsx',
   'components/Navbar.tsx',
   'app/admin/settings/users/UsersClient.tsx',
   'scripts/normalize-admin-role.ts',

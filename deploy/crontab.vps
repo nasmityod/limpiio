@@ -13,15 +13,15 @@ APP_SLUG=storefront
 #   - El endpoint es idempotente: si la fecha de la API no cambió, responde
 #     sinCambios y no escribe nada (seguro correr a diario, incl. fines de semana).
 15 0,1,5 * * * /var/www/$APP_SLUG/scripts/run-bcv-cron.sh >> /var/log/bcv-cron.log 2>&1
-0 */2 * * * . /etc/$APP_SLUG/$APP_SLUG.env; curl -fsS -H "Authorization: Bearer $CRON_SECRET" http://127.0.0.1:3000/api/cron/abandoned-cart >> /var/log/$APP_SLUG-cron.log 2>&1
-30 1 * * 0 . /etc/$APP_SLUG/$APP_SLUG.env; curl -fsS -H "Authorization: Bearer $CRON_SECRET" http://127.0.0.1:3000/api/cron/purge-product-views >> /var/log/$APP_SLUG-cron.log 2>&1
+0 */2 * * * /var/www/$APP_SLUG/scripts/run-cron-endpoint.sh abandoned-cart >> /var/log/$APP_SLUG-cron.log 2>&1
+30 1 * * 0 /var/www/$APP_SLUG/scripts/run-cron-endpoint.sh purge-product-views >> /var/log/$APP_SLUG-cron.log 2>&1
 # review-request (FASE 4.5): a las 10:00 — email de reseña 7 días tras 'Entregado' (uno por pedido, sin reenvíos).
-0 10 * * * . /etc/$APP_SLUG/$APP_SLUG.env; curl -fsS -H "Authorization: Bearer $CRON_SECRET" http://127.0.0.1:3000/api/cron/review-request >> /var/log/$APP_SLUG-cron.log 2>&1
+0 10 * * * /var/www/$APP_SLUG/scripts/run-cron-endpoint.sh review-request >> /var/log/$APP_SLUG-cron.log 2>&1
 # SESIÓN 07 — Purga unificada de datos temporales (una vez al día a las 03:00).
 # Borra reset tokens, tokens de email, metadatos PaymentUpload DELETED (>30d), vistas y carritos abandonados
 # según la política de retención. No borra pedidos ni comprobantes LINKED.
-0 3 * * * . /etc/$APP_SLUG/$APP_SLUG.env; curl -fsS -H "Authorization: Bearer $CRON_SECRET" "http://127.0.0.1:3000/api/cron/purge-temporary-data" >> /var/log/$APP_SLUG-cron.log 2>&1
+0 3 * * * /var/www/$APP_SLUG/scripts/run-cron-endpoint.sh purge-temporary-data >> /var/log/$APP_SLUG-cron.log 2>&1
 # SESIÓN 05 — Purga horaria de PaymentUpload PENDING/UPLOADING expirados: borra objeto R2 y marca DELETED.
-15 * * * * . /etc/$APP_SLUG/$APP_SLUG.env; curl -fsS -H "Authorization: Bearer $CRON_SECRET" http://127.0.0.1:3000/api/cron/purge-payment-uploads >> /var/log/$APP_SLUG-cron.log 2>&1
+15 * * * * /var/www/$APP_SLUG/scripts/run-cron-endpoint.sh purge-payment-uploads >> /var/log/$APP_SLUG-cron.log 2>&1
 # Cancelación automática de pedidos pendientes: cada 15 minutos, al superar 48 horas desde createdAt.
-7,22,37,52 * * * * . /etc/$APP_SLUG/$APP_SLUG.env; curl -fsS -H "Authorization: Bearer $CRON_SECRET" http://127.0.0.1:3000/api/cron/auto-cancel-orders >> /var/log/$APP_SLUG-cron.log 2>&1
+7,22,37,52 * * * * /var/www/$APP_SLUG/scripts/run-cron-endpoint.sh auto-cancel-orders >> /var/log/$APP_SLUG-cron.log 2>&1

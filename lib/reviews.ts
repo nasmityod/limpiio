@@ -6,7 +6,8 @@
 import type { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
-import { isR2PublicUrl, keyFromR2PublicUrl } from '@/lib/r2';
+import { isR2PublicUrl, keyFromR2PublicUrl, deleteFromR2 } from '@/lib/r2';
+import { logError } from '@/lib/safe-logger';
 import type { OrderStatus, Review, ReviewStatus, ReviewSummary } from '@/lib/definitions';
 
 type DbClient = Prisma.TransactionClient;
@@ -40,27 +41,56 @@ export const reviewInputSchema = z.object({
 
 export type ReviewInput = z.infer<typeof reviewInputSchema>;
 
-/** Mapea un registro Prisma de Review al tipo de UI. */
-export function reviewToClient(r: {
-  id: string;
-  productId: string;
-  userId: string | null;
-  authorName: string;
-  rating: number;
-  title: string | null;
-  comment: string;
-  status: string;
-  verifiedPurchase: boolean;
-  adminReply: string | null;
-  photos: string[];
-  createdAt: Date;
-  product?: { name: string } | null;
-}): Review {
+/**
+ * Borra de R2 las fotos de una reseña (best-effort). SEC-2026-09 (#21): antes
+ * nada purgaba `reviews/*` — cada foto subida quedaba para siempre en el CDN
+ * público aunque la reseña se borrara o la foto se retirara.
+ */
+export async function deleteReviewPhotosFromR2(urls: readonly string[]): Promise<void> {
+  for (const url of urls) {
+    const key = keyFromR2PublicUrl(url);
+    if (!key || !key.startsWith('reviews/')) continue;
+    try {
+      await deleteFromR2(key);
+    } catch (err) {
+      logError('review_photo_r2_delete_failed', err, { operation: 'delete_review_photo', provider: 'r2' });
+    }
+  }
+}
+
+/**
+ * Mapea un registro Prisma de Review al tipo de UI.
+ *
+ * SEC-2026-09: `userId` solo se expone cuando coincide con `viewerUserId`
+ * (para que el autor vea sus botones de editar/borrar). Para el resto es
+ * `null` — la API pública de reseñas no debe revelar identificadores estables
+ * de otros clientes. `reviewToClient(r, 'admin')` conserva el id (panel).
+ */
+export function reviewToClient(
+  r: {
+    id: string;
+    productId: string;
+    userId: string | null;
+    authorName: string;
+    rating: number;
+    title: string | null;
+    comment: string;
+    status: string;
+    verifiedPurchase: boolean;
+    adminReply: string | null;
+    photos: string[];
+    createdAt: Date;
+    product?: { name: string } | null;
+  },
+  viewerUserId: string | 'admin' | null = null,
+): Review {
+  const exposeUserId =
+    viewerUserId === 'admin' || (viewerUserId !== null && r.userId === viewerUserId);
   return {
     id: r.id,
     productId: r.productId,
     productName: r.product?.name,
-    userId: r.userId,
+    userId: exposeUserId ? r.userId : null,
     authorName: r.authorName,
     rating: r.rating,
     title: r.title,
@@ -132,13 +162,17 @@ export async function getReviewSummariesMap(
 }
 
 /** Lista reseñas APROBADAS de un producto (para la ficha pública). */
-export async function getApprovedReviews(productId: string, limit = 50): Promise<Review[]> {
+export async function getApprovedReviews(
+  productId: string,
+  limit = 50,
+  viewerUserId: string | null = null,
+): Promise<Review[]> {
   const rows = await prisma.review.findMany({
     where: { productId, status: 'APPROVED' },
     orderBy: { createdAt: 'desc' },
     take: limit,
   });
-  return rows.map(reviewToClient);
+  return rows.map((r) => reviewToClient(r, viewerUserId));
 }
 
 /** ¿Auto-aprobar reseñas nuevas? Config en AppConfig (editable desde el panel). */

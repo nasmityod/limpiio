@@ -7,7 +7,9 @@ import Papa from 'papaparse';
 export function downloadCsv(filename: string, rows: Record<string, unknown>[]): void {
   if (typeof window === 'undefined') return;
 
-  const csv = Papa.unparse(rows, { quotes: true });
+  // SEC-2026-09 (#9): escapeFormulae — los textos vienen del cliente (nombre, ciudad, referencia)
+  // y Excel evalúa `=HYPERLINK(...)`/DDE aunque el campo vaya entre comillas.
+  const csv = Papa.unparse(rows, { quotes: true, escapeFormulae: true });
   const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
 

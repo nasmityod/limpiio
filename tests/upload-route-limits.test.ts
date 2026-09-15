@@ -17,8 +17,10 @@ import {
  */
 
 const requirePermissionMock = vi.fn();
+const requireBackofficeAccessMock = vi.fn();
 vi.mock('@/lib/admin-access-server', () => ({
   requirePermission: requirePermissionMock,
+  requireBackofficeAccess: requireBackofficeAccessMock,
 }));
 
 const rejectInvalidMutationOriginMock = vi.fn();
@@ -75,6 +77,10 @@ function makeRequest(file: File, purpose = 'product'): Request {
 beforeEach(() => {
   vi.clearAllMocks();
   rejectInvalidMutationOriginMock.mockReturnValue(null);
+  requireBackofficeAccessMock.mockResolvedValue({
+    authorized: true,
+    session: { user: { id: 'admin-1' } },
+  });
   requirePermissionMock.mockResolvedValue({
     authorized: true,
     session: { user: { id: 'admin-1' } },
@@ -158,6 +164,7 @@ describe('protecciones que NO se relajan', () => {
     );
     const res = await POST(makeRequest(makeFile('a.jpg', 1024, MAGIC.jpeg)));
     expect(res.status).toBe(403);
+    expect(requireBackofficeAccessMock).not.toHaveBeenCalled();
     expect(requirePermissionMock).not.toHaveBeenCalled();
   });
 
@@ -180,6 +187,27 @@ describe('protecciones que NO se relajan', () => {
   it('rechaza un purpose fuera del enum', async () => {
     const res = await POST(makeRequest(makeFile('a.jpg', 1024, MAGIC.jpeg), '../../etc'));
     expect(res.status).toBe(400);
+  });
+
+  it.each([
+    ['tracking', 'ORDERS'],
+    ['banner', 'SITE_CONTENT'],
+    ['binance-qr', 'FINANCIAL_SETTINGS'],
+    ['product', 'CATALOG'],
+  ])('SEC-2026-09 (#19): purpose %s exige el permiso %s', async (purpose, permission) => {
+    const res = await POST(makeRequest(makeFile('a.jpg', 1024, MAGIC.jpeg), purpose));
+    expect(res.status).toBe(200);
+    expect(requirePermissionMock).toHaveBeenCalledWith(permission);
+  });
+
+  it('SEC-2026-09 (#19): sin el permiso del purpose responde con el 403 del guard', async () => {
+    requirePermissionMock.mockResolvedValue({
+      authorized: false,
+      response: new Response('denied', { status: 403 }),
+    });
+    const res = await POST(makeRequest(makeFile('a.jpg', 1024, MAGIC.jpeg), 'tracking'));
+    expect(res.status).toBe(403);
+    expect(uploadToR2Mock).not.toHaveBeenCalled();
   });
 });
 

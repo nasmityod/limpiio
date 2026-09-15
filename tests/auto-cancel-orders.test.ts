@@ -78,6 +78,8 @@ function baseOrder(overrides: Record<string, unknown> = {}) {
     createdAt: new Date(CUTOFF_ISO),
     status: 'Pendiente',
     paidAt: null,
+    paymentProofKey: null,
+    paymentReference: null,
     customerName: 'Juan Pérez',
     customerEmail: 'juan@example.com',
     stockDeducted: true,
@@ -127,6 +129,8 @@ describe('GET /api/cron/auto-cancel-orders', () => {
         status: { in: ['Pendiente', 'Pendiente verificación Binance'] },
         createdAt: { lte: new Date(CUTOFF_ISO) },
         paidAt: null,
+        paymentProofKey: null,
+        OR: [{ paymentReference: null }, { paymentReference: '' }],
         casheaStatus: null,
       },
       orderBy: { createdAt: 'asc' },
@@ -135,6 +139,29 @@ describe('GET /api/cron/auto-cancel-orders', () => {
     });
     expect(body.cancelled).toBe(0);
     expect(body.hasMore).toBe(false);
+  });
+
+  it('SEC-2026-09 (#17): NO cancela un pedido con comprobante subido aunque pasen 48 h', async () => {
+    findManyMock.mockResolvedValue([{ id: 'order-1', createdAt: new Date(CUTOFF_ISO) }]);
+    findUniqueMock.mockResolvedValue(baseOrder({ paymentProofKey: 'proofs/abc.webp' }));
+
+    const res = await GET(authorizedRequest());
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.cancelled).toBe(0);
+    expect(updateManyMock).not.toHaveBeenCalled();
+  });
+
+  it('SEC-2026-09 (#17): NO cancela un pedido con referencia de pago declarada', async () => {
+    findManyMock.mockResolvedValue([{ id: 'order-1', createdAt: new Date(CUTOFF_ISO) }]);
+    findUniqueMock.mockResolvedValue(baseOrder({ paymentReference: '123456' }));
+
+    const res = await GET(authorizedRequest());
+    const body = await res.json();
+
+    expect(body.cancelled).toBe(0);
+    expect(updateManyMock).not.toHaveBeenCalled();
   });
 
   it('Fase 8: excluye pedidos Cashea (casheaStatus no nulo) de la query de candidatos', async () => {

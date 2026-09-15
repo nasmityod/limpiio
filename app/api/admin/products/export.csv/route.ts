@@ -93,6 +93,7 @@ export async function GET(request: Request) {
     // → round-trip completo exportar → editar → importar, con SKU como clave.
     const csv = Papa.unparse(rows, {
       quotes: true,
+      escapeFormulae: true, // SEC-2026-09 (#9)
       columns: [
         'sku',
         'name',

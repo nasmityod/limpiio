@@ -50,7 +50,24 @@ export function parseExchangeRateFromConfigValue(value: string | null | undefine
   return parsed;
 }
 
-/** Tasa USD→Bs. desde `AppConfig` (misma fuente que el panel admin). */
+/**
+ * Lanzado cuando no hay una tasa persistida válida. SEC-2026-09 (#16): el
+ * checkout NO debe congelar precios en Bs con el default de compilación
+ * (36,5) — si la fila de AppConfig falta o está corrupta (restore, instancia
+ * nueva, escritura fallida) se vendía a una fracción del valor real.
+ */
+export class ExchangeRateUnavailableError extends Error {
+  constructor() {
+    super('No hay una tasa de cambio válida configurada.');
+    this.name = 'ExchangeRateUnavailableError';
+  }
+}
+
+/**
+ * Tasa USD→Bs. desde `AppConfig` para operaciones que CONGELAN dinero
+ * (checkout, previsualización de cupón). Estricta: sin tasa válida lanza
+ * `ExchangeRateUnavailableError` en lugar de caer al default.
+ */
 export async function loadExchangeRateUsdBsFromTx(
   tx: Prisma.TransactionClient,
 ): Promise<number> {
@@ -58,7 +75,25 @@ export async function loadExchangeRateUsdBsFromTx(
     where: { key: EXCHANGE_RATE_APP_CONFIG_KEY },
     select: { value: true },
   });
-  return parseExchangeRateFromConfigValue(record?.value);
+  const rate = tryParseExchangeRateFromString(record?.value);
+  if (rate == null) {
+    logError('exchange_rate_unavailable_for_checkout', new ExchangeRateUnavailableError(), {
+      operation: 'load_exchange_rate_tx',
+    });
+    throw new ExchangeRateUnavailableError();
+  }
+  return rate;
+}
+
+/** ¿Existe una tasa persistida válida? (para el cron BCV: sin tasa no hay «salto sospechoso» que comparar). */
+export async function hasStoredExchangeRate(
+  tx: Prisma.TransactionClient,
+): Promise<boolean> {
+  const record = await tx.appConfig.findUnique({
+    where: { key: EXCHANGE_RATE_APP_CONFIG_KEY },
+    select: { value: true },
+  });
+  return tryParseExchangeRateFromString(record?.value) != null;
 }
 
 export function roundMoney2(n: number): number {
