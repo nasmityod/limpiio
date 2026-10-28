@@ -60,6 +60,13 @@ async function main() {
   ]);
 
   await prisma.$transaction(async (tx) => {
+    // E2E resets intentionally discard durable attempts/outbox state. Ordinary
+    // order deletion must retain these records; only this guarded fixture reset
+    // clears them so the next run starts without replay tombstones or old jobs.
+    await tx.emailDelivery.deleteMany();
+    await tx.checkoutAttempt.deleteMany();
+    await tx.cartReminderPreference.deleteMany();
+    await tx.reviewPhotoUpload.deleteMany();
     await tx.couponRedemption.deleteMany();
     await tx.paymentUpload.deleteMany();
     await tx.orderItem.deleteMany();

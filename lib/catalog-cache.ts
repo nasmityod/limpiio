@@ -25,6 +25,7 @@
  */
 
 import { unstable_cache } from 'next/cache';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { d, dn } from '@/lib/decimal';
 import { PRODUCT_CARD_SELECT } from '@/lib/product-select';
@@ -47,6 +48,7 @@ type ProductCardRow = {
   category: string;
   brand: string | null;
   images: string[];
+  freeShipping: boolean;
 };
 
 /** Convierte filas Prisma (Decimal) al modelo de tarjeta usado en catálogo/categoría. */
@@ -63,6 +65,7 @@ function mapProductRowsToCardModels(rows: ProductCardRow[]) {
     brand:         p.brand,
     image:         firstCardImage(p.images),
     images:        p.images,
+    freeShipping:  p.freeShipping === true,
     details:       {} as Record<string, string>,
   }));
 }
@@ -71,7 +74,7 @@ function mapProductRowsToCardModels(rows: ProductCardRow[]) {
 
 /** Total count of active products — used for pagination bounds and metadata. */
 export const getCachedCatalogCount = unstable_cache(
-  () => prisma.product.count({ where: { isActive: true } }),
+  () => prisma.product.count({ where: { isActive: true, stock: { gt: 0 } } }),
   ['catalog-count'],
   { tags: ['catalog'], revalidate: REVALIDATE },
 );
@@ -83,8 +86,8 @@ export const getCachedCatalogCount = unstable_cache(
 export const getCachedCatalogProducts = unstable_cache(
   async (page: number) => {
     const rows = await prisma.product.findMany({
-      where:   { isActive: true },
-      orderBy: { createdAt: 'desc' },
+      where:   { isActive: true, stock: { gt: 0 } },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       skip:    (page - 1) * PAGE_SIZE,
       take:    PAGE_SIZE,
       select: PRODUCT_CARD_SELECT,
@@ -95,22 +98,32 @@ export const getCachedCatalogProducts = unstable_cache(
   { tags: ['catalog'], revalidate: REVALIDATE },
 );
 
-/**
- * Productos activos EN OFERTA (originalPrice > price), orden newest-first.
- * Devuelve la lista completa ya filtrada; la página /ofertas pagina en memoria.
- */
+/** Una página de ofertas disponibles. La comparación de precios ocurre en SQL. */
 export const getCachedOfferProducts = unstable_cache(
-  async () => {
-    const rows = await prisma.product.findMany({
-      where:   { isActive: true, originalPrice: { not: null } },
-      orderBy: { createdAt: 'desc' },
-      select:  PRODUCT_CARD_SELECT,
-    });
-    return mapProductRowsToCardModels(rows).filter(
-      (p) => p.originalPrice != null && p.originalPrice > p.price,
-    );
+  async (page: number) => {
+    const rows = await prisma.$queryRaw<ProductCardRow[]>(Prisma.sql`
+      SELECT id, slug, name, description, price, "originalPrice", stock,
+             category, brand, images, "freeShipping"
+      FROM "Product"
+      WHERE "isActive" = true AND stock > 0 AND "originalPrice" > price
+      ORDER BY "createdAt" DESC, id DESC
+      LIMIT ${PAGE_SIZE} OFFSET ${(Math.max(1, Math.trunc(page)) - 1) * PAGE_SIZE}
+    `);
+    return mapProductRowsToCardModels(rows);
   },
-  ['offer-products'],
+  ['offer-products-paged', String(PAGE_SIZE)],
+  { tags: ['catalog'], revalidate: REVALIDATE },
+);
+
+export const getCachedOfferCount = unstable_cache(
+  async () => {
+    const rows = await prisma.$queryRaw<Array<{ total: bigint }>>(Prisma.sql`
+      SELECT COUNT(*) AS total FROM "Product"
+      WHERE "isActive" = true AND stock > 0 AND "originalPrice" > price
+    `);
+    return Number(rows[0]?.total ?? 0);
+  },
+  ['offer-count'],
   { tags: ['catalog'], revalidate: REVALIDATE },
 );
 
@@ -129,7 +142,7 @@ export const getCachedServerCategories = unstable_cache(
       }),
       prisma.product.groupBy({
         by:    ['category'],
-        where: { isActive: true },
+        where: { isActive: true, stock: { gt: 0 } },
         _count: { _all: true },
       }),
     ]);
@@ -168,6 +181,7 @@ export const getCachedCategoryCount = unstable_cache(
       where: {
         category: { equals: categoryName, mode: 'insensitive' },
         isActive: true,
+        stock: { gt: 0 },
       },
     }),
   ['category-count'],
@@ -184,8 +198,9 @@ export const getCachedCategoryProducts = unstable_cache(
       where: {
         category: { equals: categoryName, mode: 'insensitive' as const },
         isActive: true,
+        stock: { gt: 0 },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       skip:    (page - 1) * PAGE_SIZE,
       take:    PAGE_SIZE,
       select: PRODUCT_CARD_SELECT,

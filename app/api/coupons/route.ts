@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { requirePermission } from '@/lib/admin-access-server';
 import { couponInputSchema, couponToClient, normalizeCouponCode } from '@/lib/coupons';
 import { rejectInvalidMutationOrigin } from '@/lib/security';
+import type { Prisma } from '@prisma/client';
 
 /**
  * Tope de filas del listado admin de cupones.
@@ -19,11 +20,32 @@ import { rejectInvalidMutationOrigin } from '@/lib/security';
 const MAX_COUPONS = 500;
 
 /** GET /api/coupons — listado admin de cupones (acotado, ordenado por fecha). */
-export async function GET() {
+export async function GET(request?: Request) {
   const auth = await requirePermission('PROMOTIONS');
   if (!auth.authorized) return auth.response;
 
   try {
+    const query = new URL(request?.url ?? 'http://localhost/api/coupons').searchParams;
+    if (query.has('page')) {
+      const page = Number(query.get('page'));
+      const pageSize = Number(query.get('pageSize') ?? 25);
+      const q = (query.get('q') ?? '').trim();
+      const status = query.get('status') ?? 'all';
+      if (!Number.isInteger(page) || page < 1 || page > 100_000 || !Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100 || q.length > 100 || !['all', 'active', 'inactive', 'expired'].includes(status)) {
+        return NextResponse.json({ error: 'Paginación o filtro inválido.' }, { status: 400 });
+      }
+      const where: Prisma.CouponWhereInput = {
+        ...(q ? { OR: [{ code: { contains: q, mode: 'insensitive' } }, { description: { contains: q, mode: 'insensitive' } }] } : {}),
+        ...(status === 'active' ? { active: true } : {}),
+        ...(status === 'inactive' ? { active: false } : {}),
+        ...(status === 'expired' ? { expiresAt: { lt: new Date() } } : {}),
+      };
+      const [items, total] = await Promise.all([
+        prisma.coupon.findMany({ where, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], skip: (page - 1) * pageSize, take: pageSize }),
+        prisma.coupon.count({ where }),
+      ]);
+      return NextResponse.json({ items: items.map(couponToClient), total, page, pageSize }, { headers: { 'Cache-Control': 'no-store' } });
+    }
     const [coupons, total] = await Promise.all([
       prisma.coupon.findMany({
         orderBy: { createdAt: 'desc' },

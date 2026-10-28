@@ -19,6 +19,7 @@ import {
   type UploadItemState,
 } from '@/lib/products/upload-product-images';
 
+import { sanitizeOrderItemImageUrl } from '@/lib/r2-public-url';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
@@ -29,6 +30,7 @@ import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
  */
 interface Product {
   id:          string;
+  updatedAt?: string;
   name:        string;
   category:    string;
   price:       number;
@@ -105,6 +107,7 @@ function CategoryCombobox({
   options: string[];
 }) {
   const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
   const wrapRef = useRef<HTMLDivElement>(null);
   const listId = `${id}-listbox`;
   const query = normalizeCategoryLabel(value).toLowerCase();
@@ -141,6 +144,7 @@ function CategoryCombobox({
         aria-expanded={open}
         aria-controls={listId}
         aria-autocomplete="list"
+        aria-activedescendant={open && activeIndex >= 0 ? `${listId}-${activeIndex}` : undefined}
         autoComplete="off"
         required
         value={value}
@@ -152,7 +156,15 @@ function CategoryCombobox({
         }}
         onFocus={() => setOpen(true)}
         onKeyDown={(e) => {
-          if (e.key === 'Escape') setOpen(false);
+          if (e.key === 'Escape' && open) { e.preventDefault(); e.stopPropagation(); setOpen(false); }
+          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault(); setOpen(true);
+            const count = filtered.length + (willCreate ? 1 : 0);
+            setActiveIndex(i => count === 0 ? -1 : (i + (e.key === 'ArrowDown' ? 1 : -1) + count) % count);
+          }
+          if (e.key === 'Enter' && open && activeIndex >= 0) {
+            e.preventDefault(); pick(filtered[activeIndex] ?? normalizeCategoryLabel(value)); setActiveIndex(-1);
+          }
         }}
       />
       <button
@@ -171,29 +183,29 @@ function CategoryCombobox({
           data-testid="category-options"
           className="absolute z-30 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg"
         >
-          {filtered.map((c) => (
-            <li key={c} role="option" aria-selected={normalizeCategoryLabel(c).toLowerCase() === query}>
+          {filtered.map((c, index) => (
+            <li key={c} id={`${listId}-${index}`} role="option" aria-selected={normalizeCategoryLabel(c).toLowerCase() === query}>
               <button
                 type="button"
                 className="w-full text-left px-3 py-2 text-sm text-gray-800 hover:bg-navy/5"
                 onMouseDown={(e) => {
                   e.preventDefault();
-                  pick(c);
                 }}
+                onClick={() => pick(c)}
               >
                 {c}
               </button>
             </li>
           ))}
           {willCreate ? (
-            <li role="option" aria-selected>
+            <li id={`${listId}-${filtered.length}`} role="option" aria-selected>
               <button
                 type="button"
                 className="w-full text-left px-3 py-2 text-sm font-semibold text-navy hover:bg-navy/5"
                 onMouseDown={(e) => {
                   e.preventDefault();
-                  pick(normalizeCategoryLabel(value));
                 }}
+                onClick={() => pick(normalizeCategoryLabel(value))}
               >
                 Crear «{normalizeCategoryLabel(value)}»
               </button>
@@ -291,6 +303,8 @@ function UploadProgressList({
 
 export default function AddProductModal({ isOpen, onClose, onSaved, product, detailLoading = false, detailError = null, categories }: AddProductModalProps) {
   const [isPending, startTransition] = useTransition();
+  const savingRef = useRef(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const formRef        = useRef<HTMLFormElement>(null);
   const fileInputRef   = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -310,6 +324,8 @@ export default function AddProductModal({ isOpen, onClose, onSaved, product, det
   const [presets, setPresets] = useState<number[]>([30, 50, 80, 100]);
   const [presetDraft, setPresetDraft] = useState<string[]>(['30', '50', '80', '100']);
   const [editingPresets, setEditingPresets] = useState(false);
+  const [canEditPresets, setCanEditPresets] = useState(false);
+  const [savingPresets, setSavingPresets] = useState(false);
   const [price, setPrice] = useState('');
   const [freeShipping, setFreeShipping] = useState(false);
   const [onSale, setOnSale] = useState(false);
@@ -328,7 +344,14 @@ export default function AddProductModal({ isOpen, onClose, onSaved, product, det
 
   useEffect(() => {
     if (!isOpen) return;
-    getPricingParams().then(setPricing).catch(() => {});
+    let cancelled = false;
+    setCanEditPresets(false);
+    getPricingParams().then((params) => {
+      if (cancelled) return;
+      setPricing(params);
+      setCanEditPresets(params.canEditMarginPresets === true);
+    }).catch(() => { if (!cancelled) setSaveError('No se pudo cargar la fórmula de precios. Cierra y vuelve a abrir el formulario.'); });
+    return () => { cancelled = true; };
   }, [isOpen]);
 
   useEffect(() => {
@@ -366,6 +389,8 @@ export default function AddProductModal({ isOpen, onClose, onSaved, product, det
     if (!isOpen) return;
     // Al AGREGAR: siempre en blanco. Al EDITAR: el margen guardado del producto.
     setMarginPct(product?.profitMarginPct != null ? String(product.profitMarginPct) : '');
+    setSaveError(null);
+    setEditingPresets(false);
   }, [isOpen, product]);
 
   useEffect(() => {
@@ -719,6 +744,7 @@ export default function AddProductModal({ isOpen, onClose, onSaved, product, det
     normalizedCategoryInput.length > 0 && !categoryMatchesExisting;
 
   const handleClose = useCallback(() => {
+    if (savingRef.current || serverUploading || slotsRef.current.some((s) => s.type === 'VIDEO' && s.status === 'processing')) return;
     for (const v of sessionUploadedVideosRef.current) {
       if (!originalProductVideoUrlsRef.current.has(v.url)) {
         deleteOrphanVideo(v.url, v.posterUrl, true);
@@ -726,7 +752,7 @@ export default function AddProductModal({ isOpen, onClose, onSaved, product, det
     }
     sessionUploadedVideosRef.current = [];
     onClose();
-  }, [onClose]);
+  }, [onClose, serverUploading]);
   handleCloseRef.current = handleClose;
 
   const handleSubmitAttempt = useCallback(() => {
@@ -744,7 +770,7 @@ export default function AddProductModal({ isOpen, onClose, onSaved, product, det
   if (!isOpen) return null;
 
   // Solo el margen escrito para ESTE producto. Sin global.
-  const effectiveMargin = Number(marginPct) > 0 ? Number(marginPct) : null;
+  const effectiveMargin = marginPct.trim() !== '' && Number(marginPct) >= 0 ? Number(marginPct) : null;
   const suggestedPrice =
     effectiveMargin != null && Number(cost) > 0
       ? calcSellingPriceUsd(Number(cost), effectiveMargin, pricing.factor)
@@ -774,14 +800,14 @@ export default function AddProductModal({ isOpen, onClose, onSaved, product, det
     const n = Number(v);
     const m = Number(marginPct);
     // Solo autocalcula con costo Y margen del producto. Sin global.
-    setPrice(n > 0 && m > 0 ? calcSellingPriceUsd(n, m, pricing.factor).toFixed(2) : '');
+    setPrice(n > 0 && m >= 0 && marginPct.trim() !== '' ? calcSellingPriceUsd(n, m, pricing.factor).toFixed(2) : '');
   };
 
   const onMarginChange = (v: string) => {
     setMarginPct(v);
     const n = Number(cost);
     const m = Number(v);
-    if (n > 0 && m > 0) setPrice(calcSellingPriceUsd(n, m, pricing.factor).toFixed(2));
+    if (n > 0 && m >= 0 && v.trim() !== '') setPrice(calcSellingPriceUsd(n, m, pricing.factor).toFixed(2));
   };
 
   return (
@@ -851,7 +877,7 @@ export default function AddProductModal({ isOpen, onClose, onSaved, product, det
           )}
 
             {/* ── Galería de medios ──────────────────────────────── */}
-            <div className="mb-5">
+            <div className="mb-5" inert={isPending}>
               <div className="flex items-center justify-between mb-1">
                 <label className={labelCls}>
                   Galería de medios
@@ -962,13 +988,14 @@ export default function AddProductModal({ isOpen, onClose, onSaved, product, det
                     </p>
                     <input
                       type="url"
-                      placeholder="https://ejemplo.com/imagen.jpg"
+                      placeholder="URL del CDN de la tienda"
+                      aria-label="URL de imagen del CDN"
                       className={inputCls}
                       onKeyDown={e => {
                         if (e.key === 'Enter') {
                           e.preventDefault();
                           const val = (e.target as HTMLInputElement).value.trim();
-                          if (val) { addImages([val]); (e.target as HTMLInputElement).value = ''; }
+                          if (val && sanitizeOrderItemImageUrl(val)) { addImages([val]); (e.target as HTMLInputElement).value = ''; } else if (val) { setSaveError('Usa una imagen subida al CDN de la tienda.'); }
                         }
                       }}
                     />
@@ -994,17 +1021,9 @@ export default function AddProductModal({ isOpen, onClose, onSaved, product, det
             <form
               ref={formRef}
               onSubmit={(e) => {
-                if (hasProcessingVideo) {
-                  e.preventDefault();
-                  alert('Espera a que el video termine de procesarse antes de guardar.');
-                  return;
-                }
-                if (hasFailedVideo) {
-                  e.preventDefault();
-                  alert('Quita o reemplaza los videos con error antes de guardar.');
-                }
-              }}
-              action={async (formData) => {
+                e.preventDefault();
+                if (savingRef.current || serverUploading) return;
+                const formData = new FormData(e.currentTarget);
                 const currentSlots = slotsRef.current;
                 if (currentSlots.some((s) => s.type === 'VIDEO' && s.status === 'processing')) {
                   alert('Espera a que el video termine de procesarse antes de guardar.');
@@ -1029,10 +1048,14 @@ export default function AddProductModal({ isOpen, onClose, onSaved, product, det
                 // No depender de que un checkbox desmarcado desaparezca del FormData.
                 formData.set('freeShipping', freeShipping ? 'true' : 'false');
                 formData.set('category', categoryInput);
+                if (product?.updatedAt) formData.set('expectedUpdatedAt', product.updatedAt);
+                setSaveError(null);
+                savingRef.current = true;
                 startTransition(async () => {
                   const action = product
                     ? updateProductAction.bind(null, product.id)
                     : createProductAction;
+                  try {
                   const result = await action(formData);
                   if (result.success) {
                     sessionUploadedVideosRef.current = [];
@@ -1049,11 +1072,18 @@ export default function AddProductModal({ isOpen, onClose, onSaved, product, det
                       setCategoryInput('');
                     }
                   } else {
-                    alert(result.message);
+                    setSaveError(result.message);
+                  }
+                  } catch {
+                    setSaveError('No se pudo guardar el producto. Tus cambios se conservan; vuelve a intentarlo.');
+                  } finally {
+                    savingRef.current = false;
                   }
                 });
               }}
             >
+              {saveError && <p role="alert" className="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">{saveError}</p>}
+              <fieldset disabled={isPending || serverUploading} className="contents">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
                 {/* Nombre */}
                 <div className="sm:col-span-2">
@@ -1094,13 +1124,16 @@ export default function AddProductModal({ isOpen, onClose, onSaved, product, det
                   <p className="text-[11px] text-gray-400 mt-1">Escribe el % de ganancia de este producto (o usa un atajo).</p>
                   {/* Atajos de margen configurables */}
                   <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                    {editingPresets ? (
+                    {editingPresets && canEditPresets ? (
                       <>
                         {presetDraft.map((val, i) => (
                           <input
                             key={i}
                             type="number"
                             min="0"
+                            max="1000"
+                            aria-label={`Atajo de margen ${i + 1}`}
+                            disabled={savingPresets}
                             value={val}
                             onChange={(e) =>
                               setPresetDraft((prev) => prev.map((v, j) => (j === i ? e.target.value : v)))
@@ -1111,11 +1144,22 @@ export default function AddProductModal({ isOpen, onClose, onSaved, product, det
                         <button
                           type="button"
                           onClick={async () => {
-                            const nums = presetDraft.map((v) => Number(v) || 0);
-                            const res = await updateMarginPresets(nums);
-                            if (res.success) { setPresets(nums); setEditingPresets(false); }
-                            else alert(res.message);
+                            if (savingPresets) return;
+                            if (presetDraft.some(v => !v.trim() || !Number.isFinite(Number(v)))) {
+                              setSaveError('Completa los cuatro atajos con números válidos.');
+                              return;
+                            }
+                            setSavingPresets(true);
+                            try {
+                              const nums = presetDraft.map(Number);
+                              const res = await updateMarginPresets(nums);
+                              if (res.success) { setPresets(nums); setEditingPresets(false); }
+                              else setSaveError(res.message);
+                            } catch {
+                              setSaveError('No se pudieron guardar los atajos. Tus valores se conservan.');
+                            } finally { setSavingPresets(false); }
                           }}
+                          disabled={savingPresets}
                           className="px-2 py-1 text-xs font-semibold text-white bg-navy rounded-md"
                         >
                           Guardar
@@ -1140,7 +1184,7 @@ export default function AddProductModal({ isOpen, onClose, onSaved, product, det
                             {preset}%
                           </button>
                         ))}
-                        <button
+                        {canEditPresets && <button
                           type="button"
                           onClick={() => { setPresetDraft(presets.map(String)); setEditingPresets(true); }}
                           aria-label="Configurar atajos de margen"
@@ -1148,7 +1192,7 @@ export default function AddProductModal({ isOpen, onClose, onSaved, product, det
                           className="px-1.5 py-1 text-gray-400 hover:text-navy"
                         >
                           ✎
-                        </button>
+                        </button>}
                       </>
                     )}
                   </div>
@@ -1333,6 +1377,7 @@ export default function AddProductModal({ isOpen, onClose, onSaved, product, det
                 )}
               </div>
 
+              </fieldset>
             </form>
         </div>
 
@@ -1344,7 +1389,7 @@ export default function AddProductModal({ isOpen, onClose, onSaved, product, det
           <button
             type="button"
             onClick={handleClose}
-            disabled={isPending}
+            disabled={isPending || serverUploading}
             className="flex-1 min-h-[52px] rounded-xl border border-gray-200 bg-white text-gray-700 text-sm font-semibold active:bg-gray-100 transition"
           >
             Cancelar
@@ -1352,7 +1397,7 @@ export default function AddProductModal({ isOpen, onClose, onSaved, product, det
           <button
             type="button"
             onClick={handleSubmitAttempt}
-            disabled={isPending || hasProcessingVideo}
+            disabled={isPending || serverUploading || hasProcessingVideo}
             className="flex-[2] min-h-[52px] rounded-xl bg-brand-yellow border border-yellow-400 text-navy text-sm font-black uppercase tracking-wide active:bg-yellow-300 transition disabled:opacity-60 inline-flex items-center justify-center"
           >
             {isPending

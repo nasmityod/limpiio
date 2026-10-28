@@ -119,7 +119,7 @@ export function PaymentsSettingsPanel({
       });
       if (result.success) {
         if (result.data) {
-          setFinancialSettings(result.data);
+          setFinancialSettings(current => snapshotJson(current) === snapshotJson(financialSettings) ? result.data! : current);
           setSnapshot(snapshotJson(result.data));
         } else {
           setSnapshot(snapshotJson(financialSettings));

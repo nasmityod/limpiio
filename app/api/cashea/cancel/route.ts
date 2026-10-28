@@ -13,6 +13,7 @@ import {
 } from '@/lib/security';
 import { rateLimitCritical, getClientIp, hashForBucket } from '@/lib/rate-limit';
 import { logError, logInfo, logWarn } from '@/lib/safe-logger';
+import { OrderTransitionConflict } from '@/lib/order-lifecycle';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -95,6 +96,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         stockDeducted: true,
         casheaStatus: true,
         casheaOrderId: true,
+        updatedAt: true,
         items: { select: { productId: true, quantity: true } },
       },
     });
@@ -126,13 +128,17 @@ export async function POST(request: Request): Promise<NextResponse> {
       return NextResponse.json({ ok: true, status: 'CANCELLED' });
     }
 
-    // Transición optimista a CANCEL_PENDING: si otra petición concurrente ya
-    // movió el estado a CONFIRMED/CANCELLED, esta llamada se convierte en no-op
-    // más abajo (se relee el estado real antes de cancelar en remoto).
-    await prisma.order.updateMany({
-      where: { id: order.id, casheaStatus: { notIn: ['CONFIRMED', 'CANCELLED'] } },
-      data: { casheaStatus: 'CANCEL_PENDING' },
+    if (order.casheaStatus === 'VERIFYING') return NextResponse.json({ message: 'La verificación está en curso. Espera antes de cancelar.' }, { status: 409 });
+    const leaseCutoff = new Date(Date.now() - 60_000);
+    const claimed = await prisma.order.updateMany({
+      where: {
+        id: order.id, updatedAt: order.updatedAt,
+        casheaStatus: { notIn: ['CONFIRMED', 'CANCELLED', 'VERIFYING'] },
+        OR: [{ casheaStatus: { not: 'CANCEL_PENDING' } }, { updatedAt: { lt: leaseCutoff } }],
+      },
+      data: { casheaStatus: 'CANCEL_PENDING', casheaReturnTokenHash: null },
     });
+    if (claimed.count !== 1) return NextResponse.json({ message: 'El pedido cambió o su cancelación está en curso. Recarga en un minuto.' }, { status: 409 });
 
     // Cancela en Cashea de forma idempotente (Fase 3: 200 o "ya cancelada" = ok)
     // ANTES de tocar inventario local — solo si ya existe una orden remota.
@@ -179,45 +185,18 @@ export async function POST(request: Request): Promise<NextResponse> {
         return { conflict: true as const };
       }
 
-      await applyOrderCancellationEffectsInTransaction(tx, {
-        id: current.id,
-        status: current.status,
-        items: current.items,
-        stockDeducted: current.stockDeducted,
-      });
-
-      // Transición condicional local: id + casheaStatus + status del snapshot.
-      // Solo count === 1 afirma que esta petición completó la cancelación.
+      if (current.casheaStatus !== 'CANCEL_PENDING') throw new OrderTransitionConflict();
       const transition = await tx.order.updateMany({
-        where: {
-          id: current.id,
-          casheaStatus: current.casheaStatus,
-          status: current.status,
-        },
-        data: {
-          status: 'Cancelado',
-          casheaStatus: 'CANCELLED',
-          casheaCancelledAt: new Date(),
-        },
+        where: { id: current.id, casheaStatus: 'CANCEL_PENDING', status: current.status, updatedAt: current.updatedAt },
+        data: { status: 'Cancelado', casheaStatus: 'CANCELLED', casheaCancelledAt: new Date(), casheaReturnTokenHash: null },
       });
+      if (transition.count !== 1) throw new OrderTransitionConflict();
+      await applyOrderCancellationEffectsInTransaction(tx, current, { stockClaimStatus: 'Cancelado' });
 
-      if (transition.count === 1) {
-        return { cancelled: true as const };
-      }
-
-      const raced = await tx.order.findUnique({
-        where: { id: current.id },
-        select: { casheaStatus: true },
-      });
-      if (raced?.casheaStatus === 'CANCELLED') {
-        return { alreadyCancelled: true as const };
-      }
-      if (raced?.casheaStatus === 'CONFIRMED') {
-        return { conflict: true as const };
-      }
-      return { alreadyCancelled: true as const };
+      return { cancelled: true as const };
     });
 
+    if (!result) return NextResponse.json({ message: 'Pedido no encontrado.' }, { status: 404 });
     if (result?.conflict) {
       return NextResponse.json(
         { message: 'Este pedido ya fue confirmado; no se puede cancelar por esta vía.' },
@@ -232,6 +211,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     }
     return NextResponse.json({ ok: true, status: 'CANCELLED' });
   } catch (error) {
+    if (error instanceof OrderTransitionConflict) return NextResponse.json({ message: error.message }, { status: 409 });
     logError('cashea_cancel_failed', error, { operation: 'cashea_cancel' });
     return NextResponse.json(
       { message: 'No pudimos cancelar el pedido. Intenta de nuevo en unos minutos.' },

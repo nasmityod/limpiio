@@ -8,6 +8,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { v4 as uuidv4 } from 'uuid';
 import { isE2eMode } from '@/lib/e2e-mode';
 import { slugify } from '@/lib/slugify';
+import { isR2PublicHttpsUrl } from '@/lib/r2-public-url';
 
 /** URL pública determinista en E2E (sin red). */
 const E2E_PUBLIC_BASE_URL = 'https://cdn.e2e.test';
@@ -34,7 +35,6 @@ function assertR2Env(): void {
     return;
   }
   if (envChecked) return;
-  envChecked = true;
 
   const missing = REQUIRED_ENV.filter((k) => !process.env[k]?.trim());
   if (missing.length > 0) {
@@ -43,6 +43,7 @@ function assertR2Env(): void {
         'Configura R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME y R2_PUBLIC_BASE_URL.',
     );
   }
+  envChecked = true;
 }
 
 type PrivateR2Config = {
@@ -134,7 +135,7 @@ function getS3Client(): S3Client {
 }
 
 export const R2_BUCKET = process.env.R2_BUCKET_NAME ?? '';
-export const R2_PUBLIC_BASE_URL = (process.env.R2_PUBLIC_BASE_URL ?? '').replace(/\/$/, '');
+export const R2_PUBLIC_BASE_URL = (process.env.R2_PUBLIC_BASE_URL ?? '').trim().replace(/\/$/, '');
 
 let privateS3Client: S3Client | null = null;
 
@@ -204,6 +205,7 @@ export async function uploadToR2({
       ContentType: contentType,
       CacheControl: cacheControl,
     }),
+    { abortSignal: AbortSignal.timeout(120_000) },
   );
   return `${publicBaseUrl}/${key}`;
 }
@@ -235,6 +237,7 @@ export async function deleteFromR2(key: string): Promise<void> {
       Bucket: bucket,
       Key: key,
     }),
+    { abortSignal: AbortSignal.timeout(10_000) },
   );
 }
 
@@ -251,14 +254,7 @@ export function getR2PublicHostname(): string | null {
 
 /** true si la URL apunta al dominio público configurado en R2_PUBLIC_BASE_URL. */
 export function isR2PublicUrl(url: string): boolean {
-  const hostname = getR2PublicHostname();
-  if (!hostname) return false;
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === 'https:' && parsed.hostname === hostname;
-  } catch {
-    return false;
-  }
+  return isR2PublicHttpsUrl(url, R2_PUBLIC_BASE_URL || process.env.R2_PUBLIC_BASE_URL?.trim());
 }
 
 /** Extrae la object key de una URL pública de R2, o null si no pertenece al bucket. */

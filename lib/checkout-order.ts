@@ -41,6 +41,7 @@ export const orderItemSchema = z.object({
 });
 
 export const checkoutSchema = z.object({
+  attemptKey: z.string().trim().regex(/^[A-Za-z0-9_-]{16,128}$/).optional(),
   customerId: z.string().max(64).optional().default('guest'),
   customerName: shortText(120).min(1, 'El nombre del cliente es requerido.'),
   customerEmail: z.string().trim().email().max(254).optional().nullable(),
@@ -87,6 +88,8 @@ export const checkoutSchema = z.object({
 export type CheckoutInput = z.infer<typeof checkoutSchema>;
 
 export type CheckoutExecuteOptions = {
+  checkoutAttemptKey?: string;
+  checkoutPayloadHash?: string;
   /** Estado inicial del pedido (ej. verificación Binance). */
   orderStatus?: OrderStatus;
   /** Si false, no descuenta stock (modo WhatsApp). Default true. */
@@ -144,9 +147,9 @@ async function loadPaymentSettingsSliceFromTransaction(
 
 /**
  * PRD-131: busca un pedido reciente equivalente (mismo comprador + misma
- * referencia de pago, no cancelado) para tratar reintentos/doble envío como
- * idempotentes. Una misma transferencia no puede pagar dos pedidos distintos,
- * así que la referencia funciona como clave natural de idempotencia.
+ * referencia, método y banco, no cancelado) para detectar referencias ya
+ * asociadas a otra compra. El caller devuelve conflicto; la identidad estable
+ * de un reintento es CheckoutAttempt, nunca una referencia bancaria corta.
  * FASE 4.1: para invitados (customerId null) la clave es (customerEmail, ref).
  * Debe ejecutarse DENTRO de la misma transacción que crea el pedido —
  * el aislamiento Serializable convierte la carrera lectura→inserción en un
@@ -163,6 +166,8 @@ export async function findRecentDuplicateOrderInTransaction(
     customerId: string | null;
     customerEmail?: string | null;
     paymentReference: string | null | undefined;
+    paymentMethodId?: string;
+    paymentBank?: string | null;
   },
 ) {
   const reference = params.paymentReference?.trim();
@@ -178,6 +183,8 @@ export async function findRecentDuplicateOrderInTransaction(
         ? { customerId: params.customerId }
         : { customerId: null, customerEmail: { equals: guestEmail, mode: 'insensitive' } }),
       paymentReference: reference,
+      ...(params.paymentMethodId ? { paymentMethodId: params.paymentMethodId } : {}),
+      ...(params.paymentBank !== undefined ? { paymentBank: params.paymentBank } : {}),
       status: { not: 'Cancelado' satisfies OrderStatus },
       createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
     },
@@ -247,7 +254,7 @@ export async function executeCheckoutInTransactionWithMethod(
     );
   }
 
-  for (const [productId, totalQty] of quantityByProduct) {
+  for (const [productId, totalQty] of [...quantityByProduct].sort(([a], [b]) => a.localeCompare(b))) {
     const dbProduct = productMap.get(productId);
     if (!dbProduct) {
       throw new CheckoutError(
@@ -400,7 +407,7 @@ export async function executeCheckoutInTransactionWithMethod(
   // deriva de coma flotante. Así sum(items) === Order.total siempre.
   let subtotalBeforeDiscountCents = 0;
   let subtotalUsd = 0;
-  for (const item of items) {
+  for (const item of [...items].sort((a, b) => a.productId.localeCompare(b.productId))) {
     const p = productMap.get(item.productId)!;
     // PRD-204: p.price es Decimal en BD — convertir a number antes de aritmética.
     const priceNum = d(p.price);
@@ -490,6 +497,8 @@ export async function executeCheckoutInTransactionWithMethod(
 
   const newOrder = await tx.order.create({
     data: {
+      checkoutAttemptKey: options?.checkoutAttemptKey,
+      checkoutPayloadHash: options?.checkoutPayloadHash,
       customer: isRegisteredUser ? { connect: { id: customerId } } : undefined,
       customerName,
       customerEmail: resolvedCustomerEmail,
@@ -633,7 +642,7 @@ export async function deductOrderStockInTransaction(
     );
   }
 
-  for (const [productId, totalQty] of quantityByProduct) {
+  for (const [productId, totalQty] of [...quantityByProduct].sort(([a], [b]) => a.localeCompare(b))) {
     const result = await tx.product.updateMany({
       where: { id: productId, stock: { gte: totalQty } },
       data: { stock: { decrement: totalQty } },
@@ -664,7 +673,7 @@ export async function restoreOrderStockInTransaction(
   tx: Prisma.TransactionClient,
   items: { productId: string; quantity: number }[]
 ): Promise<void> {
-  for (const item of items) {
+  for (const item of [...items].sort((a, b) => a.productId.localeCompare(b.productId))) {
     const result = await tx.product.updateMany({
       where: { id: item.productId },
       data: { stock: { increment: item.quantity } },
@@ -734,6 +743,7 @@ export async function applyOrderCancellationEffectsInTransaction(
       await restoreOrderStockInTransaction(tx, order.items);
       stockRestored = true;
     }
+    if (claim.count !== 1) return { stockRestored: false };
     // claim.count === 0 → reintento/concurrencia/no-op: no incrementar inventario.
   }
 

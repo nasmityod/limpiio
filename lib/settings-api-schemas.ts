@@ -28,9 +28,9 @@ const socialLinkSchema = z
 
 /** Subset expuesto con STORE_SETTINGS (GET/PUT general). */
 export const generalSettingsApiSchema = z.object({
-  storeName:          z.string().min(1),
+  storeName:          z.string().trim().min(1),
   tagline:            z.string().optional().default(''),
-  phone:              z.string().min(1),
+  phone:              z.string().trim().min(1),
   phone2:             z.string().optional().default(''),
   email:              z.string().email(),
   address:            z.string().optional().default(''),
@@ -96,7 +96,12 @@ export type FinancialSettingsDto = z.infer<typeof financialSettingsApiSchema> & 
 };
 
 export function pickGeneralSettingsDto(settings: GeneralSettingsDto & Partial<FinancialSettingsDto>): GeneralSettingsDto {
-  return generalSettingsApiSchema.parse({
+  // Fresh installations and a recovered settings store legitimately have no
+  // contact details yet. Read DTOs must not use the stricter write validation.
+  return generalSettingsApiSchema.extend({
+    phone: z.string().trim(),
+    email: z.union([z.literal(''), z.string().email()]),
+  }).parse({
     storeName: settings.storeName,
     tagline: settings.tagline ?? '',
     phone: settings.phone,

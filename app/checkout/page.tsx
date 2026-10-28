@@ -83,7 +83,7 @@ export default async function CheckoutPage() {
     );
   }
 
-  // Guest solo en whatsapp / auth obligatoria en full: middleware.ts ya
+  // Guest solo en whatsapp / auth obligatoria en full: proxy.ts ya
   // protege /checkout cuando CHECKOUT_MODE=full, pero esta es la segunda
   // capa (defense in depth) del propio Server Component.
   const session = await getServerSession(authOptions);

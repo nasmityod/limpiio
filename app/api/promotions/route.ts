@@ -1,32 +1,12 @@
 import { NextResponse } from 'next/server';
 import { logError } from '@/lib/safe-logger';
-import { z } from 'zod';
+import { promotionSchema } from '@/lib/editorial-schemas';
 import { prisma } from '@/lib/prisma';
+import { claimEditorialAssets } from '@/lib/products/product-asset-references';
 import { requirePermission } from '@/lib/admin-access-server';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
-import { isSafeEditableImageUrl, isSafeEditableLink } from '@/lib/safe-link';
 import { revalidatePath, revalidateTag } from 'next/cache';
 import { rejectInvalidMutationOrigin } from '@/lib/security';
-
-const promotionSchema = z.object({
-  title: z.string().trim().min(1).max(160),
-  subtitle: z.string().max(300).nullish(),
-  discountText: z.string().max(60).nullish(),
-  // PRD-042: URL https válida (R2), ruta interna o vacío/null.
-  imageUrl: z
-    .string()
-    .max(600)
-    .nullish()
-    .refine((v) => v == null || isSafeEditableImageUrl(v), 'imageUrl debe ser una URL https válida o una ruta interna.'),
-  bgColor: z.string().regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/).optional(),
-  link: z
-    .string()
-    .max(400)
-    .optional()
-    .refine((v) => v == null || isSafeEditableLink(v), 'Enlace no permitido: usa ruta interna (/...) o https.'),
-  active: z.boolean().optional(),
-  order: z.coerce.number().int().min(0).max(99).optional(),
-});
 
 export async function GET(request: Request) {
   try {
@@ -76,10 +56,12 @@ export async function POST(request: Request) {
   try {
     const parsed = promotionSchema.safeParse(await request.json());
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+      return NextResponse.json({ error: 'Datos editoriales inválidos.', errors: parsed.error.flatten() }, { status: 400 });
     }
     const body = parsed.data;
-    const promo = await prisma.promotion.create({
+    const promo = await prisma.$transaction(async (tx) => {
+      await claimEditorialAssets(tx, body.imageUrl);
+      return tx.promotion.create({
       data: {
         title:        body.title,
         subtitle:     body.subtitle     ?? null,
@@ -90,6 +72,7 @@ export async function POST(request: Request) {
         active:       body.active       ?? true,
         order:        body.order        ?? 1,
       },
+    });
     });
     revalidatePath('/');
     revalidateTag('promotions', 'default');

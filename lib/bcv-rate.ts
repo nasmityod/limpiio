@@ -1,5 +1,6 @@
 import { tryParseExchangeRateFromString } from '@/lib/exchange-rate';
 import { logError } from '@/lib/safe-logger';
+import { normalizeBcvDate } from '@/lib/bcv-date';
 
 const BCV_FETCH_TIMEOUT_MS = 8_000;
 const DOLLARAPI_OFICIAL_URL = 'https://ve.dolarapi.com/v1/dolares/oficial';
@@ -34,7 +35,8 @@ function parseRateFromDolarApi(data: unknown): BcvRateResult | null {
 
   if (rate == null || !Number.isFinite(rate) || rate <= 0) return null;
 
-  return { rate, date: fechaActualizacion };
+  const date = normalizeBcvDate(fechaActualizacion);
+  return date ? { rate, date } : null;
 }
 
 function parseRateFromPyDolarVe(data: unknown): BcvRateResult | null {
@@ -62,7 +64,8 @@ function parseRateFromPyDolarVe(data: unknown): BcvRateResult | null {
   if (rate == null) return null;
   if (typeof lastUpdate !== 'string' || lastUpdate === '') return null;
 
-  return { rate, date: lastUpdate };
+  const date = normalizeBcvDate(lastUpdate);
+  return date ? { rate, date } : null;
 }
 
 async function fetchFromDolarApi(): Promise<BcvRateResult | null> {

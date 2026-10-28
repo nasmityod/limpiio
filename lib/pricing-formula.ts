@@ -37,3 +37,9 @@ export function calcSellingPriceUsd(
   const raw = cost * (1 + marginPct / 100) * factor;
   return roundUpToStep(raw);
 }
+
+/** Product.priceBaseFactor is numeric(6,2); configuration must use the same precision. */
+export function canonicalPricingFactor(value: number): number {
+  if (!Number.isFinite(value) || value < 0.01 || value > 100) return DEFAULT_BCV_BINANCE_FACTOR;
+  return Math.round(value * 100) / 100;
+}

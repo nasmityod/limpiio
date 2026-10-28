@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { emailOutboxTransaction } from '@/lib/email-outbox-context';
 
 const findManyMock = vi.fn();
 const findUniqueMock = vi.fn();
@@ -78,6 +79,8 @@ function baseOrder(overrides: Record<string, unknown> = {}) {
     createdAt: new Date(CUTOFF_ISO),
     status: 'Pendiente',
     paidAt: null,
+    casheaStatus: null,
+    updatedAt: new Date(CUTOFF_ISO),
     paymentProofKey: null,
     paymentReference: null,
     customerName: 'Juan Pérez',
@@ -189,6 +192,10 @@ describe('GET /api/cron/auto-cancel-orders', () => {
         status: 'Pendiente',
         createdAt: { lte: new Date(CUTOFF_ISO) },
         paidAt: null,
+        casheaStatus: null,
+        paymentProofKey: null,
+        OR: [{ paymentReference: null }, { paymentReference: '' }],
+        updatedAt: new Date(CUTOFF_ISO),
       },
       data: { status: 'Cancelado' },
     });
@@ -274,7 +281,7 @@ describe('GET /api/cron/auto-cancel-orders', () => {
     expect(updateManyMock).not.toHaveBeenCalled();
   });
 
-  it('efectos dentro de la transacción y correo después', async () => {
+  it('persiste efectos y notificación en la misma transacción', async () => {
     const order: string[] = [];
 
     findManyMock.mockResolvedValue([{ id: 'order-1', createdAt: new Date(CUTOFF_ISO) }]);
@@ -293,20 +300,21 @@ describe('GET /api/cron/auto-cancel-orders', () => {
       return result;
     });
     sendOrderCancelledEmailMock.mockImplementation(async () => {
-      order.push('send-email');
+      expect(emailOutboxTransaction()).toBeDefined();
+      order.push('enqueue-email');
     });
 
     await GET(authorizedRequest());
 
-    const sendIndex = order.indexOf('send-email');
+    const sendIndex = order.indexOf('enqueue-email');
     const endIndex = order.indexOf('transaction-end');
-    expect(sendIndex).toBeGreaterThan(endIndex);
+    expect(sendIndex).toBeLessThan(endIndex);
     expect(order).toEqual([
       'transaction-start',
       'updateMany',
       'cancellation-effects',
+      'enqueue-email',
       'transaction-end',
-      'send-email',
     ]);
   });
 
@@ -342,22 +350,22 @@ describe('GET /api/cron/auto-cancel-orders', () => {
     expect(sendOrderCancelledEmailMock).not.toHaveBeenCalled();
   });
 
-  it('Resend falla', async () => {
+  it('un fallo de inserción outbox aborta la transacción y no marca éxito del cron', async () => {
     findManyMock.mockResolvedValue([{ id: 'order-1', createdAt: new Date(CUTOFF_ISO) }]);
     findUniqueMock.mockResolvedValue(baseOrder());
     updateManyMock.mockResolvedValue({ count: 1 });
-    sendOrderCancelledEmailMock.mockRejectedValue(new Error('resend down'));
+    sendOrderCancelledEmailMock.mockRejectedValue(new Error('outbox write failed'));
 
     const res = await GET(authorizedRequest());
     const body = await res.json();
 
-    expect(res.status).toBe(200);
-    expect(body.cancelled).toBe(1);
-    expect(body.emailErrors).toBe(1);
+    expect(res.status).toBe(500);
+    expect(body).toEqual({ error: 'Internal server error' });
+    expect(upsertMock).not.toHaveBeenCalled();
     expect(logErrorMock).toHaveBeenCalledWith(
-      'auto_cancel_order_email_failed',
+      'cron_auto_cancel_orders_error',
       expect.anything(),
-      expect.objectContaining({ orderId: 'order-1', provider: 'resend', operation: 'auto_cancel_order_email' }),
+      expect.objectContaining({ operation: 'auto_cancel_orders' }),
     );
   });
 

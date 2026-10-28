@@ -1,11 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import {
   Plus, Pencil, Trash2, Eye, EyeOff,
   X, Save, Loader2, ImageIcon, ExternalLink,
 } from 'lucide-react';
+import { sanitizeOrderItemImageUrl } from '@/lib/r2-public-url';
+import { useAdminDialog } from '@/hooks/useAdminDialog';
 import PhotoUploader from '@/components/admin/PhotoUploader';
 
 interface Banner {
@@ -109,15 +111,19 @@ export default function AdminBannersPage() {
   const [saving, setSaving]           = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [filterType, setFilterType]   = useState('all');
+  const [actionError, setActionError] = useState('');
+  const busyIds = useRef(new Set<string>());
 
   const fetchBanners = async () => {
     setLoading(true);
     try {
       const r = await fetch('/api/banners?showAll=true');
+      if (!r.ok) throw new Error('No se pudieron cargar los banners.');
       const data = await r.json();
+      setActionError('');
       setBanners(Array.isArray(data) ? data : []);
     } catch {
-      setBanners([]);
+      setActionError('No se pudieron cargar los banners. Recarga para volver a intentarlo.');
     } finally {
       setLoading(false);
     }
@@ -151,9 +157,10 @@ export default function AdminBannersPage() {
     setShowForm(true);
   };
 
-  const closeForm = () => { setShowForm(false); setEditId(null); };
+  const { dialogRef, close: closeForm } = useAdminDialog(() => { setShowForm(false); setEditId(null); }, showForm, saving);
 
   const handleSave = async () => {
+    if (saving) return;
     if (!form.imageUrl) { setUploadError('Debes seleccionar una imagen'); return; }
     setSaving(true);
     try {
@@ -172,27 +179,40 @@ export default function AdminBannersPage() {
           order:    Number(form.order),
         }),
       });
-      if (!res.ok) throw new Error('Error al guardar');
+      if (!res.ok) { const data = await res.json().catch(() => null); throw new Error(typeof data?.error === 'string' ? data.error : 'No se pudo guardar el banner.'); }
       await fetchBanners();
-      closeForm();
+      setShowForm(false); setEditId(null);
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : 'Error de conexión. Tus cambios se conservan.');
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('¿Eliminar este banner? Esta acción no se puede deshacer.')) return;
-    await fetch(`/api/banners/${id}`, { method: 'DELETE' });
-    setBanners(bs => bs.filter(b => b.id !== id));
+    if (busyIds.current.has(id) || !confirm('¿Eliminar este banner? Esta acción no se puede deshacer.')) return;
+    busyIds.current.add(id);
+    try {
+      const res = await fetch(`/api/banners/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('No se pudo eliminar el banner.');
+      setBanners(bs => bs.filter(b => b.id !== id));
+      setActionError('');
+    } catch (error) { setActionError(error instanceof Error ? error.message : 'Error de conexión.'); }
+    finally { busyIds.current.delete(id); }
   };
 
   const handleToggle = async (b: Banner) => {
-    await fetch(`/api/banners/${b.id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...b, active: !b.active }),
-    });
-    setBanners(bs => bs.map(x => x.id === b.id ? { ...x, active: !x.active } : x));
+    if (busyIds.current.has(b.id)) return;
+    busyIds.current.add(b.id);
+    try {
+      const res = await fetch(`/api/banners/${b.id}`, { method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ active: !b.active }) });
+      if (!res.ok) throw new Error('No se pudo cambiar el estado del banner.');
+      const saved = await res.json();
+      setBanners(bs => bs.map(x => x.id === b.id ? saved : x));
+      setActionError('');
+    } catch (error) { setActionError(error instanceof Error ? error.message : 'Error de conexión.'); }
+    finally { busyIds.current.delete(b.id); }
   };
 
   const visibleBanners = filterType === 'all' ? banners : banners.filter(b => b.type === filterType);
@@ -217,6 +237,7 @@ export default function AdminBannersPage() {
         </button>
       </div>
 
+      {actionError && <p role="alert" className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{actionError}</p>}
       {/* Leyenda de tipos */}
       <div className="grid grid-cols-2 xl:grid-cols-3 gap-3 mb-5">
         {BANNER_TYPES.slice(0, 4).map(t => (
@@ -281,7 +302,7 @@ export default function AdminBannersPage() {
             >
               <div className="relative h-40 bg-gray-100">
                 {b.imageUrl ? (
-                  <Image src={b.imageUrl} alt={b.title ?? b.type} fill className="object-cover" sizes="400px" />
+                  <Image src={sanitizeOrderItemImageUrl(b.imageUrl) ?? '/placeholder-product.png'} alt={b.title ?? b.type} fill className="object-cover" sizes="400px" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center">
                     <ImageIcon size={32} className="text-gray-300" />
@@ -350,8 +371,8 @@ export default function AdminBannersPage() {
 
       {/* ── Modal ──────────────────────────────────────────────────────────────── */}
       {showForm && (
-        <div className="fixed inset-0 z-50 flex sm:items-center sm:justify-center" onClick={(e) => { if (e.target === e.currentTarget) closeForm(); }}>
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+        <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Editor de banner" className="fixed inset-0 z-50 flex sm:items-center sm:justify-center" onClick={(e) => { if (e.target === e.currentTarget) closeForm(); }}>
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={closeForm} />
           <div
             className="relative bg-white sm:rounded-2xl shadow-2xl w-full sm:w-[520px] sm:max-w-[92vw] sm:my-6 max-h-screen max-h-[100dvh] sm:max-h-[88vh] flex flex-col"
             style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
@@ -369,14 +390,14 @@ export default function AdminBannersPage() {
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 space-y-5">
+            <div inert={saving} className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 space-y-5">
 
               {/* Tipo */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                <label htmlFor="banner-type" className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                   Tipo de Banner *
                 </label>
-                <select
+                <select id="banner-type"
                   value={form.type}
                   onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
                   className="w-full min-h-[48px] border border-gray-200 rounded-xl px-3 py-2.5 text-base text-navy bg-gray-50 focus:outline-none focus:ring-2 focus:ring-navy/20"
@@ -404,17 +425,17 @@ export default function AdminBannersPage() {
                 previewHeight="h-44"
               />
               {uploadError && (
-                <p className="text-xs text-red-600 -mt-2">
+                <p role="alert" className="text-xs text-red-600 -mt-2">
                   {uploadError}
                 </p>
               )}
 
               {showField('focalPoint') && (
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                  <label htmlFor="banner-focalPoint" className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                     Punto focal (recorte en móvil)
                   </label>
-                  <select
+                  <select id="banner-focalPoint"
                     value={form.focalPoint}
                     onChange={e => setForm(f => ({ ...f, focalPoint: e.target.value }))}
                     className="w-full min-h-[48px] border border-gray-200 rounded-xl px-3 py-2.5 text-base text-navy bg-gray-50 focus:outline-none focus:ring-2 focus:ring-navy/20"
@@ -435,11 +456,11 @@ export default function AdminBannersPage() {
                 const help = FIELD_HELP[field];
                 return (
                   <div key={field}>
-                    <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                    <label htmlFor={`banner-${field}`} className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                       {help.label}
                     </label>
                     {field === 'subtitle' ? (
-                      <textarea
+                      <textarea id={`banner-${field}`}
                         rows={3}
                         placeholder={help.placeholder}
                         value={form[field]}
@@ -447,7 +468,7 @@ export default function AdminBannersPage() {
                         className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-base bg-gray-50 focus:outline-none focus:ring-2 focus:ring-navy/20 resize-none"
                       />
                     ) : (
-                      <input
+                      <input id={`banner-${field}`}
                         type="text"
                         placeholder={help.placeholder}
                         value={form[field]}
@@ -463,10 +484,10 @@ export default function AdminBannersPage() {
               {/* Link */}
               {showField('link') && (
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                  <label htmlFor="banner-link" className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                     Enlace (al hacer clic)
                   </label>
-                  <input
+                  <input id="banner-link"
                     type="text"
                     placeholder={FIELD_HELP.link.placeholder}
                     value={form.link}
@@ -479,10 +500,10 @@ export default function AdminBannersPage() {
               {/* Orden + Activo */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
+                  <label htmlFor="banner-order" className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
                     Orden {form.type === 'ad_box' ? '(1–4)' : ''}
                   </label>
-                  <input
+                  <input id="banner-order"
                     type="number"
                     inputMode="numeric"
                     min={0}

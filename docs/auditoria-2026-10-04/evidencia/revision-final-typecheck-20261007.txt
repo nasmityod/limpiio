@@ -1,0 +1,5 @@
+
+> ecommerce-platform@0.1.0 typecheck
+> tsc --noEmit
+
+tests/email-delivery-provider.test.ts(104,330): error TS2353: Object literal may only specify known properties, and 'shippingZip' does not exist in type 'OrderConfirmationPayload'.

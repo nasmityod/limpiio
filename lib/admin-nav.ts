@@ -133,9 +133,9 @@ export function filterBottomNav(
 export function getActiveLabel(pathname: string): string {
   if (pathname === '/admin') return 'Mostrador';
   if (pathname === '/admin/menu') return 'Menú';
-  const found = FLAT_ADMIN_NAV.find(i =>
-    i.href !== '/admin' && pathname.startsWith(i.href),
-  );
+  const found = FLAT_ADMIN_NAV
+    .filter(i => i.href !== '/admin' && isItemActive(pathname, i.href))
+    .sort((a, b) => b.href.length - a.href.length)[0];
   return found?.label ?? 'Panel';
 }
 

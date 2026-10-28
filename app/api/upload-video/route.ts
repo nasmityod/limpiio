@@ -24,64 +24,20 @@ import {
 } from '@/lib/r2';
 import { prisma } from '@/lib/prisma';
 import { readFile } from 'fs/promises';
-import { deleteFromR2, keyFromR2PublicUrl } from '@/lib/r2';
+import { retireVideoAssets } from '@/lib/orphan-uploads';
 import { z } from 'zod';
 import { logError } from '@/lib/safe-logger';
+
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
 
 const MAX_BYTES = 95 * 1024 * 1024; // 95 MB — debajo del límite Cloudflare 100 MB
-const STALE_JOB_MS = 10 * 60_000;
 
 const deleteVideoSchema = z.object({
   url: z.string().url(),
   posterUrl: z.string().url().optional(),
 });
-
-async function safeDeleteR2Key(key: string, label: string): Promise<void> {
-  try {
-    await deleteFromR2(key);
-  } catch (err) {
-    logError('upload_video_r2_delete_failed', err, { provider: 'r2', operation: `delete_${label}` });
-  }
-}
-
-async function deleteVideoAssets(url: string, posterUrl?: string): Promise<void> {
-  const videoKey = keyFromR2PublicUrl(url);
-  if (videoKey) await safeDeleteR2Key(videoKey, 'video');
-
-  if (posterUrl) {
-    const posterKey = keyFromR2PublicUrl(posterUrl);
-    if (posterKey) await safeDeleteR2Key(posterKey, 'poster');
-  }
-
-  try {
-    await prisma.videoJob.updateMany({
-      where: { videoUrl: url },
-      data: { status: 'DELETED' },
-    });
-  } catch (err) {
-    logError('upload_video_job_mark_failed', err, { operation: 'mark_video_deleted' });
-  }
-}
-
-/** Marca trabajos PROCESSING antiguos como FAILED (reinicio del servidor o timeout). */
-async function markStaleVideoJobsFailed(): Promise<void> {
-  const cutoff = new Date(Date.now() - STALE_JOB_MS);
-  await prisma.videoJob.updateMany({
-    where: {
-      status: 'PROCESSING',
-      updatedAt: { lt: cutoff },
-    },
-    data: {
-      status: 'FAILED',
-      error: 'Procesamiento interrumpido (timeout o reinicio del servidor).',
-    },
-  });
-}
-
-void markStaleVideoJobsFailed();
 
 async function streamFileToDisk(
   file: File,
@@ -111,6 +67,11 @@ async function processVideoJob(
 ): Promise<void> {
   const outputPath = join(tmpDir, 'output.mp4');
   const posterJpgPath = join(tmpDir, 'poster.jpg');
+  const heartbeat = setInterval(() => {
+    void prisma.videoJob.updateMany({ where: { id: jobId, status: 'PROCESSING' }, data: { updatedAt: new Date() } })
+      .catch(error => logError('video_job_heartbeat_failed', error, { operation: 'video_job' }));
+  }, 30_000);
+  heartbeat.unref();
 
   try {
     await probeVideo(inputPath);
@@ -119,18 +80,28 @@ async function processVideoJob(
     const poster = await extractPoster(inputPath, posterJpgPath);
 
     const mp4Buffer = await readFile(outputPath);
-    await uploadToR2({
+    await prisma.$transaction(async tx => {
+      const job = await tx.videoJob.findUnique({ where: { id: jobId } });
+      if (!job || job.status !== 'PROCESSING') throw new Error('El trabajo de video ya no está activo.');
+      for (const url of [job.videoUrl, ...(job.posterUrl ? [job.posterUrl] : [])].sort()) {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${url}, 0))`;
+      }
+      const current = await tx.videoJob.findUnique({ where: { id: jobId }, select: { status: true } });
+      if (current?.status !== 'PROCESSING') throw new Error('El trabajo de video ya no está activo.');
+      // Retirement takes these locks too. Keep them until both immutable
+      // objects and their READY metadata exist, including the network writes.
+      await uploadToR2({
       buffer: mp4Buffer,
       key: videoKey,
       contentType: 'video/mp4',
     });
-    await uploadToR2({
+      await uploadToR2({
       buffer: poster.buffer,
       key: posterKey,
       contentType: poster.contentType,
     });
 
-    await prisma.videoJob.update({
+      await tx.videoJob.update({
       where: { id: jobId },
       data: {
         status: 'READY',
@@ -139,16 +110,16 @@ async function processVideoJob(
         durationS: probe.durationS,
         error: null,
       },
-    });
+      });
+    }, { timeout: 260_000 });
   } catch (err) {
     logError('upload_video_job_failed', err, { operation: 'process_video_job' });
     const message =
       err instanceof Error ? err.message : 'Error desconocido al procesar el video.';
-    await prisma.videoJob.update({
-      where: { id: jobId },
-      data: { status: 'FAILED', error: message },
-    });
+    try { await prisma.videoJob.updateMany({ where: { id: jobId, status: 'PROCESSING' }, data: { status: 'FAILED', error: message } }); }
+    catch (error) { logError('upload_video_failure_persist_failed', error, { operation: 'process_video_job' }); }
   } finally {
+    clearInterval(heartbeat);
     try {
       await rm(tmpDir, { recursive: true, force: true });
     } catch (cleanupErr) {
@@ -218,6 +189,7 @@ export async function POST(request: Request) {
     const job = await prisma.videoJob.create({
       data: {
         status: 'PROCESSING',
+        uploadedById: auth.access.userId,
         videoUrl,
         posterUrl,
       },
@@ -273,7 +245,8 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'Datos inválidos.' }, { status: 400 });
     }
 
-    await deleteVideoAssets(parsed.data.url, parsed.data.posterUrl);
+    const status = await retireVideoAssets(parsed.data.url, auth.access.userId, auth.access.isSuperAdmin);
+    if (status !== 200) return NextResponse.json({ error: status === 409 ? 'El video está en uso o todavía se está procesando.' : 'No puedes eliminar este archivo.' }, { status });
     return NextResponse.json({ ok: true });
   } catch (err) {
     logError('upload_video_delete_error', err, { operation: 'delete_video' });

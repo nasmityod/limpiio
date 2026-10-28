@@ -8,6 +8,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { BRAND } from "@/config/brand";
 import { prisma } from "@/lib/prisma";
+import { getCachedSiteShellData } from "@/lib/site-shell-cache";
 import { Search, Home, Tag, ArrowRight } from "lucide-react";
 
 export const metadata: Metadata = {
@@ -29,7 +30,7 @@ async function getFeaturedCategories() {
 }
 
 export default async function NotFound() {
-  const categories = await getFeaturedCategories();
+  const [categories, { settings }] = await Promise.all([getFeaturedCategories(), getCachedSiteShellData()]);
 
   return (
     <div className="min-h-[75vh] flex flex-col items-center justify-center px-4 py-16">
@@ -128,7 +129,7 @@ export default async function NotFound() {
       <p className="mt-14 text-xs text-slate-600">
         <span className="font-black tracking-tight">{BRAND.name}</span>
         {BRAND.tagline ? ` — ${BRAND.tagline}` : ''}
-        {" · Carrera 21 con esquina calle 21, Centro, Barquisimeto 3001"}
+        {settings.address ? ` · ${settings.address}` : ''}
       </p>
     </div>
   );

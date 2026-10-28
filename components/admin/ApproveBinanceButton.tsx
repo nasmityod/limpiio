@@ -23,7 +23,7 @@ export function ApproveBinanceButton({
 }) {
   const [pending, setPending] = useState(false);
 
-  if (order.status !== 'Pendiente verificación Binance') return null;
+  if (order.status !== 'Pendiente verificación Binance' || order.paidAt || order.casheaStatus) return null;
 
   const handleApprove = async () => {
     if (typeof window !== 'undefined' && !window.confirm(CONFIRM_MSG)) return;

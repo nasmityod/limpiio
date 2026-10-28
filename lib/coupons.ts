@@ -268,23 +268,33 @@ export async function redeemCouponInTransaction(
   const { couponId, maxUses, perUserLimit, orderId, userId, discountBs } = params;
   const normalizedUserId = userId && userId !== 'guest' ? userId : null;
 
-  let perUserSlot: number | null = null;
-  if (perUserLimit != null && normalizedUserId) {
-    const activeCount = await tx.couponRedemption.count({
-      where: activeRedemptionWhere(couponId, normalizedUserId),
-    });
-    if (activeCount >= perUserLimit) {
-      throw new Error(COUPON_PER_USER_LIMIT_REASON);
-    }
-    perUserSlot = activeCount + 1;
-  }
-
+  // Claim the coupon row before allocating a per-user slot. This serializes
+  // competing redemptions and refuses a stale limits snapshot edited by admin.
   const res = await tx.coupon.updateMany({
-    where: maxUses != null ? { id: couponId, usedCount: { lt: maxUses } } : { id: couponId },
+    where: {
+      id: couponId,
+      active: true,
+      maxUses,
+      perUserLimit,
+      ...(maxUses != null ? { usedCount: { lt: maxUses } } : {}),
+    },
     data: { usedCount: { increment: 1 } },
   });
-  if (res.count === 0) {
-    throw new Error(COUPON_GENERIC_INVALID_REASON);
+  if (res.count === 0) throw new Error(COUPON_GENERIC_INVALID_REASON);
+
+  let perUserSlot: number | null = null;
+  if (perUserLimit != null && normalizedUserId) {
+    const active = await tx.couponRedemption.findMany({
+      where: activeRedemptionWhere(couponId, normalizedUserId),
+      select: { perUserSlot: true },
+    });
+    if (active.length >= perUserLimit) {
+      throw new Error(COUPON_PER_USER_LIMIT_REASON);
+    }
+    const occupied = new Set(active.map((r) => r.perUserSlot));
+    perUserSlot = 1;
+    while (occupied.has(perUserSlot)) perUserSlot++;
+    if (perUserSlot > perUserLimit) throw new Error(COUPON_PER_USER_LIMIT_REASON);
   }
 
   try {
@@ -333,12 +343,13 @@ export async function revertCouponRedemptionInTransaction(
   });
   if (!redemption || redemption.revertedAt) return;
 
+  const claimed = await tx.couponRedemption.updateMany({
+    where: { id: redemption.id, revertedAt: null },
+    data: { revertedAt: new Date() },
+  });
+  if (claimed.count !== 1) return;
   await tx.coupon.updateMany({
     where: { id: redemption.couponId, usedCount: { gt: 0 } },
     data: { usedCount: { decrement: 1 } },
-  });
-  await tx.couponRedemption.update({
-    where: { id: redemption.id },
-    data: { revertedAt: new Date() },
   });
 }

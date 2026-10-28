@@ -101,7 +101,15 @@ export async function GET(request: Request): Promise<NextResponse> {
   // así una segunda petición concurrente con el mismo token pierde la carrera
   // (count 0) y no reconfirma ni reexpone nada.
   const consumed = await prisma.order.updateMany({
-    where: { id: order.id, casheaReturnTokenHash: tokenHash },
+    where: {
+      id: order.id,
+      casheaReturnTokenHash: tokenHash,
+      casheaStatus: { in: ['CREATED', 'REDIRECTED'] },
+      status: 'Pendiente',
+      paidAt: null,
+      stockDeducted: true,
+      casheaReservationExpiresAt: { gt: new Date() },
+    },
     data: {
       casheaReturnTokenHash: null,
       casheaReturnedAt: new Date(),

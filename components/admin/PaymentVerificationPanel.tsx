@@ -61,7 +61,7 @@ export function PaymentVerificationPanel({
   const isPending = order.status === 'Pendiente';
   const isVerified = !!order.paidAt && ['En Proceso', 'Enviado', 'Entregado'].includes(order.status);
   const isRejected = order.status === 'Cancelado' && !!order.paymentRejectionReason;
-  const canAct = isPending || isPendingBinance;
+  const canAct = (isPending || isPendingBinance) && !order.paidAt && !order.casheaStatus;
 
   // SESIÓN 04: solicitar URL del comprobante al abrir el panel (no al cargar la página).
   // No guarda en localStorage; limpia estado al cerrar (cleanup del effect).
@@ -182,7 +182,7 @@ export function PaymentVerificationPanel({
         </div>
       </dl>
 
-      {order.paymentDiscount != null && order.paymentDiscount > 0 && (
+      {canAct && order.paymentDiscount != null && order.paymentDiscount > 0 && (
         <div className="mt-3">
           <RevertDivisaDiscountButton order={order} onReverted={onUpdate} />
         </div>
@@ -262,7 +262,7 @@ export function PaymentVerificationPanel({
         <div className="mt-4 space-y-2">
           {isPendingBinance && (
             <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-              Confirma el pago en Binance con <strong>«Aprobar pago Binance»</strong>; luego usa <strong>«Validar pago»</strong> para preparar el envío.
+              Confirma el pago en Binance con <strong>«Aprobar pago Binance»</strong>. Esa acción valida el pago y pasa el pedido a En Proceso para preparar el envío.
             </p>
           )}
           <div className="flex flex-wrap gap-2">

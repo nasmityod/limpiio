@@ -2,7 +2,7 @@
 
 import { revalidatePath, revalidateTag } from 'next/cache';
 import { requirePermissionAction } from '@/lib/admin-access-server';
-import { storeSettingsSchema, writeSettings, type StoreSettings } from '@/lib/data-store';
+import { patchSettings, type StoreSettings } from '@/lib/data-store';
 import {
   pickGeneralSettingsDto,
   pickFinancialSettingsDto,
@@ -130,39 +130,22 @@ export async function updateGeneralStoreSettings(input: unknown): Promise<Genera
     };
   }
 
-  // Leer settings actuales y mezclar solo los campos generales
-  const { readSettings } = await import('@/lib/data-store');
-  const current = await readSettings();
-  const merged: StoreSettings = {
-    ...current,
-    storeName:          parsed.data.storeName,
-    tagline:            parsed.data.tagline,
-    phone:              parsed.data.phone,
-    phone2:             parsed.data.phone2,
-    email:              parsed.data.email,
-    address:            parsed.data.address,
-    instagram:          parsed.data.instagram,
-    facebook:           parsed.data.facebook,
-    labelWidthMm:       parsed.data.labelWidthMm,
-    labelHeightMm:      parsed.data.labelHeightMm,
-    whatsappOrderPhone: parsed.data.whatsappOrderPhone,
-  };
-
-  // Validar el objeto completo antes de guardar
-  const fullParsed = storeSettingsSchema.safeParse(merged);
-  if (!fullParsed.success) {
-    return { success: false, message: 'Error al combinar configuración.' };
+  let saved: StoreSettings;
+  try {
+    saved = await patchSettings(parsed.data);
+  } catch {
+    return { success: false, message: 'No se pudo guardar la configuración. Tus cambios se conservan; vuelve a intentarlo.' };
   }
-
-  await writeSettings(fullParsed.data);
   revalidatePath('/', 'layout');
   revalidatePath('/admin/settings');
   revalidateTag('store-settings', 'default');
+  revalidateTag('site-shell', 'default');
+  revalidateTag('settings', 'default');
 
   return {
     success: true,
     message: 'Configuración general guardada.',
-    data: pickGeneralSettingsDto(fullParsed.data),
+    data: pickGeneralSettingsDto(saved),
   };
 }
 
@@ -203,43 +186,22 @@ export async function updateFinancialSettings(input: unknown): Promise<Financial
     };
   }
 
-  // Leer settings actuales y mezclar solo los campos financieros
-  const { readSettings } = await import('@/lib/data-store');
-  const current = await readSettings();
-  const merged: StoreSettings = {
-    ...current,
-    pagoMovil:    parsed.data.pagoMovil,
-    transferencia: parsed.data.transferencia,
-    binancePayId: parsed.data.binancePayId,
-    binanceQrUrl: parsed.data.binanceQrUrl,
-    paymentMethods: methodsResult.methods,
-    divisaDiscountEnabled: parsed.data.divisaDiscountEnabled,
-    divisaDiscountPercent: parsed.data.divisaDiscountPercent,
-  };
-
-  const fullParsed = storeSettingsSchema.safeParse(merged);
-  if (!fullParsed.success) {
-    const errors: Record<string, string[]> = {};
-    for (const issue of fullParsed.error.issues) {
-      const key = issue.path.join('.') || '_root';
-      (errors[key] ??= []).push(issue.message);
-    }
-    return {
-      success: false,
-      message: 'Error al combinar configuración financiera.',
-      errors,
-    };
+  let saved: StoreSettings;
+  try {
+    saved = await patchSettings({ ...parsed.data, paymentMethods: methodsResult.methods });
+  } catch {
+    return { success: false, message: 'No se pudo guardar la configuración financiera. Comprueba los datos y vuelve a intentarlo.' };
   }
-
-  await writeSettings(fullParsed.data);
   revalidatePath('/', 'layout');
   revalidatePath('/admin/settings');
   revalidateTag('store-settings', 'default');
+  revalidateTag('site-shell', 'default');
+  revalidateTag('settings', 'default');
 
   return {
     success: true,
     message: 'Configuración financiera guardada.',
-    data: pickFinancialSettingsDto(fullParsed.data),
+    data: pickFinancialSettingsDto(saved),
   };
 }
 

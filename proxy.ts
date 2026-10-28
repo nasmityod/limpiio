@@ -126,7 +126,7 @@ function matchesPrefix(pathname: string, prefix: string): boolean {
  * | whatsapp      | público   | público (guest)   | no usados (404)       |
  * | full          | JWT       | JWT (401 sin él)  | JWT (401 sin él)      |
  */
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const nonce = Buffer.from(globalThis.crypto.randomUUID()).toString('base64');
   const { pathname } = req.nextUrl;
   const publicCached = isPublicCached(pathname);
@@ -216,10 +216,13 @@ export async function middleware(req: NextRequest) {
       matchesPrefix(pathname, '/api/checkout'));
 
   if (isAdminUiPath || isApiAdminPath || isProtectedPath || isAdminWriteApi || isUserTokenApi) {
-    const token = await getToken({
-      req,
-      secret: process.env.NEXTAUTH_SECRET,
-    });
+    let token;
+    try {
+      token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+    } catch {
+      // Malformed credentials remain unauthenticated, even if token parsing fails.
+      token = null;
+    }
 
     if (isAdminUiPath || isApiAdminPath || isAdminWriteApi) {
       /*

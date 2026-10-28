@@ -89,7 +89,7 @@ function baseOrder(overrides: Record<string, unknown> = {}) {
 }
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
   isCasheaEnabledMock.mockReturnValue(true);
   rejectInvalidMutationOriginMock.mockReturnValue(null);
   rateLimitCriticalMock.mockResolvedValue({ limited: false, retryAfterSeconds: 0 });
@@ -106,7 +106,7 @@ beforeEach(() => {
       },
     }),
   );
-  txFindUniqueMock.mockResolvedValue(baseOrder({ items: [{ productId: 'prod-1', quantity: 2 }] }));
+  txFindUniqueMock.mockResolvedValue(baseOrder({ casheaStatus: 'CANCEL_PENDING', items: [{ productId: 'prod-1', quantity: 2 }] }));
   txUpdateManyMock.mockResolvedValue({ count: 1 });
 });
 
@@ -205,6 +205,15 @@ describe('POST /api/cashea/cancel', () => {
     expect(applyOrderCancellationEffectsInTransactionMock).not.toHaveBeenCalled();
   });
 
+  it('claim perdido impide llamar al proveedor y ejecutar efectos locales', async () => {
+    updateManyMock.mockResolvedValueOnce({ count: 0 });
+    const res = await POST(buildRequest({ orderId: 'order-1' }));
+    expect(res.status).toBe(409);
+    expect(cancelCasheaOrderMock).not.toHaveBeenCalled();
+    expect(transactionMock).not.toHaveBeenCalled();
+    expect(applyOrderCancellationEffectsInTransactionMock).not.toHaveBeenCalled();
+  });
+
   it('cancelCasheaOrder falla en remoto -> 502, no cancela localmente', async () => {
     cancelCasheaOrderMock.mockResolvedValue({ ok: false, status: 500 });
 
@@ -234,13 +243,15 @@ describe('POST /api/cashea/cancel', () => {
     expect(txUpdateManyMock).toHaveBeenCalledWith({
       where: {
         id: 'order-1',
-        casheaStatus: 'RETURNED',
+        casheaStatus: 'CANCEL_PENDING',
         status: 'Pendiente',
+        updatedAt: undefined,
       },
       data: {
         status: 'Cancelado',
         casheaStatus: 'CANCELLED',
         casheaCancelledAt: expect.any(Date),
+        casheaReturnTokenHash: null,
       },
     });
     expect(txUpdateMock).not.toHaveBeenCalled();
@@ -283,7 +294,7 @@ describe('POST /api/cashea/cancel', () => {
   it('Cashea concurrente: efectos locales una vez; segundo request idempotente', async () => {
     // Primera: gana transición
     txFindUniqueMock.mockResolvedValueOnce(
-      baseOrder({ items: [{ productId: 'prod-1', quantity: 2 }] }),
+      baseOrder({ casheaStatus: 'CANCEL_PENDING', items: [{ productId: 'prod-1', quantity: 2 }] }),
     );
     txUpdateManyMock.mockResolvedValueOnce({ count: 1 });
 
@@ -291,24 +302,24 @@ describe('POST /api/cashea/cancel', () => {
     expect(res1.status).toBe(200);
     expect(applyOrderCancellationEffectsInTransactionMock).toHaveBeenCalledTimes(1);
 
-    // Segunda: lee snapshot pre-cancel, efectos corren, transición pierde → CANCELLED
+    // Segunda: lee snapshot pre-cancel; pierde la transición y no ejecuta efectos.
     txFindUniqueMock
-      .mockResolvedValueOnce(baseOrder({ items: [{ productId: 'prod-1', quantity: 2 }] }))
+      .mockResolvedValueOnce(baseOrder({ casheaStatus: 'CANCEL_PENDING', items: [{ productId: 'prod-1', quantity: 2 }] }))
       .mockResolvedValueOnce({ casheaStatus: 'CANCELLED' });
     txUpdateManyMock.mockResolvedValueOnce({ count: 0 });
 
     const res2 = await POST(buildRequest({ orderId: 'order-1' }));
     const body2 = await res2.json();
-    expect(res2.status).toBe(200);
-    expect(body2).toEqual({ ok: true, status: 'CANCELLED' });
-    // apply se invocó otra vez (antes de saber que perdió), pero no hay segunda
-    // afirmación de transición ganada; el inventario real lo protege el claim.
+    expect(res2.status).toBe(409);
+    expect(body2.message).toBeTruthy();
+    expect(applyOrderCancellationEffectsInTransactionMock).toHaveBeenCalledTimes(1);
+    // Solo el primer request ejecutó la devolución de stock.
     expect(txUpdateManyMock).toHaveBeenCalledTimes(2);
   });
 
   it('Cashea transición perdida a CONFIRMED -> 409 sin inventario afirmado', async () => {
     txFindUniqueMock
-      .mockResolvedValueOnce(baseOrder({ items: [{ productId: 'prod-1', quantity: 2 }] }))
+      .mockResolvedValueOnce(baseOrder({ casheaStatus: 'CANCEL_PENDING', items: [{ productId: 'prod-1', quantity: 2 }] }))
       .mockResolvedValueOnce({ casheaStatus: 'CONFIRMED' });
     txUpdateManyMock.mockResolvedValueOnce({ count: 0 });
 

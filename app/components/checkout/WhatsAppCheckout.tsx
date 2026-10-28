@@ -1,5 +1,7 @@
 'use client';
 
+import { getCheckoutAttemptKey, finishCheckoutAttempt } from '@/lib/checkout-attempt';
+
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
@@ -289,7 +291,7 @@ const WhatsAppCheckout = ({
 
       const response = await fetch('/api/orders', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': await getCheckoutAttemptKey(orderPayload) },
         body: JSON.stringify(orderPayload),
       });
 
@@ -322,6 +324,7 @@ const WhatsAppCheckout = ({
 
       // pedido creado con éxito → bloquear el redirect al carrito
       orderPlacedRef.current = true;
+      finishCheckoutAttempt();
       clearCart();
 
       if (!whatsappOrderPhone) {

@@ -186,12 +186,12 @@ export default async function NosotrosPage() {
               {
                 icon: Store,
                 title: 'Local físico verificable',
-                desc: 'Carrera 21 con esquina calle 21, Centro, Barquisimeto 3001. Búscanos en Google Maps o pasa a saludar.',
+                desc: settings.address ? `${settings.address}. Búscanos en Google Maps o pasa a saludar.` : 'Búscanos en Google Maps o consulta nuestra ubicación antes de visitarnos.',
               },
               {
                 icon: Clock,
                 title: 'Retiro en tienda el mismo día',
-                desc: 'Compra por la web y recoge en Carrera 21 cuando te convenga.',
+                desc: settings.address ? `Compra por la web y recoge en ${settings.address}.` : 'Compra por la web y coordina el retiro con la tienda.',
               },
               {
                 icon: Wallet,

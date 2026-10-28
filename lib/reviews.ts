@@ -6,8 +6,8 @@
 import type { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
-import { isR2PublicUrl, keyFromR2PublicUrl, deleteFromR2 } from '@/lib/r2';
-import { logError } from '@/lib/safe-logger';
+import { isR2PublicUrl, keyFromR2PublicUrl } from '@/lib/r2';
+export { reviewPhotoPrefix, reviewPhotosBelongToUser, deleteReviewPhotosFromR2, claimReviewPhotos, ReviewPhotoError } from '@/lib/review-photo-assets';
 import type { OrderStatus, Review, ReviewStatus, ReviewSummary } from '@/lib/definitions';
 
 type DbClient = Prisma.TransactionClient;
@@ -40,23 +40,6 @@ export const reviewInputSchema = z.object({
 });
 
 export type ReviewInput = z.infer<typeof reviewInputSchema>;
-
-/**
- * Borra de R2 las fotos de una reseña (best-effort). SEC-2026-09 (#21): antes
- * nada purgaba `reviews/*` — cada foto subida quedaba para siempre en el CDN
- * público aunque la reseña se borrara o la foto se retirara.
- */
-export async function deleteReviewPhotosFromR2(urls: readonly string[]): Promise<void> {
-  for (const url of urls) {
-    const key = keyFromR2PublicUrl(url);
-    if (!key || !key.startsWith('reviews/')) continue;
-    try {
-      await deleteFromR2(key);
-    } catch (err) {
-      logError('review_photo_r2_delete_failed', err, { operation: 'delete_review_photo', provider: 'r2' });
-    }
-  }
-}
 
 /**
  * Mapea un registro Prisma de Review al tipo de UI.

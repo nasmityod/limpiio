@@ -1,0 +1,15 @@
+# Solo se despliega el código necesario para Next.js y Prisma.
+# La documentación operativa, auditorías y fixtures no deben viajar a Vercel.
+docs/
+backups/
+deploy/
+e2e/
+tests/
+scripts/
+.github/
+.claude/
+.cleanup/
+AGENTS.md
+CLAUDE.md
+playwright.config.ts
+vitest.config.ts

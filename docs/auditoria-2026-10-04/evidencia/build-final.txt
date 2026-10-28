@@ -1,0 +1,180 @@
+▲ Next.js 16.3.8 (Turbopack)
+✓ Running next.config.mjs took 18ms
+Warning: Custom Cache-Control headers detected for the following routes:
+  - /_next/static/:path*
+
+Setting a custom Cache-Control header can break Next.js development behavior.
+- Experiments (use with caution):
+  · optimizePackageImports
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 3.9s
+  Running TypeScript ...
+
+  We detected TypeScript in your project and reconfigured your tsconfig.json file for you.
+  The following suggested values were added to your tsconfig.json. These values can be changed to fit your project's needs:
+
+  	- include was updated to add '.next-audit-prod-second/types/**/*.ts'
+  	- include was updated to add '.next-audit-prod-second/dev/types/**/*.ts'
+
+  Finished TypeScript in 13.2s ...
+  Collecting page data using 11 workers ...
+  Generating static pages using 11 workers (0/69) ...
+  Generating static pages using 11 workers (17/69) 
+{"timestamp":"2026-10-07T15:18:14.896Z","level":"info","event":"site_shell_build","context":{"route":"lib/site-shell-cache"}}
+{"timestamp":"2026-10-07T15:18:14.938Z","level":"info","event":"site_shell_build","context":{"route":"lib/site-shell-cache"}}
+{"timestamp":"2026-10-07T15:18:14.956Z","level":"info","event":"site_shell_build","context":{"route":"lib/site-shell-cache"}}
+{"timestamp":"2026-10-07T15:18:14.963Z","level":"info","event":"site_shell_build","context":{"route":"lib/site-shell-cache"}}
+{"timestamp":"2026-10-07T15:18:14.967Z","level":"info","event":"site_shell_build","context":{"route":"lib/site-shell-cache"}}
+{"timestamp":"2026-10-07T15:18:14.970Z","level":"info","event":"site_shell_build","context":{"route":"lib/site-shell-cache"}}
+{"timestamp":"2026-10-07T15:18:14.971Z","level":"info","event":"site_shell_build","context":{"route":"lib/site-shell-cache"}}
+{"timestamp":"2026-10-07T15:18:14.973Z","level":"info","event":"site_shell_build","context":{"route":"lib/site-shell-cache"}}
+{"timestamp":"2026-10-07T15:18:15.035Z","level":"info","event":"site_shell_build","context":{"route":"lib/site-shell-cache"}}
+{"timestamp":"2026-10-07T15:18:15.187Z","level":"info","event":"site_shell_build","context":{"route":"lib/site-shell-cache"}}
+{"timestamp":"2026-10-07T15:18:15.200Z","level":"info","event":"site_shell_build","context":{"route":"lib/site-shell-cache"}}
+{"timestamp":"2026-10-07T15:18:15.220Z","level":"info","event":"site_shell_build","context":{"route":"lib/site-shell-cache"}}
+{"timestamp":"2026-10-07T15:18:15.223Z","level":"info","event":"site_shell_build","context":{"route":"lib/site-shell-cache"}}
+{"timestamp":"2026-10-07T15:18:15.226Z","level":"info","event":"site_shell_build","context":{"route":"lib/site-shell-cache"}}
+{"timestamp":"2026-10-07T15:18:15.230Z","level":"info","event":"site_shell_build","context":{"route":"lib/site-shell-cache"}}
+{"timestamp":"2026-10-07T15:18:15.232Z","level":"info","event":"site_shell_build","context":{"route":"lib/site-shell-cache"}}
+  Generating static pages using 11 workers (34/69) 
+  Generating static pages using 11 workers (51/69) 
+✓ Generating static pages using 11 workers (69/69) in 1320ms
+  Finalizing page optimization ...
+
+Route (app)                                  Revalidate  Expire
+┌ ○ /                                                5m      1y
+├ ○ /_not-found                                      5m      1y
+├ ƒ /account
+├ ƒ /account/addresses
+├ ƒ /account/details
+├ ƒ /account/orders
+├ ƒ /account/orders/[id]
+├ ○ /account/password                                5m      1y
+├ ƒ /admin
+├ ƒ /admin/banners
+├ ƒ /admin/categories
+├ ƒ /admin/coupons
+├ ƒ /admin/home-manager
+├ ƒ /admin/menu
+├ ƒ /admin/operations
+├ ƒ /admin/orders
+├ ƒ /admin/orders/[id]
+├ ƒ /admin/orders/[id]/etiqueta
+├ ƒ /admin/personalizar
+├ ƒ /admin/products
+├ ƒ /admin/reviews
+├ ƒ /admin/settings
+├ ƒ /admin/settings/announcement
+├ ƒ /admin/settings/seo-local
+├ ƒ /admin/settings/users
+├ ƒ /admin/stats
+├ ƒ /admin/unauthorized
+├ ƒ /api/account/confirm-email
+├ ƒ /api/admin/migrate-slugs
+├ ƒ /api/admin/operations-health
+├ ƒ /api/admin/product-costs
+├ ƒ /api/admin/products/export.csv
+├ ƒ /api/admin/products/search
+├ ƒ /api/admin/stats
+├ ƒ /api/auth/[...nextauth]
+├ ƒ /api/banners
+├ ƒ /api/banners/[id]
+├ ƒ /api/cart
+├ ƒ /api/cart/items
+├ ƒ /api/cart/items/[productId]
+├ ƒ /api/cart/merge
+├ ƒ /api/cart/recover
+├ ƒ /api/cart/unsubscribe
+├ ƒ /api/cashea/cancel
+├ ƒ /api/cashea/session
+├ ƒ /api/categories
+├ ƒ /api/categories/[id]
+├ ƒ /api/categories/sync
+├ ƒ /api/checkout/upload-proof
+├ ƒ /api/checkout/upload-session
+├ ƒ /api/config/exchange-rate
+├ ƒ /api/config/homepage
+├ ƒ /api/coupons
+├ ƒ /api/coupons/[id]
+├ ƒ /api/coupons/validate
+├ ƒ /api/cron/abandoned-cart
+├ ƒ /api/cron/auto-cancel-orders
+├ ƒ /api/cron/cashea-reconcile
+├ ƒ /api/cron/email-delivery
+├ ƒ /api/cron/purge-orphan-uploads
+├ ƒ /api/cron/purge-payment-uploads
+├ ƒ /api/cron/purge-product-views
+├ ƒ /api/cron/purge-temporary-data
+├ ƒ /api/cron/review-request
+├ ƒ /api/cron/update-bcv-rate
+├ ƒ /api/events/top-viewed
+├ ƒ /api/events/view
+├ ƒ /api/health
+├ ƒ /api/merchant-feed
+├ ƒ /api/orders
+├ ƒ /api/orders/[id]
+├ ƒ /api/orders/[id]/approve-binance
+├ ƒ /api/orders/[id]/cashea-verify
+├ ƒ /api/orders/[id]/payment-proof
+├ ƒ /api/orders/[id]/resend-confirmation
+├ ƒ /api/orders/[id]/revert-divisa-discount
+├ ƒ /api/orders/[id]/status
+├ ƒ /api/orders/bulk-status-update
+├ ƒ /api/orders/export.csv
+├ ƒ /api/orders/new-count
+├ ƒ /api/products/[id]/reviews
+├ ƒ /api/promotions
+├ ƒ /api/promotions/[id]
+├ ƒ /api/reviews
+├ ƒ /api/reviews/[id]
+├ ƒ /api/reviews/auto-approve
+├ ƒ /api/reviews/upload-photo
+├ ƒ /api/settings
+├ ƒ /api/settings/financial
+├ ƒ /api/settings/general
+├ ƒ /api/upload
+├ ƒ /api/upload-video
+├ ƒ /api/upload-video/status
+├ ○ /apple-icon.png
+├ ƒ /buscar
+├ ƒ /cart
+├ ƒ /cart/unsubscribe/confirm
+├ ƒ /categoria/[slug]
+├ ƒ /checkout
+├ ƒ /checkout/cashea/return
+├ ƒ /checkout/success
+├ ○ /devoluciones                                    5m      1y
+├ ○ /forgot-password                                 5m      1y
+├ ○ /icon.svg
+├ ƒ /indexnow.txt
+├ ƒ /login
+├ ƒ /manifest.webmanifest
+├ ○ /nosotros                                        5m      1y
+├ ƒ /ofertas
+├ ○ /opengraph-image                                 5m      1y
+├ ○ /pedido                                          5m      1y
+├ ○ /privacy-policy                                  5m      1y
+├   /product/[slug]
+│ ├ ● /product/cargador-usb-c-test                   5m      1y
+│ └ ● /product/audifonos-bluetooth-test              5m      1y
+├ ƒ /productos
+├ ○ /register                                        5m      1y
+├ ƒ /registro
+├ ○ /reset-password                                  5m      1y
+├ ○ /robots.txt
+├ ○ /shipping-policy                                 5m      1y
+├ ○ /sitemap.xml                                     5m      1y
+├ ƒ /sitemaps/[kind]/[page]
+├ ƒ /sitemaps/static.xml
+├ ○ /terms-of-service                                5m      1y
+├ ○ /tienda-barquisimeto                             5m      1y
+└ ○ /wishlist                                        5m      1y
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+●  (SSG)      prerendered as static HTML (uses generateStaticParams)
+ƒ  (Dynamic)  server-rendered on demand
+

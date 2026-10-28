@@ -8,12 +8,8 @@
  * @see lib/exchange-rate.ts (funciones puras y helpers compartidos)
  */
 import 'server-only';
-import { prisma } from '@/lib/prisma';
-import {
-  EXCHANGE_RATE_APP_CONFIG_KEY,
-  EXCHANGE_RATE_BCV_DATE_KEY,
-  parseExchangeRateFromConfigValue,
-} from '@/lib/exchange-rate';
+import { readExchangeRateStatus } from '@/lib/exchange-rate-status';
+import type { ExchangeRateStatus } from '@/lib/exchange-rate-status';
 
 /**
  * Lee la tasa guardada y su timestamp desde AppConfig para hidratación
@@ -23,20 +19,6 @@ import {
  * default, y `updatedAt` es ISO string del último cambio o null si no hay
  * datos.
  */
-export async function getExchangeRateWithTimestamp(): Promise<{
-  rate: number;
-  updatedAt: string | null;
-}> {
-  const rows = await prisma.appConfig.findMany({
-    where: { key: { in: [EXCHANGE_RATE_APP_CONFIG_KEY, EXCHANGE_RATE_BCV_DATE_KEY] } },
-    select: { key: true, value: true, updatedAt: true },
-  });
-
-  const rateRow = rows.find(r => r.key === EXCHANGE_RATE_APP_CONFIG_KEY);
-  const rate = parseExchangeRateFromConfigValue(rateRow?.value);
-
-  const dateRow = rows.find(r => r.key === EXCHANGE_RATE_BCV_DATE_KEY);
-  const updatedAt = rateRow?.updatedAt?.toISOString() ?? dateRow?.value ?? null;
-
-  return { rate, updatedAt };
+export async function getExchangeRateWithTimestamp(): Promise<ExchangeRateStatus> {
+  return readExchangeRateStatus();
 }

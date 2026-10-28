@@ -77,28 +77,11 @@ function setFullValidConfig(): void {
   process.env.NEXT_PUBLIC_CASHEA_PUBLIC_API_KEY = 'test-public-key';
 }
 
-describe('getCasheaConfig — flag on completo (ok)', () => {
-  it('devuelve la configuración completa sin lanzar', () => {
+describe('Cashea activation readiness', () => {
+  it('blocks a fully configured flag while the authoritative adapter is missing', () => {
     setFullValidConfig();
-
-    const config = getCasheaConfig();
-
-    expect(config.enabled).toBe(true);
-    expect(config.publicEnabled).toBe(true);
-    expect(config.apiBaseUrl).toBe('https://sandbox.cashea.example/api');
-    expect(config.privateApiKey).toBe('test-private-key');
-    expect(config.externalClientId).toBe('client-123');
-    expect(config.storeId).toBe(42);
-    expect(config.storeName).toBe('Tienda Demo');
-    expect(config.merchantName).toBe('Tienda Demo VE');
-    expect(config.publicApiKey).toBe('test-public-key');
-    expect(config.currency).toBe('USD');
-    expect(config.deliveryPrice).toBe(0);
-  });
-
-  it('isCasheaEnabled() devuelve true', () => {
-    setFullValidConfig();
-    expect(isCasheaEnabled()).toBe(true);
+    expect(() => getCasheaConfig()).toThrow(/adaptador autoritativo/);
+    expect(isCasheaEnabled()).toBe(false);
   });
 });
 

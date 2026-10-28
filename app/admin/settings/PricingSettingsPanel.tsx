@@ -61,12 +61,13 @@ export function PricingSettingsPanel({ bcvDate }: { bcvDate: string | null }) {
   }, []);
 
   const handleRateUpdate = () => {
-    const rate = parseFloat(newRate);
+    const rate = Number(newRate);
     if (isNaN(rate) || rate <= 0) {
       setRateMsg({ ok: false, text: 'Ingresa un número positivo válido.' });
       return;
     }
     startRateTransition(async () => {
+      try {
       const result = await updateExchangeRate(rate);
       setRateMsg({ ok: result.success, text: result.message });
       if (result.success) {
@@ -74,33 +75,38 @@ export function PricingSettingsPanel({ bcvDate }: { bcvDate: string | null }) {
         router.refresh();
       }
       setTimeout(() => setRateMsg(null), 4000);
+      } catch { setRateMsg({ ok: false, text: 'No se pudo guardar. Vuelve a intentarlo.' }); }
     });
   };
 
   const handlePricingUpdate = () => {
     startPricingTransition(async () => {
+      try {
       // marginPct se mantiene en estado técnico (requerido por updatePricingParams)
       // pero no se presenta como margen global editable.
       const result = await updatePricingParams({ marginPct, factor });
       setPricingMsg({ ok: result.success, text: result.message });
       if (result.success) router.refresh();
       setTimeout(() => setPricingMsg(null), 4000);
+      } catch { setPricingMsg({ ok: false, text: 'No se pudo guardar. Vuelve a intentarlo.' }); }
     });
   };
 
   const handleRecalc = () => {
     if (
       !window.confirm(
-        'Esto recalculará el precio de TODOS los productos con costo, usando la tasa actual y el margen guardado de cada producto. Las ofertas conservan su % de descuento, y los productos con precio manual (sin costo) no se tocan. ¿Continuar?',
+        'Esto recalculará el precio de TODOS los productos con costo, usando la tasa actual y el margen guardado de cada producto. Las ofertas conservan su % de descuento, y los precios manuales se ajustan por la proporción de tasas. ¿Continuar?',
       )
     ) {
       return;
     }
     startRecalcTransition(async () => {
+      try {
       const result = await recalculateAllProductPrices();
       setRecalcMsg({ ok: result.success, text: result.message });
       if (result.success) router.refresh();
       setTimeout(() => setRecalcMsg(null), 6000);
+      } catch { setRecalcMsg({ ok: false, text: 'No se pudo recalcular. Vuelve a intentarlo.' }); }
     });
   };
 
@@ -196,8 +202,8 @@ export function PricingSettingsPanel({ bcvDate }: { bcvDate: string | null }) {
 
       <SectionCard title="Recalcular catálogo" icon={AlertTriangle}>
         <HelpCallout variant="danger">
-          Recalcula únicamente productos con costo utilizando su margen guardado. Los productos con
-          precio manual no cambian y las ofertas conservan su descuento.
+          Recalcula productos con costo utilizando su margen guardado. Los productos con
+          precio manual se ajustan por la proporción de tasas y las ofertas conservan su descuento.
         </HelpCallout>
         <p className="text-xs text-gray-500">
           No se ejecuta automáticamente al cambiar la tasa. Confirma antes de continuar.

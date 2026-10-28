@@ -178,4 +178,14 @@ describe('DataTable — selección y estados', () => {
     );
     expect(screen.getByText('Nada por aquí.')).toBeTruthy();
   });
+
+  it('las cards con acciones usan botones hermanos y casillas con nombre accesible', async () => {
+    const Table = await loadTable(false);
+    const { container } = render(<Table<Row> data={makeRows(1)} columns={columns} rowKey={r => r.id}
+      onRowClick={vi.fn()} actions={() => <button type="button">Editar</button>} selectable onSelectionChange={vi.fn()} />);
+    expect(container.querySelector('button button')).toBeNull();
+    expect(container.querySelector('button input')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Abrir registro r0' })).toBeTruthy();
+    expect(screen.getByRole('checkbox', { name: 'Seleccionar registro r0' })).toBeTruthy();
+  });
 });

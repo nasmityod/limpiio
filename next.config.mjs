@@ -3,7 +3,7 @@ import withBundleAnalyzer from '@next/bundle-analyzer';
 /** @type {import('next').NextConfig} */
 /**
  * Headers estáticos que no requieren nonce por petición.
- * El Content-Security-Policy (con nonce dinámico por request) lo genera middleware.ts,
+ * El Content-Security-Policy (con nonce dinámico por request) lo genera proxy.ts,
  * que cubre todas las rutas HTML excepto _next/static y _next/image.
  */
 const securityHeaders = [
@@ -43,6 +43,7 @@ const nextConfig = {
 
   // PRD-071: no exponer el framework al servidor ("X-Powered-By: Next.js").
   poweredByHeader: false,
+  agentRules: false,
 
   experimental: {
     optimizePackageImports: ['lucide-react', 'framer-motion'],
@@ -58,11 +59,13 @@ const nextConfig = {
         headers: securityHeaders,
       },
       {
-        source: '/_next/static/:path*',
-        headers: [
-          { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
-        ],
+        source: '/admin/settings/seo-local',
+        headers: [{ key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(self)' }],
       },
+      ...(process.env.NODE_ENV === 'production' ? [{
+        source: '/_next/static/:path*',
+        headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }],
+      }] : []),
       {
         source: '/icon.svg',
         headers: [

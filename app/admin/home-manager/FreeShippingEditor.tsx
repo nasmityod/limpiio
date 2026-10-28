@@ -82,7 +82,7 @@ export default function FreeShippingEditor({
         return;
       }
       const snapshot = cloneFreeShipping(payload);
-      setDraft(cloneFreeShipping(snapshot));
+      setDraft(current => JSON.stringify(current) === JSON.stringify(draft) ? cloneFreeShipping(snapshot) : current);
       setSaved(cloneFreeShipping(snapshot));
       onSaved?.(cloneFreeShipping(snapshot));
       setStatus('saved');

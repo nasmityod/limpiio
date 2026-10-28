@@ -1,6 +1,8 @@
 'use client';
 
-import { useEffect, useState, useTransition } from 'react';
+import { useAdminDialog } from '@/hooks/useAdminDialog';
+
+import { useEffect, useState, useTransition, useCallback, useRef } from 'react';
 import {
   Ticket, Plus, Edit, Trash2, Check, X, Loader2, AlertCircle, Power,
 } from 'lucide-react';
@@ -40,50 +42,55 @@ export default function AdminCouponsPage() {
   const [editing, setEditing] = useState<Coupon | null>(null);
   const [creating, setCreating] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
-  /** El endpoint acota el listado; si hay más se avisa en vez de ocultarlo. */
-  const [truncatedTotal, setTruncatedTotal] = useState<number | null>(null);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [query, setQuery] = useState('');
+  const [status, setStatus] = useState('all');
+  const requestSeq = useRef(0);
+  const busyIds = useRef(new Set<string>());
 
-  const fetchCoupons = async () => {
+  const fetchCoupons = useCallback(async () => {
+    const seq = ++requestSeq.current;
     setLoading(true);
     try {
-      const res = await fetch('/api/coupons');
-      if (res.ok) {
-        const rows = (await res.json()) as Coupon[];
-        setCoupons(rows);
-        setTruncatedTotal(
-          res.headers.get('X-Truncated') === '1'
-            ? Number(res.headers.get('X-Total-Count') ?? 0)
-            : null,
-        );
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
+      const qs = new URLSearchParams({ page: String(page), pageSize: '25', q: query.trim(), status });
+      const res = await fetch(`/api/coupons?${qs}`);
+      if (!res.ok) throw new Error('No se pudieron cargar los cupones.');
+      const data = await res.json();
+      if (seq !== requestSeq.current) return;
+      setCoupons(data.items); setTotal(data.total);
+      if (data.items.length === 0 && page > 1) setPage(p => Math.max(1, p - 1));
+    } catch {
+      if (seq === requestSeq.current) setFeedback({ type: 'error', msg: 'No se pudieron cargar los cupones. Vuelve a intentarlo.' });
+    } finally { if (seq === requestSeq.current) setLoading(false); }
+  }, [page, query, status]);
 
-  useEffect(() => { fetchCoupons(); }, []);
+  useEffect(() => { const timer = setTimeout(() => void fetchCoupons(), 250); return () => { clearTimeout(timer); }; }, [fetchCoupons]);
 
   const flash = (type: 'success' | 'error', msg: string) => {
     setFeedback({ type, msg });
-    setTimeout(() => setFeedback(null), 3500);
+    if (type === 'success') setTimeout(() => setFeedback(current => current?.type === 'success' ? null : current), 3500);
   };
 
   const handleDelete = async (c: Coupon) => {
-    // PRD-245: con usos registrados, borrar deja Order.couponCode huérfano
-    // (PRD-158 → 02). Advertencia explícita de pérdida de historial; la
-    // alternativa segura recomendada es desactivar.
-    const warning = c.usedCount > 0
-      ? `El cupón "${c.code}" ya fue usado en ${c.usedCount} pedido${c.usedCount !== 1 ? 's' : ''}.\n\nAl eliminarlo, esos pedidos conservarán el código pero se perderá el registro del cupón (historial/auditoría). Si solo quieres que deje de funcionar, usa «Desactivar».\n\n¿Eliminar de todas formas?`
-      : `¿Eliminar el cupón "${c.code}"? Esta acción no se puede deshacer.`;
+    if (busyIds.current.has(c.id)) return;
+    const warning = `El cupón "${c.code}" se desactivará conservando su código y el historial de usos. ¿Continuar?`;
     if (!confirm(warning)) return;
+    busyIds.current.add(c.id);
+    try {
     const res = await fetch(`/api/coupons/${c.id}`, { method: 'DELETE' });
-    if (res.ok) { flash('success', 'Cupón eliminado.'); fetchCoupons(); }
+    if (res.ok) { flash('success', 'Cupón desactivado; historial conservado.'); fetchCoupons(); }
     else flash('error', 'No se pudo eliminar.');
+    } catch { flash('error', 'Error de conexión. El estado no se pudo confirmar.'); }
+    finally { busyIds.current.delete(c.id); }
   };
 
   const handleToggleActive = async (c: Coupon) => {
+    if (busyIds.current.has(c.id)) return;
     // PRD-244 / RUN-14 (cerrado): PATCH parcial atómico — solo viaja { active },
     // imposible pisar la edición concurrente de otro admin.
+    busyIds.current.add(c.id);
+    try {
     const res = await fetch(`/api/coupons/${c.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -91,6 +98,8 @@ export default function AdminCouponsPage() {
     });
     if (res.ok) { flash('success', c.active ? 'Cupón desactivado.' : 'Cupón activado.'); fetchCoupons(); }
     else flash('error', 'No se pudo actualizar.');
+    } catch { flash('error', 'Error de conexión. El estado no se pudo confirmar.'); }
+    finally { busyIds.current.delete(c.id); }
   };
 
   const columns: DataTableColumn<Coupon>[] = [
@@ -142,7 +151,7 @@ export default function AdminCouponsPage() {
           <div>
             <h1 className="text-xl sm:text-2xl font-black text-navy">Cupones</h1>
             <p className="text-xs text-gray-500 mt-0.5">
-              {loading ? '…' : `${coupons.length} cupones. Descuentos con fecha de expiración y límite de usos.`}
+              {loading ? '…' : `${total} cupones. Descuentos con fecha de expiración y límite de usos.`}
             </p>
           </div>
         </div>
@@ -166,15 +175,13 @@ export default function AdminCouponsPage() {
         </div>
       )}
 
-      {truncatedTotal != null && (
-        <div className="flex items-start gap-2 px-4 py-3 rounded-xl text-sm bg-amber-50 border border-amber-200 text-amber-800">
-          <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />
-          <span>
-            Se muestran los {coupons.length} cupones más recientes de {truncatedTotal}.
-            Archiva los que ya no uses para mantener la lista manejable.
-          </span>
-        </div>
-      )}
+      <div className="flex flex-wrap gap-3">
+        <input aria-label="Buscar cupones" maxLength={100} value={query} onChange={e => { ++requestSeq.current; setQuery(e.target.value); setPage(1); }} placeholder="Buscar código o descripción" className="min-h-[44px] rounded-xl border px-3" />
+        <select aria-label="Estado del cupón" value={status} onChange={e => { ++requestSeq.current; setStatus(e.target.value); setPage(1); }} className="min-h-[44px] rounded-xl border px-3">
+          <option value="all">Todos</option><option value="active">Activos</option><option value="inactive">Inactivos</option><option value="expired">Expirados</option>
+        </select>
+        <button type="button" onClick={() => void fetchCoupons()} disabled={loading} className="min-h-[44px] rounded-xl border px-3">Actualizar</button>
+      </div>
 
       <DataTable<Coupon>
         data={coupons}
@@ -205,6 +212,12 @@ export default function AdminCouponsPage() {
           </>
         )}
       />
+
+      <div className="flex items-center justify-between gap-3">
+        <button type="button" disabled={loading || page <= 1} onClick={() => { ++requestSeq.current; setPage(p => p - 1); }} className="min-h-[44px] border rounded-xl px-3 disabled:opacity-40">Anterior</button>
+        <span className="text-sm">Página {page} de {Math.max(1, Math.ceil(total / 25))} · {total} cupones</span>
+        <button type="button" disabled={loading || page * 25 >= total} onClick={() => { ++requestSeq.current; setPage(p => p + 1); }} className="min-h-[44px] border rounded-xl px-3 disabled:opacity-40">Siguiente</button>
+      </div>
 
       {(creating || editing) && (
         <CouponDialog
@@ -244,12 +257,16 @@ function CouponDialog({
   const [active, setActive] = useState(coupon?.active ?? true);
   const [pending, startTransition] = useTransition();
 
+  const [dialogError, setDialogError] = useState('');
+  const showError = (message: string) => { setDialogError(message); onError(message); };
+
   const submit = () => {
     const value = Number(discountValue);
-    if (!code.trim()) { onError('El código es obligatorio.'); return; }
-    if (!Number.isFinite(value) || value <= 0) { onError('El valor del descuento debe ser mayor que 0.'); return; }
-    if (discountType === 'PERCENT' && value > 100) { onError('El porcentaje no puede superar 100%.'); return; }
+    if (!code.trim()) { showError('El código es obligatorio.'); return; }
+    if (!Number.isFinite(value) || value <= 0) { showError('El valor del descuento debe ser mayor que 0.'); return; }
+    if (discountType === 'PERCENT' && value > 100) { showError('El porcentaje no puede superar 100%.'); return; }
 
+    if ([startsAt, expiresAt].some(v => v && !Number.isFinite(Date.parse(v)))) { showError('La fecha no es válida.'); return; }
     const payload = {
       code: code.trim().toUpperCase(),
       description: description.trim() || null,
@@ -259,12 +276,13 @@ function CouponDialog({
       maxDiscount: maxDiscount === '' ? null : Number(maxDiscount),
       maxUses: maxUses === '' ? null : Number(maxUses),
       perUserLimit: perUserLimit === '' ? null : Number(perUserLimit),
-      startsAt: startsAt || null,
-      expiresAt: expiresAt || null,
+      startsAt: startsAt ? new Date(startsAt).toISOString() : null,
+      expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
       active,
     };
 
     startTransition(async () => {
+      try {
       const url = coupon ? `/api/coupons/${coupon.id}` : '/api/coupons';
       const method = coupon ? 'PUT' : 'POST';
       const res = await fetch(url, {
@@ -275,8 +293,9 @@ function CouponDialog({
       if (res.ok) onSaved(coupon ? 'Cupón actualizado.' : 'Cupón creado.');
       else {
         const err = await res.json().catch(() => ({}));
-        onError(err.error ?? 'No se pudo guardar el cupón.');
+        showError(typeof err.error === 'string' ? err.error : 'No se pudo guardar el cupón.');
       }
+      } catch { showError('Error de conexión al guardar cupón. Tus cambios se conservan.'); }
     });
   };
 
@@ -284,9 +303,11 @@ function CouponDialog({
     'w-full min-h-[48px] px-3.5 py-2 border border-gray-200 rounded-xl bg-gray-50 text-base focus:outline-none focus:ring-2 focus:ring-navy/20 focus:border-navy';
   const labelClass = 'block text-xs font-bold uppercase tracking-wide text-gray-700 mb-1.5';
 
+  const { dialogRef, close } = useAdminDialog(onClose, true, pending);
+
   return (
-    <div className="fixed inset-0 z-50 flex sm:items-center sm:justify-center" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Cupón" className="fixed inset-0 z-50 flex sm:items-center sm:justify-center" onClick={(e) => { if (e.target === e.currentTarget) close(); }}>
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={close} />
       <div
         className="relative z-10 w-full sm:w-[480px] sm:max-w-[92vw] sm:my-6 bg-white sm:rounded-2xl shadow-2xl flex flex-col max-h-screen max-h-[100dvh] sm:max-h-[88vh]"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
@@ -296,15 +317,16 @@ function CouponDialog({
           <h2 className="text-base font-black text-navy truncate">
             {coupon ? 'Editar cupón' : 'Nuevo cupón'}
           </h2>
-          <button type="button" onClick={onClose} aria-label="Cerrar" className="w-11 h-11 flex items-center justify-center rounded-full active:bg-gray-100">
+          <button type="button" onClick={close} aria-label="Cerrar" className="w-11 h-11 flex items-center justify-center rounded-full active:bg-gray-100">
             <X size={20} className="text-gray-500" />
           </button>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+        <div inert={pending} className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+          {dialogError && <p role="alert" className="p-3 bg-red-50 text-red-700 rounded-lg text-sm">{dialogError}</p>}
           <div>
-            <label className={labelClass}>Código</label>
-            <input
+            <label htmlFor="coupon-code" className={labelClass}>Código</label>
+            <input id="coupon-code"
               type="text"
               value={code}
               onChange={e => setCode(e.target.value.toUpperCase())}
@@ -315,10 +337,10 @@ function CouponDialog({
           </div>
 
           <div>
-            <label className={labelClass}>
+            <label htmlFor="coupon-description" className={labelClass}>
               Descripción <span className="text-[10px] font-medium text-gray-400 normal-case">— opcional, uso interno</span>
             </label>
-            <input
+            <input id="coupon-description"
               type="text"
               value={description}
               onChange={e => setDescription(e.target.value)}
@@ -328,9 +350,9 @@ function CouponDialog({
           </div>
 
           <div>
-            <label className={labelClass}>Tipo de descuento</label>
+            <label htmlFor="coupon-percent" className={labelClass}>Tipo de descuento</label>
             <div className="grid grid-cols-2 gap-2">
-              <button
+              <button id="coupon-percent" aria-pressed={discountType === 'PERCENT'}
                 type="button"
                 onClick={() => setDiscountType('PERCENT')}
                 className={`min-h-[48px] rounded-xl border text-sm font-bold transition ${
@@ -343,6 +365,7 @@ function CouponDialog({
               </button>
               <button
                 type="button"
+                aria-pressed={discountType === 'FIXED'}
                 onClick={() => setDiscountType('FIXED')}
                 className={`min-h-[48px] rounded-xl border text-sm font-bold transition ${
                   discountType === 'FIXED'
@@ -357,10 +380,10 @@ function CouponDialog({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={labelClass}>
+              <label htmlFor="coupon-discountValue" className={labelClass}>
                 {discountType === 'PERCENT' ? 'Porcentaje' : 'Monto (USD)'}
               </label>
-              <input
+              <input id="coupon-discountValue"
                 type="number"
                 inputMode="decimal"
                 value={discountValue}
@@ -370,10 +393,10 @@ function CouponDialog({
               />
             </div>
             <div>
-              <label className={labelClass}>
+              <label htmlFor="coupon-minPurchase" className={labelClass}>
                 Compra mínima (USD)
               </label>
-              <input
+              <input id="coupon-minPurchase"
                 type="number"
                 inputMode="decimal"
                 value={minPurchase}
@@ -386,10 +409,10 @@ function CouponDialog({
 
           {discountType === 'PERCENT' && (
             <div>
-              <label className={labelClass}>
+              <label htmlFor="coupon-maxDiscount" className={labelClass}>
                 Descuento máximo (USD) <span className="text-[10px] font-medium text-gray-400 normal-case">— tope opcional</span>
               </label>
-              <input
+              <input id="coupon-maxDiscount"
                 type="number"
                 inputMode="decimal"
                 value={maxDiscount}
@@ -402,10 +425,10 @@ function CouponDialog({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className={labelClass}>
+              <label htmlFor="coupon-maxUses" className={labelClass}>
                 Usos totales <span className="text-[10px] font-medium text-gray-400 normal-case">— vacío = ilimitado</span>
               </label>
-              <input
+              <input id="coupon-maxUses"
                 type="number"
                 inputMode="numeric"
                 value={maxUses}
@@ -415,10 +438,10 @@ function CouponDialog({
               />
             </div>
             <div>
-              <label className={labelClass}>
+              <label htmlFor="coupon-perUserLimit" className={labelClass}>
                 Usos por usuario <span className="text-[10px] font-medium text-gray-400 normal-case">— opcional</span>
               </label>
-              <input
+              <input id="coupon-perUserLimit"
                 type="number"
                 inputMode="numeric"
                 value={perUserLimit}
@@ -431,8 +454,8 @@ function CouponDialog({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className={labelClass}>Válido desde <span className="text-[10px] font-medium text-gray-400 normal-case">— opcional</span></label>
-              <input
+              <label htmlFor="coupon-startsAt" className={labelClass}>Válido desde <span className="text-[10px] font-medium text-gray-400 normal-case">— opcional</span></label>
+              <input id="coupon-startsAt"
                 type="datetime-local"
                 value={startsAt}
                 onChange={e => setStartsAt(e.target.value)}
@@ -440,8 +463,8 @@ function CouponDialog({
               />
             </div>
             <div>
-              <label className={labelClass}>Expira el <span className="text-[10px] font-medium text-gray-400 normal-case">— opcional</span></label>
-              <input
+              <label htmlFor="coupon-expiresAt" className={labelClass}>Expira el <span className="text-[10px] font-medium text-gray-400 normal-case">— opcional</span></label>
+              <input id="coupon-expiresAt"
                 type="datetime-local"
                 value={expiresAt}
                 onChange={e => setExpiresAt(e.target.value)}
@@ -469,7 +492,7 @@ function CouponDialog({
 
         <footer className="sticky bottom-0 bg-white sm:rounded-b-2xl border-t border-gray-100 px-4 py-3 flex gap-2"
           style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
-          <button type="button" onClick={onClose} disabled={pending} className="flex-1 min-h-[52px] bg-white border border-gray-200 text-gray-700 text-sm font-semibold rounded-xl active:bg-gray-100">
+          <button type="button" onClick={close} disabled={pending} className="flex-1 min-h-[52px] bg-white border border-gray-200 text-gray-700 text-sm font-semibold rounded-xl active:bg-gray-100">
             Cancelar
           </button>
           <button type="button" onClick={submit} disabled={pending} className="flex-[2] min-h-[52px] inline-flex items-center justify-center gap-2 bg-brand-yellow border border-yellow-400 text-navy text-sm font-black uppercase rounded-xl active:bg-yellow-300 disabled:opacity-60">

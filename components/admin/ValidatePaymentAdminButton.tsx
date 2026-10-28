@@ -18,7 +18,7 @@ export function ValidatePaymentAdminButton({
 }) {
   const [pending, startTransition] = useTransition();
 
-  if (order.status !== 'Pendiente') return null;
+  if (order.status !== 'Pendiente' || order.paidAt || order.casheaStatus) return null;
 
   const handleValidate = () => {
     if (typeof window !== 'undefined' && !window.confirm(CONFIRM_MSG)) return;

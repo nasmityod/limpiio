@@ -7,12 +7,13 @@ import { logInfo, logError } from '@/lib/safe-logger';
 export const dynamic = 'force-dynamic';
 
 const BATCH_LIMIT = 100;
+const WORK_BUDGET_MS = 45_000;
 
 /**
  * GET /api/cron/purge-payment-uploads
  *
- * SESIÓN 05 (CORREGIDO): limpia registros PaymentUpload PENDING o UPLOADING
- * cuyo expiresAt ya venció. Por cada uno:
+ * Limpia uploads PENDING/UPLOADING vencidos y leases DELETING abandonados
+ * durante cinco minutos. La marca de lease protege escrituras tardías. Por cada uno:
  *   1. Reclama atómicamente (PENDING|UPLOADING) → DELETING con updateMany condicional.
  *   2. Si tiene objectKey, lo borra del bucket privado R2.
  *   3. Marca DELETED.
@@ -38,36 +39,43 @@ export async function GET(request: Request): Promise<NextResponse> {
 
   try {
     const now = new Date();
+    const deadline = Date.now() + WORK_BUDGET_MS;
+    const leaseCutoff = new Date(now.getTime() - 5 * 60_000);
     const expired = await prisma.paymentUpload.findMany({
       where: {
-        status: {
-          in: ['PENDING', 'UPLOADING'],
-        },
-        expiresAt: { lte: now },
+        OR: [
+          { status: { in: ['PENDING', 'UPLOADING'] }, expiresAt: { lte: now } },
+          { status: 'DELETING', updatedAt: { lte: leaseCutoff } },
+        ],
       },
       take: BATCH_LIMIT,
-      orderBy: { expiresAt: 'asc' },
+      // Failed jobs move to the back of the queue rather than starving later uploads.
+      orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }],
       select: {
         id: true,
         objectKey: true,
         status: true,
+        updatedAt: true,
       },
     });
 
-    attempted = expired.length;
-
     for (const record of expired) {
+      if (Date.now() >= deadline) break;
+      attempted++;
       const previousStatus = record.status;
+      const claimAt = new Date();
 
-      // Reclamo atómico: (PENDING|UPLOADING) → DELETING
+      // Reclamo atómico o recuperación de un lease DELETING abandonado.
       const claim = await prisma.paymentUpload.updateMany({
         where: {
           id: record.id,
           status: previousStatus,
-          expiresAt: { lte: now },
+          updatedAt: record.updatedAt,
+          ...(previousStatus === 'DELETING' ? {} : { expiresAt: { lte: now } }),
         },
         data: {
           status: 'DELETING',
+          updatedAt: claimAt,
         },
       });
 
@@ -87,6 +95,7 @@ export async function GET(request: Request): Promise<NextResponse> {
             where: {
               id: record.id,
               status: 'DELETING',
+              updatedAt: claimAt,
             },
             data: {
               status: previousStatus,
@@ -101,6 +110,7 @@ export async function GET(request: Request): Promise<NextResponse> {
         where: {
           id: record.id,
           status: 'DELETING',
+          updatedAt: claimAt,
         },
         data: {
           status: 'DELETED',
@@ -116,7 +126,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     }
 
     // Registrar última ejecución exitosa para health check
-    if (purged > 0 || r2Errors === 0) {
+    if (r2Errors === 0) {
       await prisma.appConfig.upsert({
         where: { key: 'purge_payment_uploads_last_success_at' },
         update: { value: new Date().toISOString() },
@@ -130,11 +140,11 @@ export async function GET(request: Request): Promise<NextResponse> {
     logInfo('cron_purge_payment_uploads', { count: purged, operation: 'purge_payment_uploads' });
 
     return NextResponse.json({
-      ok: true,
+      ok: r2Errors === 0,
       purged,
       r2Errors,
       attempted,
-    });
+    }, { status: r2Errors > 0 ? 503 : 200 });
   } catch (err) {
     logError('cron_purge_payment_uploads_error', err, { operation: 'purge_payment_uploads' });
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

@@ -176,11 +176,11 @@ async function getData() {
   }
 }
 
-function CtaBanner({ data }: { data: CtaBannerData | null }) {
+function CtaBanner({ data, address }: { data: CtaBannerData | null; address: string }) {
   const title = data?.title ?? 'Lo que ves aquí, lo tenemos en la tienda.';
   const subtitle =
     data?.subtitle ??
-    'Catálogo con stock real del local en Carrera 21 con esquina calle 21, Centro. Si lo quieres ya, pásate por la tienda; si no, te lo enviamos.';
+    `Catálogo con stock real${address ? ` del local en ${address}` : ' de nuestra tienda'}. Visítanos o compra por la web.`;
   const badge = data?.label ?? 'Catálogo completo · Barquisimeto';
   const ctaText = data?.ctaText ?? 'Explorar todo el catálogo';
   const link = data?.link ?? '/productos';
@@ -423,7 +423,7 @@ const HomePage = async () => {
       <div className="w-full max-w-full overflow-x-hidden mt-5 sm:mt-8">
         <div className="w-full max-w-full pb-12 pt-1 sm:pt-2">
           {midSections}
-          <CtaBanner data={ctaBannerRow} />
+          <CtaBanner data={ctaBannerRow} address={settings.address} />
         </div>
       </div>
     </div>

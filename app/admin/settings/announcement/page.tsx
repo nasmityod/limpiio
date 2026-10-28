@@ -9,30 +9,35 @@ export default function AdminAnnouncementPage() {
   const [data, setData] = useState<Announcement>({
     active: false, text: '', link: '', bgColor: '#0B1220', textColor: '#FFFFFF',
   });
+  const [loadFailed, setLoadFailed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [pending, startTransition] = useTransition();
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
 
   useEffect(() => {
-    getAnnouncement().then((a) => { setData(a); setLoading(false); });
+    getAnnouncement().then((a) => { setData(a); setLoading(false); }).catch(() => { setLoadFailed(true); setLoading(false); });
   }, []);
 
   const flash = (type: 'success' | 'error', msg: string) => {
     setFeedback({ type, msg });
-    setTimeout(() => setFeedback(null), 3500);
+    if (type === 'success') setTimeout(() => setFeedback(current => current?.type === 'success' ? null : current), 3500);
   };
 
   const save = () => {
     startTransition(async () => {
+      try {
       const res = await updateAnnouncement(data);
       if (res.success) flash('success', 'Barra de anuncios guardada.');
       else flash('error', res.message);
+      } catch { flash('error', 'Error de conexión. Los cambios pendientes se conservan.'); }
     });
   };
 
   const inputClass =
     'w-full min-h-[48px] px-3.5 py-2 border border-gray-200 rounded-xl bg-gray-50 text-base focus:outline-none focus:ring-2 focus:ring-navy/20 focus:border-navy';
   const labelClass = 'block text-xs font-bold uppercase tracking-wide text-gray-700 mb-1.5';
+
+  if (loadFailed) return <p role="alert" className="p-6 text-red-700">No se pudo cargar la configuración. <button type="button" className="underline" onClick={() => window.location.reload()}>Volver a intentarlo</button></p>;
 
   if (loading) {
     return <div className="py-16 text-center text-gray-400 text-sm">Cargando…</div>;

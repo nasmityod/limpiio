@@ -3,22 +3,24 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 import { normalizePostgresUrlForNodePg } from '@/lib/normalize-postgres-url-for-node-pg';
 import '@/lib/env-validation';
+import { databasePoolConfig } from '@/lib/database-pool-config';
+import { logError } from '@/lib/safe-logger';
 
 declare global {
   // allow global `var` declarations
-  // eslint-disable-next-line no-var
-  var prisma: PrismaClient | undefined;
+  var prismaRuntime: { client: PrismaClient; pool: Pool } | undefined;
 }
 
-const pool = new Pool({
-  connectionString: normalizePostgresUrlForNodePg(process.env.DATABASE_URL),
-});
-const adapter = new PrismaPg(pool);
-
-export const prisma =
-  global.prisma ||
-  new PrismaClient({ adapter });
-
-if (process.env.NODE_ENV !== 'production') {
-  global.prisma = prisma;
+function createRuntime() {
+  const pool = new Pool({
+    connectionString: normalizePostgresUrlForNodePg(process.env.DATABASE_URL),
+    ...databasePoolConfig(),
+  });
+  // pg emits idle-client errors outside query promises; without a listener they
+  // can terminate the process during a PostgreSQL restart.
+  pool.on('error', () => logError('database_idle_connection_error', new Error('PostgreSQL idle connection failed')));
+  return { client: new PrismaClient({ adapter: new PrismaPg(pool) }), pool };
 }
+
+const runtime = global.prismaRuntime ??= createRuntime();
+export const prisma = runtime.client;

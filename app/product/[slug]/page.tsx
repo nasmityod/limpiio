@@ -46,11 +46,16 @@ export const revalidate = 300;
 
 const SITE_URL = BRAND.siteUrl;
 
-// H38: pre-genera las fichas en build (el ISR sigue activo para productos
-// nuevos vía dynamicParams). Usa slug ?? id — mismo patrón que sitemap y enlaces.
+// Bound build work as the catalog grows; other active fichas use on-demand ISR.
 export async function generateStaticParams() {
+  const rawLimit = Number(process.env.PRODUCT_PRERENDER_LIMIT ?? 100);
+  const limit = Number.isInteger(rawLimit) && rawLimit >= 0 && rawLimit <= 2000 ? rawLimit : 100;
+  if (limit === 0) return [];
   const products = await prisma.product.findMany({
+    where: { isActive: true },
     select: { slug: true, id: true },
+    orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+    take: limit,
   });
   return products.map((p) => ({ slug: p.slug ?? p.id }));
 }

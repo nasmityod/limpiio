@@ -22,6 +22,7 @@ vi.mock('@/hooks/useBodyScrollLock', () => ({
   useBodyScrollLock: () => {},
 }));
 
+import { getPricingParams } from '@/app/actions/configActions';
 import { createProductAction, updateProductAction } from '@/app/actions/productActions';
 
 const createProductActionMock = vi.mocked(createProductAction);
@@ -40,6 +41,7 @@ function fillRequiredFields(container: HTMLElement) {
 
 describe('AddProductModal — categoría', () => {
   beforeEach(() => {
+    vi.mocked(getPricingParams).mockResolvedValue({ marginPct: 50, factor: 1, canEditMarginPresets: false });
     createProductActionMock.mockReset();
     updateProductActionMock.mockReset();
     createProductActionMock.mockResolvedValue({
@@ -232,10 +234,61 @@ describe('AddProductModal — categoría', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Audio' })).toBeTruthy();
     });
-    fireEvent.mouseDown(screen.getByRole('button', { name: 'Audio' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Audio' }));
     expect((screen.getByRole('combobox', { name: /Categoría/i }) as HTMLInputElement).value).toBe(
       'Audio',
     );
     expect(screen.queryByTestId('category-will-create')).toBeNull();
+  });
+
+  it('no ofrece configurar atajos globales sin permiso financiero', async () => {
+    render(<AddProductModal isOpen onClose={vi.fn()} product={null} categories={existingCategories} />);
+    await waitFor(() => expect(getPricingParams).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: 'Configurar atajos de margen' })).toBeNull();
+  });
+
+  it('ofrece configurar atajos globales al recibir el permiso financiero', async () => {
+    vi.mocked(getPricingParams).mockResolvedValueOnce({ marginPct: 50, factor: 1, canEditMarginPresets: true });
+    render(<AddProductModal isOpen onClose={vi.fn()} product={null} categories={existingCategories} />);
+    expect(await screen.findByRole('button', { name: 'Configurar atajos de margen' })).toBeTruthy();
+  });
+
+  it('conserva el borrador cuando el servidor rechaza guardar', async () => {
+    createProductActionMock.mockResolvedValueOnce({ success: false, message: 'SKU duplicado' });
+    const onClose = vi.fn();
+    const { container } = render(<AddProductModal isOpen onClose={onClose} product={null} categories={existingCategories} />);
+    fillRequiredFields(container);
+    fireEvent.change(screen.getByRole('combobox', { name: /Categoría/i }), { target: { value: 'Audio' } });
+    fireEvent.submit(container.querySelector('form')!);
+    await screen.findByRole('alert');
+    expect((container.querySelector('#name') as HTMLInputElement).value).toBe('Producto test');
+    expect((container.querySelector('#description') as HTMLTextAreaElement).value).toBe('Descripción de prueba');
+    expect((container.querySelector('#stock') as HTMLInputElement).value).toBe('1');
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('no permite cerrar ni duplicar envío durante un guardado pendiente', async () => {
+    let finish!: (value: { success: boolean; message: string }) => void;
+    createProductActionMock.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const onClose = vi.fn();
+    const { container } = render(<AddProductModal isOpen onClose={onClose} product={null} categories={existingCategories} />);
+    fillRequiredFields(container);
+    fireEvent.submit(container.querySelector('form')!);
+    await waitFor(() => expect(createProductActionMock).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('button', { name: /Cerrar/i }));
+    fireEvent.submit(container.querySelector('form')!);
+    expect(onClose).not.toHaveBeenCalled(); expect(createProductActionMock).toHaveBeenCalledTimes(1);
+    finish({ success: false, message: 'Prueba' });
+    await screen.findByRole('alert');
+  });
+
+  it('selecciona categorías con teclado y Escape solo cierra la lista', async () => {
+    const onClose = vi.fn();
+    render(<AddProductModal isOpen onClose={onClose} product={null} categories={existingCategories} />);
+    const input = screen.getByRole('combobox', { name: /Categoría/i });
+    fireEvent.focus(input); fireEvent.keyDown(input, { key: 'ArrowDown' }); fireEvent.keyDown(input, { key: 'Enter' });
+    expect((input as HTMLInputElement).value).toBe('Accesorios');
+    fireEvent.focus(input); fireEvent.keyDown(input, { key: 'Escape' });
+    expect(screen.queryByTestId('category-options')).toBeNull(); expect(onClose).not.toHaveBeenCalled();
   });
 });

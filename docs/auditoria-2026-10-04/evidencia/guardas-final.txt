@@ -1,0 +1,27 @@
+
+> ecommerce-platform@0.1.0 security:versions
+> node scripts/check-security-versions.mjs
+
+next: 16.3.8
+react: 19.3.0
+react-dom: 19.3.0
+OK: Next.js cumple el mínimo revisado >=16.3.8 dentro de major 16; ejecutar también npm audit.
+
+> ecommerce-platform@0.1.0 security:api-guards
+> node scripts/check-api-origin-guards.mjs
+
+OK: all browser mutation handlers have an origin guard
+
+> ecommerce-platform@0.1.0 security:permission-guards
+> node scripts/check-admin-permission-guards.mjs
+
+
+✅ RBAC Guard Check — OK
+
+
+> ecommerce-platform@0.1.0 security:admin-page-guards
+> node scripts/check-admin-page-guards.mjs
+
+
+✅ Admin Page Guard Check — OK
+

@@ -213,7 +213,7 @@ export const ADMIN_PERMISSION_HOME: Record<AdminPermission, string> = {
   SITE_CONTENT: '/admin/personalizar',
   STORE_SETTINGS: '/admin/settings',
   FINANCIAL_SETTINGS: '/admin/settings',
-  OPERATIONS: '/admin',
+  OPERATIONS: '/admin/operations',
   CUSTOMER_DATA_EXPORT: '/admin/orders',
 };
 

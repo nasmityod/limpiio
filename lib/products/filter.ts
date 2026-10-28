@@ -59,7 +59,8 @@ export function normalizeSearchText(text: string): string {
 
 function parseOptionalPrice(raw: string | undefined): number | undefined {
   if (!raw?.trim()) return undefined;
-  const n = parseFloat(raw.replace(',', '.'));
+  if (!/^\d+(?:[.,]\d+)?$/.test(raw.trim())) return undefined;
+  const n = Number(raw.trim().replace(',', '.'));
   if (!Number.isFinite(n) || n < 0) return undefined;
   return Math.round(n * 100) / 100;
 }
@@ -87,7 +88,7 @@ export function parseProductQuery(
   params: Record<string, string | undefined>,
   pageSize: number = DEFAULT_PAGE_SIZE,
 ): ProductQuery {
-  const q = (params.q ?? params.query ?? '').trim();
+  const q = (params.q ?? params.query ?? '').trim().slice(0, 120);
   const category = (params.cat ?? params.category ?? '').trim() || undefined;
   const brand = (params.brand ?? params.subcategory ?? '').trim() || undefined;
 
@@ -95,8 +96,9 @@ export function parseProductQuery(
   let maxPrice = parseOptionalPrice(params.maxPrice ?? params.max);
   ({ minPrice, maxPrice } = sanitizePriceRange(minPrice, maxPrice));
 
-  const pageParsed = parseInt(params.page ?? '1', 10);
-  const page = Math.max(1, Number.isFinite(pageParsed) ? pageParsed : 1);
+  const rawPage = params.page ?? '1';
+  const pageParsed = /^\d+$/.test(rawPage) ? Number(rawPage) : 1;
+  const page = Math.min(1_000_000, Math.max(1, Number.isSafeInteger(pageParsed) ? pageParsed : 1));
 
   const sort = parseSort(params.sort);
   const includeOutOfStock = (params.disp ?? '').trim() === 'all';
@@ -109,7 +111,7 @@ export function parseProductQuery(
     maxPrice,
     sort,
     page,
-    pageSize,
+    pageSize: Math.min(100, Math.max(1, Math.trunc(pageSize) || DEFAULT_PAGE_SIZE)),
     includeOutOfStock: includeOutOfStock || undefined,
   };
 }
@@ -117,6 +119,7 @@ export function parseProductQuery(
 /** True cuando hay filtros/búsqueda/orden distinto al default del catálogo sin query. */
 export function hasActiveCatalogFilters(query: ProductQuery): boolean {
   if (query.q) return true;
+  if (query.includeOutOfStock === true) return true;
   if (query.category) return true;
   if (query.brand) return true;
   if (query.minPrice != null || query.maxPrice != null) return true;

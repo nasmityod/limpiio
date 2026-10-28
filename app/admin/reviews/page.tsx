@@ -1,5 +1,7 @@
 'use client';
 
+import { useAdminDialog } from '@/hooks/useAdminDialog';
+
 import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   Star, Check, X, Trash2, AlertCircle, ShieldCheck, MessageSquare, Loader2, Eye,
@@ -51,7 +53,7 @@ export default function AdminReviewsPage() {
 
   const flash = (type: 'success' | 'error', msg: string) => {
     setFeedback({ type, msg });
-    setTimeout(() => setFeedback(null), 3500);
+    if (type === 'success') setTimeout(() => setFeedback(current => current?.type === 'success' ? null : current), 3500);
   };
 
   // Guardia de concurrencia: sólo la última petición puede escribir el estado.
@@ -66,7 +68,7 @@ export default function AdminReviewsPage() {
       const res = await fetch(
         `/api/reviews?status=${tab}&page=${page}&pageSize=${PAGE_SIZE}`,
       );
-      if (!res.ok) return;
+      if (!res.ok) throw new Error('No se pudieron cargar las reseñas.');
       const data = await res.json();
       if (seq !== requestSeq.current) return;
       setReviews(data.reviews ?? []);
@@ -77,7 +79,8 @@ export default function AdminReviewsPage() {
       setTotal(Number(data.total ?? 0));
       // Si al moderar/eliminar se vació la última página, retrocede una.
       if ((data.reviews ?? []).length === 0 && page > 1) setPage(p => Math.max(1, p - 1));
-    } finally {
+    } catch { if (seq === requestSeq.current) setFeedback({ type: 'error', msg: 'No se pudieron cargar las reseñas. Vuelve a intentarlo.' }); }
+    finally {
       if (seq === requestSeq.current) {
         hasLoadedOnce.current = true;
         setLoading(false);
@@ -95,6 +98,7 @@ export default function AdminReviewsPage() {
   }, []);
 
   const moderate = async (r: Review, status: ReviewStatus) => {
+    try {
     const res = await fetch(`/api/reviews/${r.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -104,13 +108,16 @@ export default function AdminReviewsPage() {
       flash('success', status === 'APPROVED' ? 'Reseña aprobada.' : 'Reseña rechazada.');
       fetchReviews();
     } else flash('error', 'No se pudo actualizar.');
+    } catch { flash('error', 'Error de conexión. Vuelve a intentarlo.'); }
   };
 
   const remove = async (r: Review) => {
     if (!confirm('¿Eliminar esta reseña de forma permanente?')) return;
+    try {
     const res = await fetch(`/api/reviews/${r.id}`, { method: 'DELETE' });
     if (res.ok) { flash('success', 'Reseña eliminada.'); fetchReviews(); }
     else flash('error', 'No se pudo eliminar.');
+    } catch { flash('error', 'Error de conexión. Vuelve a intentarlo.'); }
   };
 
   const toggleAutoApprove = async () => {
@@ -123,6 +130,7 @@ export default function AdminReviewsPage() {
       );
       if (!ok) return;
     }
+    try {
     const res = await fetch('/api/reviews/auto-approve', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -130,6 +138,7 @@ export default function AdminReviewsPage() {
     });
     if (res.ok) { setAutoApprove(next); flash('success', next ? 'Auto-aprobación activada.' : 'Auto-aprobación desactivada.'); }
     else flash('error', 'No se pudo actualizar la configuración.');
+    } catch { flash('error', 'Error de conexión. Vuelve a intentarlo.'); }
   };
 
   const columns: DataTableColumn<Review>[] = [
@@ -375,13 +384,15 @@ function ReviewDetailDialog({
   onApprove: () => void;
   onReject: () => void;
 }) {
+  const { dialogRef, close } = useAdminDialog(onClose, true, false);
+
   return (
-    <div className="fixed inset-0 z-50 flex sm:items-center sm:justify-center" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Detalle de reseña" className="fixed inset-0 z-50 flex sm:items-center sm:justify-center" onClick={(e) => { if (e.target === e.currentTarget) close(); }}>
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={close} />
       <div className="relative z-10 w-full sm:w-[520px] sm:max-w-[92vw] bg-white sm:rounded-2xl shadow-2xl flex flex-col max-h-screen max-h-[100dvh] sm:max-h-[88vh]">
         <header className="border-b border-gray-100 px-4 py-3.5 flex items-center justify-between gap-3">
           <h2 className="text-base font-black text-navy truncate">Reseña completa</h2>
-          <button type="button" onClick={onClose} aria-label="Cerrar" className="w-11 h-11 flex items-center justify-center rounded-full active:bg-gray-100">
+          <button type="button" onClick={close} aria-label="Cerrar" className="w-11 h-11 flex items-center justify-center rounded-full active:bg-gray-100">
             <X size={20} className="text-gray-500" />
           </button>
         </header>
@@ -438,30 +449,32 @@ function ReplyDialog({
 }) {
   const [reply, setReply] = useState(review.adminReply ?? '');
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   const save = async () => {
+    if (saving) return;
     setSaving(true);
-    const res = await fetch(`/api/reviews/${review.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ adminReply: reply.trim() || null }),
-    });
-    setSaving(false);
-    if (res.ok) onSaved();
-    else onError();
+    try {
+      const res = await fetch(`/api/reviews/${review.id}`, { method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ adminReply: reply.trim() || null }) });
+      if (res.ok) onSaved(); else { setSaveError('No se pudo guardar la respuesta. Vuelve a intentarlo.'); onError(); }
+    } catch { setSaveError('Error de conexión. La respuesta pendiente se conserva.'); onError(); } finally { setSaving(false); }
   };
 
+  const { dialogRef, close } = useAdminDialog(onClose, true, saving);
+
   return (
-    <div className="fixed inset-0 z-50 flex sm:items-center sm:justify-center" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Respuesta a reseña" className="fixed inset-0 z-50 flex sm:items-center sm:justify-center" onClick={(e) => { if (e.target === e.currentTarget) close(); }}>
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={close} />
       <div className="relative z-10 w-full sm:w-[460px] sm:max-w-[92vw] bg-white sm:rounded-2xl shadow-2xl flex flex-col max-h-screen max-h-[100dvh] sm:max-h-[88vh]">
         <header className="border-b border-gray-100 px-4 py-3.5 flex items-center justify-between gap-3">
           <h2 className="text-base font-black text-navy truncate">Responder reseña</h2>
-          <button type="button" onClick={onClose} aria-label="Cerrar" className="w-11 h-11 flex items-center justify-center rounded-full active:bg-gray-100">
+          <button type="button" onClick={close} aria-label="Cerrar" className="w-11 h-11 flex items-center justify-center rounded-full active:bg-gray-100">
             <X size={20} className="text-gray-500" />
           </button>
         </header>
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+          {saveError && <p role="alert" className="p-3 bg-red-50 text-red-700 rounded-lg text-sm">{saveError}</p>}
           <div className="rounded-xl bg-gray-50 border border-gray-100 p-3">
             <div className="flex items-center gap-2 mb-1">
               <Stars rating={review.rating} size={13} />
@@ -471,8 +484,8 @@ function ReplyDialog({
             <p className="text-sm text-gray-600 mt-0.5">{review.comment}</p>
           </div>
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wide text-gray-700 mb-1.5">Tu respuesta pública</label>
-            <textarea
+            <label htmlFor="review-reply" className="block text-xs font-bold uppercase tracking-wide text-gray-700 mb-1.5">Tu respuesta pública</label>
+            <textarea id="review-reply" disabled={saving}
               value={reply}
               onChange={e => setReply(e.target.value)}
               rows={4}
@@ -483,7 +496,7 @@ function ReplyDialog({
           </div>
         </div>
         <footer className="border-t border-gray-100 px-4 py-3 flex gap-2">
-          <button type="button" onClick={onClose} disabled={saving} className="flex-1 min-h-[52px] bg-white border border-gray-200 text-gray-700 text-sm font-semibold rounded-xl active:bg-gray-100">
+          <button type="button" onClick={close} disabled={saving} className="flex-1 min-h-[52px] bg-white border border-gray-200 text-gray-700 text-sm font-semibold rounded-xl active:bg-gray-100">
             Cancelar
           </button>
           <button type="button" onClick={save} disabled={saving} className="flex-[2] min-h-[52px] inline-flex items-center justify-center gap-2 bg-brand-yellow border border-yellow-400 text-navy text-sm font-black uppercase rounded-xl active:bg-yellow-300 disabled:opacity-60">

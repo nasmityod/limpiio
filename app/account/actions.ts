@@ -11,6 +11,7 @@ import { hashToken } from '@/lib/security';
 import { sendEmailChangeConfirmEmail, sendEmailChangeNoticeEmail } from '@/lib/resend';
 import { emailSiteBaseUrl } from '@/emails/transactional/site';
 import { logError } from '@/lib/safe-logger';
+import { queueTransactionalEmails } from '@/lib/email-outbox-context';
 
 interface UpdateResult {
   success: boolean;
@@ -91,48 +92,41 @@ export async function updateUserDetails(data: { name: string; email: string }): 
     const tokenHash = hashToken(token);
     const expiry = new Date(Date.now() + EMAIL_CHANGE_EXPIRY_MS);
 
-    // Actualizar nombre (si cambió) + guardar email pendiente + token
-    await prisma.user.update({
-      where: { id: session.user.id },
-      data: {
-        name: parsed.data.name,
-        pendingEmail: parsed.data.email,
-        emailChangeToken: tokenHash,
-        emailChangeTokenExpiry: expiry,
-      },
-    });
-
     const base = emailSiteBaseUrl().replace(/\/$/, '');
     const confirmUrl = `${base}/api/account/confirm-email?token=${encodeURIComponent(token)}`;
 
-    // Enviar enlace de confirmación al NUEVO correo (best-effort)
-    try {
-      await sendEmailChangeConfirmEmail({
-        to: parsed.data.email,
-        customerName: parsed.data.name || currentUser.name || 'Cliente',
-        confirmUrl,
-        newEmail: parsed.data.email,
+    // Save the token and both durable notifications together. Provider delivery
+    // happens in the outbox worker; a failed insert rolls back the token too.
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: session.user.id, email: currentUser.email },
+        data: {
+          name: parsed.data.name,
+          pendingEmail: parsed.data.email,
+          emailChangeToken: tokenHash,
+          emailChangeTokenExpiry: expiry,
+        },
       });
-    } catch (emailError) {
-      logError('email_change_confirm_failed', emailError, { operation: 'email_change' });
-    }
-
-    // SEC-2026-09: aviso al correo ANTERIOR (best-effort) — con una sesión robada,
-    // cambiar el email y luego pedir un reset era un ATO silencioso.
-    try {
-      await sendEmailChangeNoticeEmail({
-        to: currentUser.email,
-        customerName: currentUser.name || parsed.data.name || 'Cliente',
-        newEmail: parsed.data.email,
+      await queueTransactionalEmails(tx, async () => {
+        await sendEmailChangeConfirmEmail({
+          to: parsed.data.email,
+          customerName: parsed.data.name || currentUser.name || 'Cliente',
+          confirmUrl,
+          newEmail: parsed.data.email,
+          expiresAt: expiry,
+        });
+        await sendEmailChangeNoticeEmail({
+          to: currentUser.email,
+          customerName: currentUser.name || parsed.data.name || 'Cliente',
+          newEmail: parsed.data.email,
+        });
       });
-    } catch (noticeError) {
-      logError('email_change_notice_failed', noticeError, { operation: 'email_change' });
-    }
+    });
 
     revalidatePath('/account/details');
     return {
       success: true,
-      message: `Te enviamos un correo de confirmación a ${parsed.data.email}. Revisa tu bandeja y haz clic en el enlace para completar el cambio.`,
+      message: `Solicitud guardada. Enviaremos un correo de confirmación a ${parsed.data.email}. Revisa tu bandeja y haz clic en el enlace para completar el cambio.`,
     };
   } catch (error) {
     logError('update_user_details_failed', error, { operation: 'update_details' });

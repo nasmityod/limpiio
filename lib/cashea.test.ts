@@ -1,3 +1,5 @@
+// Unit-test the future transport seam with fetch mocked; production readiness remains false.
+vi.mock('@/lib/cashea-readiness', () => ({ CASHEA_AUTHORITATIVE_ADAPTER_READY: true }));
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CasheaVerificationNotImplemented,

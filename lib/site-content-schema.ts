@@ -113,7 +113,7 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
     badge: 'Tienda física en Barquisimeto',
     title: BRAND.tagline.slice(0, 90),
     subtitle:
-      'Tecnología, variedades y los productos virales del momento. Visítanos en Carrera 21 con esquina calle 21, Centro, Barquisimeto 3001 — o pide por la web y te lo enviamos a cualquier parte de Venezuela.',
+      'Tecnología, variedades y los productos virales del momento. Visita nuestra tienda o pide por la web y te lo enviamos a cualquier parte de Venezuela.',
     ctaText: 'Explorar todo el catálogo',
     ctaLink: '/productos',
     imageUrl: '',
@@ -121,7 +121,7 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
   brandStrip: {
     enabled: true,
     slogan: BRAND_STRIP_SLOGAN,
-    note: 'Carrera 21 con esquina calle 21, Centro · Barquisimeto 3001',
+    note: 'Tienda física en Barquisimeto · Envíos a Venezuela',
   },
   whatsapp: {
     enabled: true,
@@ -132,7 +132,7 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
     {
       icon: 'store',
       title: 'Tienda física en el Centro',
-      sub: 'Pásate por Carrera 21 o pide desde la web',
+      sub: 'Visita nuestra tienda o pide desde la web',
     },
     {
       icon: 'truck',

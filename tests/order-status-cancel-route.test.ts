@@ -138,7 +138,7 @@ function mockSuccessfulCancelTransition(current: ReturnType<typeof orderRow>) {
 }
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
   rejectInvalidMutationOriginMock.mockReturnValue(null);
   requirePermissionMock.mockResolvedValue({ authorized: true });
   transactionMock.mockImplementation(async (cb: (tx: unknown) => unknown) => cb(makeTx()));
@@ -165,11 +165,11 @@ describe('PUT /api/orders/[id]/status Cancelado', () => {
 
     expect(res.status).toBe(200);
     expect(txUpdateManyMock).toHaveBeenCalledWith({
-      where: { id: 'order-1', status: 'Pendiente', stockDeducted: true },
+      where: { id: 'order-1', status: 'Cancelado', stockDeducted: true },
       data: { stockDeducted: false },
     });
     expect(txUpdateManyMock).toHaveBeenCalledWith({
-      where: { id: 'order-1', status: 'Pendiente' },
+      where: { id: 'order-1', status: 'Pendiente', stockDeducted: true, paidAt: null },
       data: { status: 'Cancelado' },
     });
     expect(txProductUpdateManyMock).toHaveBeenCalled();
@@ -322,7 +322,7 @@ describe('PUT /api/orders/[id]/status Cancelado', () => {
     const res2 = await PUT(buildRequest({ status: 'Cancelado' }), {
       params: Promise.resolve({ id: 'order-1' }),
     });
-    expect(res2.status).toBe(200);
+    expect(res2.status).toBe(409);
 
     expect(txProductUpdateManyMock).toHaveBeenCalledTimes(1);
     expect(sendOrderCancelledEmailMock).toHaveBeenCalledTimes(1);
@@ -356,7 +356,7 @@ describe('PUT /api/orders/[id]/status Cancelado', () => {
       params: Promise.resolve({ id: 'order-1' }),
     });
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(409);
     expect(sendOrderCancelledEmailMock).not.toHaveBeenCalled();
     expect(logInfoMock).not.toHaveBeenCalled();
     expect(txProductUpdateManyMock).not.toHaveBeenCalled();

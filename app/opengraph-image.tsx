@@ -1,5 +1,6 @@
 import { ImageResponse } from 'next/og';
 import { BRAND } from '@/config/brand';
+import { getCachedSiteShellData } from '@/lib/site-shell-cache';
 
 /**
  * Imagen Open Graph de marca, generada en runtime con next/og.
@@ -7,7 +8,8 @@ import { BRAND } from '@/config/brand';
  * Instagram y Google devolvían 404). Reproduce el letrero de la tienda:
  * navy + amarillo + eslogan.
  */
-export const runtime = 'edge';
+export const runtime = 'nodejs';
+export const revalidate = 300;
 
 /** `Marca — Eslogan`, o solo la marca si no se configuró eslogan. */
 const BRAND_LINE = BRAND.tagline ? `${BRAND.name} — ${BRAND.tagline}` : BRAND.name;
@@ -17,6 +19,7 @@ export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 
 export default async function OpengraphImage() {
+  const { settings } = await getCachedSiteShellData();
   return new ImageResponse(
     (
       <div
@@ -73,7 +76,7 @@ export default async function OpengraphImage() {
             fontSize: 26,
           }}
         >
-          Tecnología y variedades · Carrera 21 con esquina calle 21, Centro, Barquisimeto 3001
+          Tecnología y variedades{settings.address ? ` · ${settings.address}` : ''}
         </div>
 
         <div

@@ -89,8 +89,17 @@ export const authOptions: AuthOptions = {
      */
     async signIn({ account, profile }) {
       if (account?.provider !== 'google') return true;
-      const verified = (profile as { email_verified?: unknown } | undefined)?.email_verified;
-      return verified === true;
+      const googleProfile = profile as { email_verified?: unknown; email?: string; sub?: string } | undefined;
+      if (googleProfile?.email_verified !== true || !googleProfile.email || !account.providerAccountId) return false;
+      const subject = account.providerAccountId;
+      const linked = await prisma.user.findUnique({ where: { googleSubject: subject }, select: { id: true } });
+      if (linked) return true;
+      const existing = await prisma.user.findUnique({
+        where: { email: googleProfile.email.trim().toLowerCase() }, select: { id: true },
+      });
+      // The owner must authenticate with their existing password (or reset it).
+      // A verified Google email does not prove who registered the local password.
+      return existing ? '/login?error=OAuthAccountNotLinked' : true;
     },
     async jwt({
       token,
@@ -105,16 +114,18 @@ export const authOptions: AuthOptions = {
         name?: string | null;
         pwv?: string;
       } | null;
-      account?: { provider?: string } | null;
+      account?: { provider?: string; providerAccountId?: string } | null;
     }) {
       if (user?.email && account?.provider === 'google') {
         // PRD-239: normalizar email del proveedor OAuth antes del upsert.
         const email = user.email.trim().toLowerCase();
+        if (!account.providerAccountId) throw new Error('Missing verified Google identity');
         const dbUser = await prisma.user.upsert({
-          where:  { email },
+          where:  { googleSubject: account.providerAccountId },
           update: { name: user.name ?? undefined },
           create: {
             email,
+            googleSubject: account.providerAccountId,
             name:     user.name ?? null,
             password: await bcrypt.hash(randomBytes(32).toString('hex'), 12),
             // PRD-048 / PRD-174: rol en mayúsculas, consistente con isAdminRole.
@@ -135,6 +146,7 @@ export const authOptions: AuthOptions = {
       if (user) {
         token.id    = user.id;
         token.role  = user.role;
+        token.email = user.email ?? token.email;
         token.pwv   = user.pwv;
         token.pwvAt = Date.now();
         // isSuperAdmin se sincronizará en la primera re-validación periódica
@@ -145,7 +157,7 @@ export const authOptions: AuthOptions = {
        * PRD-173 / PRD-240 / PRD-091: re-validación periódica del JWT contra
        * la BD. Si la contraseña cambió (reset propio o por admin) la huella
        * deja de coincidir y la sesión se invalida; de paso se sincronizan rol
-       * y email (un cambio de email en /account se refleja sin re-login).
+       * vigente. Cambiar el correo también invalida las sesiones anteriores.
        */
       const userId = typeof token.id === 'string' ? token.id : null;
       const lastCheck = typeof token.pwvAt === 'number' ? token.pwvAt : 0;
@@ -159,11 +171,15 @@ export const authOptions: AuthOptions = {
 
           const currentPwv = dbUser ? passwordFingerprint(dbUser.password) : null;
 
-          if (!dbUser || (typeof token.pwv === 'string' && token.pwv !== currentPwv)) {
-            // Usuario eliminado o contraseña cambiada → sesión inválida.
+          if (!dbUser || (typeof token.pwv === 'string' && token.pwv !== currentPwv) ||
+              (typeof token.email === 'string' && token.email !== dbUser.email)) {
+            // Usuario eliminado, contraseña o correo cambiado → sesión inválida.
             delete (token as Record<string, unknown>).id;
             delete (token as Record<string, unknown>).role;
             delete (token as Record<string, unknown>).pwv;
+            delete (token as Record<string, unknown>).email;
+            delete (token as Record<string, unknown>).isSuperAdmin;
+            delete (token as Record<string, unknown>).permissionsUpdatedAt;
             return token;
           }
 

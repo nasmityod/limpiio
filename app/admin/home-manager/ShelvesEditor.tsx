@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import Image from 'next/image';
 import {
   ArrowDown,
@@ -145,7 +145,9 @@ export default function ShelvesEditor({
 
   const dirty = useMemo(() => !shelvesEqual(draft, saved), [draft, saved]);
 
+  const detailSeq = useRef(0);
   const loadSelectedDetails = useCallback(async (ids: string[]) => {
+    const seq = ++detailSeq.current;
     if (ids.length === 0) {
       setSelectedDetails([]);
       return;
@@ -155,9 +157,9 @@ export default function ShelvesEditor({
         `/api/admin/products/search?ids=${encodeURIComponent(ids.join(','))}`,
       );
       const d = await r.json();
-      setSelectedDetails(Array.isArray(d.products) ? d.products : []);
+      if (seq === detailSeq.current) setSelectedDetails(Array.isArray(d.products) ? d.products : []);
     } catch {
-      setSelectedDetails([]);
+      if (seq === detailSeq.current) setInlineError('No se pudieron cargar los productos seleccionados.');
     }
   }, []);
 
@@ -184,8 +186,9 @@ export default function ShelvesEditor({
   }, []);
 
   useEffect(() => {
+    const controller = new AbortController();
     if (!query.trim()) {
-      setHits([]);
+      setHits([]); setSearching(false);
       return;
     }
     const handle = window.setTimeout(async () => {
@@ -193,16 +196,18 @@ export default function ShelvesEditor({
       try {
         const r = await fetch(
           `/api/admin/products/search?q=${encodeURIComponent(query.trim())}&limit=12`,
+          { signal: controller.signal },
         );
+        if (!r.ok) throw new Error('Search failed');
         const d = await r.json();
-        setHits(Array.isArray(d.products) ? d.products : []);
+        if (!controller.signal.aborted) setHits(Array.isArray(d.products) ? d.products : []);
       } catch {
-        setHits([]);
+        if (!controller.signal.aborted) { setHits([]); setInlineError('No se pudo buscar productos.'); }
       } finally {
-        setSearching(false);
+        if (!controller.signal.aborted) setSearching(false);
       }
     }, 280);
-    return () => window.clearTimeout(handle);
+    return () => { window.clearTimeout(handle); controller.abort(); };
   }, [query]);
 
   const moveShelf = (key: HomeShelfKey, direction: -1 | 1) => {
@@ -359,7 +364,7 @@ export default function ShelvesEditor({
         return;
       }
       const snapshot = cloneShelves(draft);
-      setDraft(cloneShelves(snapshot));
+      setDraft(current => JSON.stringify(current) === JSON.stringify(draft) ? cloneShelves(snapshot) : current);
       setSaved(cloneShelves(snapshot));
       onSaved?.(cloneShelves(snapshot));
       setStatus('saved');

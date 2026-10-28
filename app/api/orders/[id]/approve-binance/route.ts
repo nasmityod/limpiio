@@ -5,6 +5,8 @@ import { prismaOrderToOrder, type OrderStatus } from '@/lib/definitions';
 import { rejectInvalidMutationOrigin } from '@/lib/security';
 import { sendPaymentValidatedEmail } from '@/lib/resend';
 import { logError, logInfo } from '@/lib/safe-logger';
+import { orderSnapshotGuard } from '@/lib/order-lifecycle';
+import { queueTransactionalEmails } from '@/lib/email-outbox-context';
 
 const BINANCE_PENDING: OrderStatus = 'Pendiente verificación Binance';
 const APPROVED_STATUS: OrderStatus = 'En Proceso';
@@ -43,70 +45,45 @@ export async function POST(
   try {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
-      select: { id: true, status: true },
+      select: { id: true, status: true, paidAt: true, casheaStatus: true, stockDeducted: true, updatedAt: true },
     });
 
     if (!order) {
       return NextResponse.json({ message: 'Pedido no encontrado.' }, { status: 404 });
     }
     // Idempotencia: doble clic / segundo admin no debe producir error visible.
-    if (order.status === APPROVED_STATUS) {
+    if (order.status === APPROVED_STATUS && order.paidAt && !order.casheaStatus) {
       const already = await prisma.order.findUnique({
         where: { id: orderId },
         include: { items: true },
       });
       return NextResponse.json(prismaOrderToOrder(already!));
     }
-    if (order.status !== BINANCE_PENDING) {
+    if (order.status !== BINANCE_PENDING || order.casheaStatus || !order.stockDeducted) {
       return NextResponse.json(
         { message: 'Este pedido no está pendiente de verificación Binance.' },
         { status: 400 }
       );
     }
 
-    // PRD-196 (locking optimista): la transición exige el estado de origen.
-    const transition = await prisma.order.updateMany({
-      where: { id: orderId, status: BINANCE_PENDING },
-      data: {
-        status: APPROVED_STATUS,
-        paidAt: new Date(),
-        paymentVerifiedBy: adminEmail,
-        paymentRejectionReason: null,
-      },
+    const updated = await prisma.$transaction(async (tx) => {
+      const transition = await tx.order.updateMany({
+        where: { ...orderSnapshotGuard(order), paidAt: null, casheaStatus: null },
+        data: { status: APPROVED_STATUS, paidAt: new Date(), paymentVerifiedBy: adminEmail, paymentRejectionReason: null },
+      });
+      if (transition.count !== 1) return null;
+      const current = await tx.order.findUniqueOrThrow({
+        where: { id: orderId },
+        include: { items: true, customer: { select: { email: true, name: true } } },
+      });
+      const recipientEmail = current.customerEmail?.trim() || current.customer?.email?.trim() || '';
+      const displayName = current.customerName?.trim() || current.customer?.name?.trim() || '';
+      if (recipientEmail) await queueTransactionalEmails(tx, () => sendPaymentValidatedEmail(
+        recipientEmail, firstNameFromCustomerName(displayName), String(current.orderNumber).padStart(4, '0'), current.id,
+      ));
+      return current;
     });
-    if (transition.count === 0) {
-      return NextResponse.json(
-        { message: 'El pedido cambió de estado mientras se aprobaba. Recarga e intenta de nuevo.' },
-        { status: 409 }
-      );
-    }
-
-    const updated = await prisma.order.findUnique({
-      where: { id: orderId },
-      include: {
-        items: true,
-        customer: { select: { email: true, name: true } },
-      },
-    });
-
-    // Notificación best-effort (igual que validateOrderPayment): el pago ya
-    // quedó verificado en BD aunque Resend falle.
-    if (updated) {
-      const recipientEmail =
-        updated.customerEmail?.trim() || updated.customer?.email?.trim() || '';
-      const displayName =
-        updated.customerName?.trim() || updated.customer?.name?.trim() || '';
-      try {
-        await sendPaymentValidatedEmail(
-          recipientEmail,
-          firstNameFromCustomerName(displayName),
-          String(updated.orderNumber).padStart(4, '0'),
-          updated.id
-        );
-      } catch (emailError) {
-        logError('approve_binance_email_failed', emailError, { orderId, provider: 'resend' });
-      }
-    }
+    if (!updated) return NextResponse.json({ message: 'El pedido cambió de estado mientras se aprobaba. Recarga e intenta de nuevo.' }, { status: 409 });
 
     logInfo('approve_binance_success', { orderId });
     return NextResponse.json(prismaOrderToOrder(updated!));

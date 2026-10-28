@@ -42,10 +42,10 @@ export async function GET(request: Request) {
       return NextResponse.redirect(new URL('/account/details?emailChange=invalid', request.url));
     }
 
-    if (user.emailChangeTokenExpiry < new Date()) {
+    if (user.emailChangeTokenExpiry <= new Date()) {
       // Token expirado: limpiar campos y redirigir
-      await prisma.user.update({
-        where: { id: user.id },
+      await prisma.user.updateMany({
+        where: { id: user.id, emailChangeToken: tokenHash, pendingEmail: user.pendingEmail },
         data: {
           pendingEmail: null,
           emailChangeToken: null,
@@ -62,8 +62,8 @@ export async function GET(request: Request) {
     });
 
     if (conflict && conflict.id !== user.id) {
-      await prisma.user.update({
-        where: { id: user.id },
+      await prisma.user.updateMany({
+        where: { id: user.id, emailChangeToken: tokenHash, pendingEmail: user.pendingEmail },
         data: {
           pendingEmail: null,
           emailChangeToken: null,
@@ -73,16 +73,34 @@ export async function GET(request: Request) {
       return NextResponse.redirect(new URL('/account/details?emailChange=conflict', request.url));
     }
 
-    // Promover pendingEmail → email y limpiar token
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        email: user.pendingEmail,
-        pendingEmail: null,
-        emailChangeToken: null,
-        emailChangeTokenExpiry: null,
-      },
+    // Consume only this observed token, never a newer request written while
+    // the confirmation link was being checked. Reset tokens are revoked in
+    // the same transaction and share the password-reset mutation lock.
+    const confirmed = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'password-reset:' + user.id}, 0))`;
+      const now = new Date();
+      const consumed = await tx.user.updateMany({
+        where: {
+          id: user.id,
+          emailChangeToken: tokenHash,
+          pendingEmail: user.pendingEmail,
+          emailChangeTokenExpiry: { gt: now },
+        },
+        data: {
+          email: user.pendingEmail!,
+          pendingEmail: null,
+          emailChangeToken: null,
+          emailChangeTokenExpiry: null,
+          passwordChangedAt: now,
+        },
+      });
+      if (consumed.count !== 1) return false;
+      await tx.passwordResetToken.deleteMany({ where: { userId: user.id } });
+      return true;
     });
+    if (!confirmed) {
+      return NextResponse.redirect(new URL('/account/details?emailChange=invalid', request.url));
+    }
 
     return NextResponse.redirect(new URL('/account/details?emailChange=success', request.url));
   } catch (error) {

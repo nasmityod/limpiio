@@ -14,8 +14,10 @@ import {
   BCV_BINANCE_FACTOR_APP_CONFIG_KEY,
   DEFAULT_PROFIT_MARGIN_PCT,
   DEFAULT_BCV_BINANCE_FACTOR,
+  canonicalPricingFactor,
 } from '@/lib/pricing-formula';
 import { logError } from '@/lib/safe-logger';
+import { hasAdminPermission } from '@/lib/admin-permissions';
 
 const exchangeRateSchema = z
   .number({ error: 'La tasa debe ser un número.' })
@@ -54,7 +56,7 @@ export async function updateExchangeRate(rate: unknown) {
 
 const pricingParamsSchema = z.object({
   marginPct: z.coerce.number().min(0, 'El margen no puede ser negativo.').max(1000, 'Margen fuera de rango.'),
-  factor: z.coerce.number().positive('La tasa actual debe ser mayor que cero.').max(100, 'Tasa actual fuera de rango.'),
+  factor: z.coerce.number().positive('La tasa actual debe ser mayor que cero.').max(100, 'Tasa actual fuera de rango.').min(0.01).refine((v) => Math.abs(v * 100 - Math.round(v * 100)) < 1e-8, 'La tasa admite como máximo dos decimales.'),
 });
 
 /**
@@ -63,8 +65,8 @@ const pricingParamsSchema = z.object({
  * margen global y el factor BCV→Binance, y con `price = cost × (1+margen) × factor`
  * derivaba el costo de todo el catálogo (campo marcado «nunca exponer»).
  */
-export async function getPricingParams(): Promise<{ marginPct: number; factor: number }> {
-  await requireBackofficeAction();
+export async function getPricingParams(): Promise<{ marginPct: number; factor: number; canEditMarginPresets: boolean }> {
+  const access = await requireBackofficeAction();
   try {
     const rows = await prisma.appConfig.findMany({
       where: { key: { in: [PROFIT_MARGIN_APP_CONFIG_KEY, BCV_BINANCE_FACTOR_APP_CONFIG_KEY] } },
@@ -72,12 +74,16 @@ export async function getPricingParams(): Promise<{ marginPct: number; factor: n
     const map = new Map(rows.map((r) => [r.key, r.value]));
     const rawMargin = map.get(PROFIT_MARGIN_APP_CONFIG_KEY);
     const rawFactor = map.get(BCV_BINANCE_FACTOR_APP_CONFIG_KEY);
-    const marginPct = rawMargin != null && Number.isFinite(Number(rawMargin)) ? Number(rawMargin) : DEFAULT_PROFIT_MARGIN_PCT;
-    const factor = rawFactor != null && Number.isFinite(Number(rawFactor)) && Number(rawFactor) > 0 ? Number(rawFactor) : DEFAULT_BCV_BINANCE_FACTOR;
-    return { marginPct, factor };
+    const marginPct = rawMargin == null ? DEFAULT_PROFIT_MARGIN_PCT : Number(rawMargin);
+    const factor = rawFactor == null ? DEFAULT_BCV_BINANCE_FACTOR : Number(rawFactor);
+    if (!Number.isFinite(marginPct) || marginPct < 0 || marginPct > 1000 ||
+        !Number.isFinite(factor) || factor < 0.01 || factor > 100) {
+      throw new Error('Configuración de precios inválida.');
+    }
+    return { marginPct, factor: canonicalPricingFactor(factor), canEditMarginPresets: hasAdminPermission(access, 'FINANCIAL_SETTINGS') };
   } catch (err) {
     logError('pricing_params_read_failed', err, { operation: 'get_pricing_params', provider: 'postgres' });
-    return { marginPct: DEFAULT_PROFIT_MARGIN_PCT, factor: DEFAULT_BCV_BINANCE_FACTOR };
+    throw new Error('No se pudo cargar la fórmula de precios. Vuelve a intentarlo.');
   }
 }
 

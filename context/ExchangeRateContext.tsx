@@ -2,7 +2,8 @@
 
 import { createContext, useContext, useEffect, useState, useCallback, useRef, ReactNode } from 'react';
 
-const DEFAULT_RATE        = Number(process.env.NEXT_PUBLIC_BS_RATE ?? '36.5');
+const configuredFallback = Number(process.env.NEXT_PUBLIC_BS_RATE ?? '36.5');
+const DEFAULT_RATE = Number.isFinite(configuredFallback) && configuredFallback > 0 ? configuredFallback : 36.5;
 const STALE_THRESHOLD_MS  = 15 * 60 * 1000; // 15 min — una tasa más vieja necesita refresco
 const REFRESH_INTERVAL_MS = STALE_THRESHOLD_MS;
 
@@ -41,14 +42,16 @@ export function ExchangeRateProvider({
   children,
   initialRate,
   initialUpdatedAt,
+  initialStale = true,
 }: {
   children: ReactNode;
   initialRate?: number;
   initialUpdatedAt?: string | null;
+  initialStale?: boolean;
 }) {
   const [rate, setRate]       = useState<number>(initialRate && initialRate > 0 ? initialRate : DEFAULT_RATE);
   const [loading, setLoading] = useState<boolean>(false);
-  const [stale, setStale]     = useState<boolean>(!(initialRate && initialRate > 0));
+  const [stale, setStale]     = useState<boolean>(initialStale || !(initialRate && initialRate > 0));
 
   const lastRefreshedAtRef = useRef<number>(
     initialUpdatedAt ? new Date(initialUpdatedAt).getTime() : 0,
@@ -77,13 +80,13 @@ export function ExchangeRateProvider({
     const promise = fetch('/api/config/exchange-rate')
       .then(r => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json() as Promise<{ rate: number }>;
+        return r.json() as Promise<{ rate: number; valid?: boolean; stale?: boolean; source?: string }>;
       })
       .then(data => {
         if (!mountedRef.current) return;
-        if (typeof data.rate === 'number' && data.rate > 0) {
+        if (typeof data.rate === 'number' && Number.isFinite(data.rate) && data.rate > 0) {
           setRate(data.rate);
-          setStale(false);
+          setStale(data.valid !== true || data.stale !== false || data.source !== 'configured');
           lastRefreshedAtRef.current = Date.now();
         } else {
           setStale(true);
@@ -110,6 +113,7 @@ export function ExchangeRateProvider({
   useEffect(() => {
     const now = Date.now();
     const isFresh =
+      !initialStale &&
       rate > 0 &&
       lastRefreshedAtRef.current > 0 &&
       (now - lastRefreshedAtRef.current) < STALE_THRESHOLD_MS;

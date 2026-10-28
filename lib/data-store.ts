@@ -5,6 +5,7 @@
  */
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
+import { claimEditorialAssets } from '@/lib/products/product-asset-references';
 import { logWarn, logError } from '@/lib/safe-logger';
 import { isR2PublicHttpsUrl } from '@/lib/r2-public-url';
 import {
@@ -230,9 +231,37 @@ export async function readSettings(): Promise<StoreSettings> {
 }
 
 export async function writeSettings(settings: StoreSettings): Promise<void> {
-  await prisma.appConfig.upsert({
+  await prisma.$transaction(async (tx) => {
+    await claimEditorialAssets(tx, settings);
+    return tx.appConfig.upsert({
     where:  { key: SETTINGS_KEY },
     update: { value: JSON.stringify(settings) },
     create: { key: SETTINGS_KEY, value: JSON.stringify(settings) },
   });
+  });
+}
+
+/** Merge a single domain while holding the configuration row lock. Never write
+ * fallback settings after an unavailable/corrupt read: that would erase the
+ * other domain even when this operator did not edit it. */
+export async function patchSettings(patch: Partial<StoreSettings>): Promise<StoreSettings> {
+  return prisma.$transaction(async (tx) => {
+    await tx.appConfig.upsert({
+      where: { key: SETTINGS_KEY },
+      create: { key: SETTINGS_KEY, value: JSON.stringify(DEFAULT_SETTINGS) },
+      update: {},
+    });
+    await tx.$queryRaw`SELECT "key" FROM "AppConfig" WHERE "key" = ${SETTINGS_KEY} FOR UPDATE`;
+    const record = await tx.appConfig.findUniqueOrThrow({ where: { key: SETTINGS_KEY } });
+    const current = storeSettingsSchema.parse(JSON.parse(record.value));
+    const settings = storeSettingsSchema.parse({ ...current, ...patch });
+    await claimEditorialAssets(tx, patch);
+    await tx.appConfig.update({ where: { key: SETTINGS_KEY }, data: { value: JSON.stringify(settings) } });
+    return settings;
+  });
+}
+
+export async function readSettingsStrict(): Promise<StoreSettings> {
+  const record = await prisma.appConfig.findUnique({ where: { key: SETTINGS_KEY } });
+  return record ? storeSettingsSchema.parse(JSON.parse(record.value)) : DEFAULT_SETTINGS;
 }

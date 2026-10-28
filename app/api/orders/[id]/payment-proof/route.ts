@@ -16,7 +16,7 @@ export const dynamic = 'force-dynamic';
  *
  * SESIÓN 04 — solo ADMIN accede al comprobante.
  * Contrato de autenticación (verificado end-to-end):
- *   - Guest sin sesión: 401 (middleware.ts, isUserTokenApi intercepta antes de llegar aquí).
+ *   - Guest sin sesión: 401 (proxy.ts, isUserTokenApi intercepta antes de llegar aquí).
  *   - CLIENT autenticado sin rol ADMIN: 403 (requireAdmin() en este handler).
  *   - ADMIN: 200 con URL firmada.
  */

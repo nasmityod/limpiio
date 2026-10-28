@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, useRef, ReactNode, useMemo } from 'react';
+import { createContext, useContext, useState, useEffect, useLayoutEffect, useRef, ReactNode, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import { Product } from './ProductContext';
 import {
@@ -10,7 +10,9 @@ import {
   removeWishlistItemAction,
   clearWishlistAction,
   type WishlistProductDTO,
+  type WishlistResult,
 } from '@/app/actions/wishlistActions';
+import { toast } from '@/components/ui/use-toast';
 
 const STORAGE_KEY = 'wishlist';
 
@@ -54,6 +56,13 @@ export const WishlistProvider = ({ children }: { children: ReactNode }) => {
   const { data: session, status: sessionStatus } = useSession();
   const [wishlist, setWishlist] = useState<Product[]>([]);
   const [isWishlistLoading, setIsWishlistLoading] = useState(true);
+  const [listOwnerId, setListOwnerId] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
+  const queueRef = useRef<Promise<void>>(Promise.resolve());
+  const identityRef = useRef<string | null>(null);
+  const currentUserId = session?.user?.id ?? null;
+  useLayoutEffect(() => { identityRef.current = currentUserId; }, [currentUserId]);
+  const visibleWishlist = currentUserId === listOwnerId ? wishlist : [];
 
   /** Última sesión vista — para detectar logout real (PRD-262). */
   const prevUserIdRef = useRef<string | null>(null);
@@ -67,7 +76,8 @@ export const WishlistProvider = ({ children }: { children: ReactNode }) => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
-        setWishlist(JSON.parse(stored));
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) setWishlist(parsed.filter(p => p && typeof p.id === 'string').slice(0, MAX_WISHLIST_ITEMS));
       }
     } catch {
       setWishlist([]);
@@ -96,6 +106,7 @@ export const WishlistProvider = ({ children }: { children: ReactNode }) => {
       if (prevUserIdRef.current) {
         prevUserIdRef.current = null;
         setWishlist([]);
+        setListOwnerId(null);
         try {
           localStorage.removeItem(STORAGE_KEY);
         } catch {
@@ -105,12 +116,13 @@ export const WishlistProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
 
+    if (prevUserIdRef.current && prevUserIdRef.current !== userId) setWishlist([]);
     prevUserIdRef.current = userId;
     if (mergedForUserRef.current === userId) return;
-    mergedForUserRef.current = userId;
 
     let cancelled = false;
-    (async () => {
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    queueRef.current = queueRef.current.catch(() => {}).then(async () => {
       try {
         let localIds: string[] = [];
         try {
@@ -124,18 +136,29 @@ export const WishlistProvider = ({ children }: { children: ReactNode }) => {
           ? await mergeWishlistAction(localIds)
           : await getWishlistAction();
 
-        if (cancelled) return;
-        setWishlist(merged.map(dtoToProduct));
+        if (cancelled || identityRef.current !== userId) return;
+        if (!merged.ok) {
+          retryTimer = setTimeout(() => setRetry(n => n + 1), 30_000);
+          return;
+        }
+        mergedForUserRef.current = userId;
+        setListOwnerId(userId);
+        setWishlist(merged.items.map(dtoToProduct));
         // La cuenta es ahora la fuente de verdad: limpiar copia local del invitado.
         try {
-          localStorage.removeItem(STORAGE_KEY);
+          if (merged.unmergedIds?.length) {
+            const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]') as Product[];
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(saved.filter(p => merged.unmergedIds!.includes(p.id))));
+            toast({ title: 'Límite de favoritos', description: 'Tu cuenta tiene 100 favoritos. Conservamos los restantes en este dispositivo.', variant: 'destructive' });
+          } else localStorage.removeItem(STORAGE_KEY);
         } catch { /* noop */ }
       } catch (err) {
         console.error('[WishlistProvider] merge con la cuenta falló:', err);
+        if (!cancelled) retryTimer = setTimeout(() => setRetry(n => n + 1), 30_000);
       }
-    })();
-    return () => { cancelled = true; };
-  }, [session?.user?.id, sessionStatus, isWishlistLoading]);
+    });
+    return () => { cancelled = true; if (retryTimer) clearTimeout(retryTimer); };
+  }, [session?.user?.id, sessionStatus, isWishlistLoading, retry]);
 
   // Persistencia local: SOLO para invitados (con cuenta, la BD es la fuente).
   useEffect(() => {
@@ -147,52 +170,53 @@ export const WishlistProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [wishlist, isWishlistLoading]);
 
+  const syncMutation = (action: () => Promise<WishlistResult>) => {
+    const owner = identityRef.current;
+    queueRef.current = queueRef.current.catch(() => {}).then(async () => {
+      if (identityRef.current !== owner) return;
+      try {
+        const result = await action();
+        if (identityRef.current !== owner) return;
+        if (result.ok) { setListOwnerId(owner); setWishlist(result.items.map(dtoToProduct)); }
+        else toast({ title: 'No se pudieron actualizar los favoritos', description: result.code === 'LIMIT' ? 'Puedes guardar hasta 100 favoritos.' : 'Intenta de nuevo. Tu lista anterior se conserva.', variant: 'destructive' });
+      } catch {
+        if (identityRef.current === owner) toast({ title: 'No se pudieron actualizar los favoritos', description: 'Intenta de nuevo. Tu lista anterior se conserva.', variant: 'destructive' });
+      }
+    });
+  };
+
   const addToWishlist = (product: Product) => {
+    if (isAuthedRef.current) { syncMutation(() => addWishlistItemAction(product.id)); return; }
     setWishlist(prev => {
       if (prev.some(p => p.id === product.id)) return prev;
       const next = [...prev, product];
-      return next.length > MAX_WISHLIST_ITEMS
-        ? next.slice(next.length - MAX_WISHLIST_ITEMS)
-        : next;
+      return next.length > MAX_WISHLIST_ITEMS ? prev : next;
     });
-    if (isAuthedRef.current) {
-      addWishlistItemAction(product.id).catch((err) =>
-        console.error('[WishlistProvider] sync add falló:', err),
-      );
-    }
   };
 
   const removeFromWishlist = (productId: string) => {
+    if (isAuthedRef.current) { syncMutation(() => removeWishlistItemAction(productId)); return; }
     setWishlist(prev => prev.filter(p => p.id !== productId));
-    if (isAuthedRef.current) {
-      removeWishlistItemAction(productId).catch((err) =>
-        console.error('[WishlistProvider] sync remove falló:', err),
-      );
-    }
   };
 
   const isInWishlist = (productId: string) => {
-    return wishlist.some(p => p.id === productId);
+    return visibleWishlist.some(p => p.id === productId);
   };
 
   const clearWishlist = () => {
+    if (isAuthedRef.current) { syncMutation(clearWishlistAction); return; }
     setWishlist([]);
-    if (isAuthedRef.current) {
-      clearWishlistAction().catch((err) =>
-        console.error('[WishlistProvider] sync clear falló:', err),
-      );
-    }
   };
 
   const value = useMemo(() => ({
-    wishlist,
+    wishlist: visibleWishlist,
     isWishlistLoading,
     addToWishlist,
     removeFromWishlist,
     isInWishlist,
     clearWishlist,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [wishlist, isWishlistLoading]);
+  }), [wishlist, isWishlistLoading, currentUserId, listOwnerId]);
 
   return (
     <WishlistContext.Provider value={value}>

@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { getServerSession } from 'next-auth/next';
-import { absoluteEmailUrl } from '@/emails/transactional/site';
-import type { OrderConfirmationPayload } from '@/emails/transactional/types';
 import { prisma } from '@/lib/prisma';
 import { requirePermission } from '@/lib/admin-access-server';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
@@ -13,14 +11,14 @@ import {
   findRecentDuplicateOrderInTransaction,
 } from '@/lib/checkout-order';
 import { CheckoutError } from '@/lib/checkout-error';
-import { roundMoney2 } from '@/lib/exchange-rate';
 import { readSettings } from '@/lib/data-store';
 import { isValidWhatsAppPhone, normalizeWhatsAppPhone } from '@/lib/whatsapp-phone';
 import { markCartRecovered } from '@/lib/abandoned-cart';
 import { sendOrderConfirmationEmail } from '@/lib/resend';
+import { buildOrderConfirmationPayload } from '@/lib/order-confirmation-payload';
+import { queueTransactionalEmails } from '@/lib/email-outbox-context';
 import { rateLimitCritical, getClientIp, hashForBucket } from '@/lib/rate-limit';
 import { rejectInvalidMutationOrigin, buildRateLimitedResponse, safeZodIssues } from '@/lib/security';
-import { d, dn } from '@/lib/decimal';
 import { hashToken } from '@/lib/security';
 import { CHECKOUT_MODE, isWhatsAppCheckout } from '@/lib/checkout-mode';
 import { buildOrderListWhere, buildOrderSearchWhere } from '@/lib/orders/order-list-filters';
@@ -31,15 +29,55 @@ import {
   orderCursorWhere,
 } from '@/lib/orders/order-cursor';
 import { logError, logWarn } from '@/lib/safe-logger';
+import { checkoutOperationKey, checkoutPayloadHash, checkoutCapability } from '@/lib/checkout-idempotency';
+import { assertBuyerReservationCapacity } from '@/lib/order-reservation';
+import { isCasheaEnabled } from '@/lib/cashea-config';
+
+type CheckoutEmailOrder = Prisma.OrderGetPayload<{ include: { items: true } }>;
+
+/** Queue the confirmation with the order/stock commit; no provider I/O occurs here. */
+async function queueCheckoutConfirmation(tx: Prisma.TransactionClient, order: CheckoutEmailOrder, guestToken: string | null): Promise<void> {
+  let recipientEmail = order.customerEmail?.trim() ?? '';
+  if (!recipientEmail && order.customerId) {
+    const u = await tx.user.findUnique({
+      where: { id: order.customerId },
+      select: { email: true },
+    });
+    recipientEmail = u?.email?.trim() ?? '';
+  }
+
+  if (recipientEmail) {
+    const productIds = [...new Set(order.items.map((i) => i.productId))];
+    const products = await tx.product.findMany({
+      where: { id: { in: productIds } },
+      select: {
+        id: true,
+        slug: true,
+        images: true,
+        media: {
+          where: { type: 'IMAGE' },
+          orderBy: { sortOrder: 'asc' },
+          take: 1,
+          select: { url: true },
+        },
+      },
+    });
+    const confirmationPayload = buildOrderConfirmationPayload(order, recipientEmail, products, guestToken);
+
+    await queueTransactionalEmails(tx, () => sendOrderConfirmationEmail(confirmationPayload));
+  } else {
+    logWarn('order_confirmation_skipped_no_email', { orderId: order.id, operation: 'send_confirmation' });
+  }
+
+}
 
 const CHECKOUT_TX_MAX_RETRIES = 3;
 /** SEC-2026-09 (#7): pedidos `Pendiente` sin pago que una cuenta puede tener abiertos a la vez (modo full). */
-const MAX_OPEN_UNPAID_ORDERS_PER_USER = 3;
 
 /** Reintenta transacciones ante conflictos de serialización de Postgres (P2034 / 40001). */
 function isSerializationFailure(error: unknown): boolean {
   if (error && typeof error === 'object' && 'code' in error) {
-    if ((error as { code: string }).code === 'P2034') return true;
+    if (['P2034', 'P2002'].includes((error as { code: string }).code)) return true;
   }
   const message = error instanceof Error ? error.message : String(error);
   return message.includes('40001') || message.includes('could not serialize');
@@ -193,30 +231,13 @@ export async function POST(request: Request) {
       'Demasiadas solicitudes. Espera un momento antes de intentarlo de nuevo.');
   }
 
-  // SEC-2026-09 (#7): en modo full el stock se descuenta al crear el pedido y
-  // no vuelve hasta el auto-cancel (48 h). Sin tope, una cuenta gratuita podía
-  // dejar todo el catálogo «reservado» con pedidos en efectivo que nunca paga.
-  if (!isGuest && CHECKOUT_MODE === 'full') {
-    const openUnpaid = await prisma.order.count({
-      where: { customerId: userId!, status: 'Pendiente', paidAt: null },
-    });
-    if (openUnpaid >= MAX_OPEN_UNPAID_ORDERS_PER_USER) {
-      return NextResponse.json(
-        {
-          message:
-            `Tienes ${openUnpaid} pedidos pendientes de pago. Espera a que los validemos ` +
-            'o escríbenos por WhatsApp antes de crear otro.',
-        },
-        { status: 409 },
-      );
-    }
-  }
-
   try {
     const body = await request.json();
     // Forzar el canal desde el servidor — no confiar en el cliente.
     const channel = CHECKOUT_MODE === 'whatsapp' ? 'whatsapp' : 'web';
+    if (!body || typeof body !== 'object' || Array.isArray(body)) throw new CheckoutError('Datos de pedido inválidos.', 400);
     body.channel = channel;
+    body.attemptKey = request.headers.get('Idempotency-Key') || body.attemptKey;
     const parsed = checkoutSchema.safeParse(body);
 
     if (!parsed.success) {
@@ -290,59 +311,66 @@ export async function POST(request: Request) {
       };
     }
 
+    if (safeData.paymentMethodId === 'cashea' && isCasheaEnabled()) throw new CheckoutError('Usa el checkout específico de Cashea.', 409);
+    const buyer = isGuest ? `guest:${safeData.customerEmail?.toLowerCase() || safeData.customerPhone}` : `user:${userId}`;
+    const operationKey = checkoutOperationKey(buyer, safeData.attemptKey);
+    const payloadHash = checkoutPayloadHash(safeData);
+
     // SESIÓN 06: generar token guest (raw → hash) ANTES de la transacción para
     // devolverlo al cliente exactamente una vez. El hash se guarda en BD.
     let guestToken: string | null = null;
     let guestTokenHash: string | null = null;
     let guestTokenExpiresAt: Date | null = null;
     if (isGuest) {
-      const { randomBytes } = await import('crypto');
-      guestToken = randomBytes(32).toString('base64url');
+      guestToken = checkoutCapability('guest', operationKey);
       guestTokenHash = hashToken(guestToken);
       guestTokenExpiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000); // 72h
     }
 
-    // PRD-131: reintentos (doble clic, recarga, retry de red) con la misma
-    // referencia de pago devuelven el pedido ya creado en vez de duplicarlo.
-    // FASE 4.1: para invitados la clave de idempotencia es (email, referencia).
-    // PRD-131: reintentos (doble clic, recarga, retry de red) con la misma
-    // referencia de pago devuelven el pedido ya creado en vez de duplicarlo.
-    // FASE 4.1: para invitados la clave de idempotencia es (email, referencia).
     const { order: createdOrder, reused } = await runCheckoutTransaction(async (tx) => {
-      const duplicate = await findRecentDuplicateOrderInTransaction(tx, {
-        customerId: isGuest ? null : (userId as string),
-        customerEmail: isGuest ? (safeData.customerEmail?.trim().toLowerCase() ?? null) : null,
-        paymentReference: safeData.paymentReference,
-      });
-      if (duplicate) return { order: duplicate, reused: true as const };
+      const attempt = await tx.checkoutAttempt.findUnique({ where: { key: operationKey }, include: { order: { include: { items: true } } } });
+      if (attempt) {
+        if (attempt.payloadHash !== payloadHash) throw new CheckoutError('Este intento ya pertenece a otros datos de compra.', 409);
+        if (!attempt.order) throw new CheckoutError('Este intento ya fue procesado y su pedido fue eliminado. Revisa el resultado antes de iniciar otra compra.', 409);
+        return { order: attempt.order, reused: true as const };
+      }
+      const duplicate = await tx.order.findUnique({ where: { checkoutAttemptKey: operationKey }, include: { items: true } });
+      if (duplicate) {
+        if (duplicate.checkoutPayloadHash !== payloadHash) throw new CheckoutError('Este intento ya pertenece a otros datos de compra.', 409);
+        return { order: duplicate, reused: true as const };
+      }
+      if (channel !== 'whatsapp') {
+        const referenceOwner = await findRecentDuplicateOrderInTransaction(tx, {
+          customerId: isGuest ? null : userId!, customerEmail: safeData.customerEmail,
+          paymentReference: safeData.paymentReference, paymentMethodId: safeData.paymentMethodId,
+          paymentBank: safeData.paymentBank ?? null,
+        });
+        if (referenceOwner) throw new CheckoutError('Esta referencia ya está asociada a otro intento de compra. Revisa el pago antes de continuar.', 409);
+      }
+      if (!isGuest && CHECKOUT_MODE === 'full') {
+        await assertBuyerReservationCapacity(tx, userId!, safeData.items);
+      }
 
       const { order: created } = await executeCheckoutInTransactionWithMethod(tx, safeData, {
         orderStatus: channel === 'whatsapp' ? 'Pendiente' : undefined,
         deductStock: channel !== 'whatsapp',
+        checkoutAttemptKey: operationKey,
+        checkoutPayloadHash: payloadHash,
         guestAccessTokenHash: guestTokenHash,
         guestAccessTokenExpiresAt: guestTokenExpiresAt,
       });
+      await tx.checkoutAttempt.create({ data: { key: operationKey, payloadHash, orderId: created.id } });
+      await queueCheckoutConfirmation(tx, created, guestToken);
       return { order: created, reused: false as const };
     });
 
     if (reused) {
       logWarn('checkout_duplicate_prevented', { orderId: createdOrder.id, operation: 'checkout' });
-      // No devolver token si el pedido ya existía: el token se generó en el original.
-      return NextResponse.json(prismaOrderToOrder(createdOrder), { status: 200 });
+      const dto = isGuest ? toGuestOrderConfirmationDto(createdOrder) : prismaOrderToOrder(createdOrder);
+      return NextResponse.json({ ...dto, ...(isGuest && guestToken ? { guestToken } : {}) }, { status: 200 });
     }
 
-    // Refetch con tipo completo para evitar el Prisma 7 inference gap
-    const order = await prisma.order.findUnique({
-      where: { id: createdOrder.id },
-      include: { items: true },
-    });
-    if (!order) {
-      logError('checkout_order_not_found_after_create', new Error('Order not found after creation'), { orderId: createdOrder.id, operation: 'checkout' });
-      return NextResponse.json(
-        { message: 'No pudimos procesar tu pedido en este momento. Intenta de nuevo en unos minutos.' },
-        { status: 500 },
-      );
-    }
+    const order = createdOrder;
 
     // PRD-180: marcar el carrito abandonado como recuperado SOLO server-side,
     // tras confirmar el pedido (best-effort; markCartRecovered nunca lanza).
@@ -355,119 +383,6 @@ export async function POST(request: Request) {
     );
     for (const email of recoveredEmails) {
       await markCartRecovered(email);
-    }
-
-    let recipientEmail = order.customerEmail?.trim() ?? '';
-    if (!recipientEmail && order.customerId) {
-      const u = await prisma.user.findUnique({
-        where: { id: order.customerId },
-        select: { email: true },
-      });
-      recipientEmail = u?.email?.trim() ?? '';
-    }
-
-    if (recipientEmail) {
-      const productIds = [...new Set(order.items.map((i) => i.productId))];
-      const products = await prisma.product.findMany({
-        where: { id: { in: productIds } },
-        select: {
-          id: true,
-          slug: true,
-          images: true,
-          media: {
-            where: { type: 'IMAGE' },
-            orderBy: { sortOrder: 'asc' },
-            take: 1,
-            select: { url: true },
-          },
-        },
-      });
-      const slugById = new Map(
-        products.map((p) => [p.id, (p.slug?.trim() || p.id) as string])
-      );
-      // Respaldo de imagen: si la línea del pedido no guardó imagen, usamos la
-      // foto del producto para que el correo siempre muestre el artículo.
-      const fallbackImageById = new Map(
-        products.map((p) => [p.id, p.images?.[0]?.trim() || p.media?.[0]?.url?.trim() || null])
-      );
-
-      // PRD-204: convertir Decimal → number en la frontera BD→email payload
-      const rate = dn(order.exchangeRateUsdBs);
-      const priceUsdFromStored = (priceStored: number) =>
-        rate != null && rate > 0 ? roundMoney2(priceStored / rate) : roundMoney2(priceStored);
-
-      const itemsPayload = order.items.map((i) => ({
-        name: i.productName,
-        slug: slugById.get(i.productId) ?? i.productId,
-        image: absoluteEmailUrl(i.imageUrl || fallbackImageById.get(i.productId) || null),
-        priceUsd: priceUsdFromStored(d(i.price)),
-        quantity: i.quantity,
-      }));
-
-      // La tienda no cobra envío: el total autoritativo (Bs) es post-descuentos.
-      const totalBs = d(order.total);
-      const subtotalBs = dn(order.subtotalBeforeDiscount) ?? totalBs;
-      const couponDiscountBs = dn(order.couponDiscount) ?? 0;
-      const paymentDiscountBs = dn(order.paymentDiscount) ?? 0;
-      const paymentDiscountPercent = dn(order.paymentDiscountPercent) ?? undefined;
-
-      const totalUsd =
-        rate != null && rate > 0 ? roundMoney2(totalBs / rate) : roundMoney2(totalBs);
-      const subtotalUsd = priceUsdFromStored(subtotalBs);
-      const couponDiscountUsd = priceUsdFromStored(couponDiscountBs);
-      const paymentDiscountUsd = priceUsdFromStored(paymentDiscountBs);
-      const shippingUsd = 0;
-      const shippingBs = 0;
-
-      const confirmationPayload: OrderConfirmationPayload = {
-        id: order.id,
-        orderNumber: order.orderNumber,
-        customerName: order.customerName.trim() || 'Cliente',
-        email: recipientEmail,
-        createdAt: order.createdAt,
-        status: order.status,
-        items: itemsPayload,
-        subtotalUsd,
-        shippingUsd,
-        totalUsd,
-        subtotalBs,
-        shippingBs,
-        totalBs,
-        exchangeRateUsdBs: rate,
-        paymentDiscountUsd: paymentDiscountBs > 0 ? paymentDiscountUsd : undefined,
-        paymentDiscountPercent: paymentDiscountPercent != null && paymentDiscountPercent > 0
-          ? paymentDiscountPercent
-          : undefined,
-        paymentDiscountBs: paymentDiscountBs > 0 ? paymentDiscountBs : undefined,
-        couponDiscountUsd: couponDiscountBs > 0 ? couponDiscountUsd : undefined,
-        couponDiscountBs: couponDiscountBs > 0 ? couponDiscountBs : undefined,
-        paymentCurrency: order.paymentCurrency ?? null,
-        paymentMethod: order.paymentMethod,
-        paymentBank: order.paymentBank,
-        paymentReference: order.paymentReference,
-        shippingAddress: order.shippingAddress,
-        shippingCity: order.shippingCity,
-        shippingState: order.shippingState,
-        shippingZipCode: order.shippingZipCode,
-        shippingCountry: order.shippingCountry,
-        customerPhone: order.customerPhone,
-        shippingMethod: order.trackingCarrier ?? null,
-        freeShipping: order.freeShipping === true,
-        // SESIÓN 06: token raw para construir enlace de acceso guest en el email
-        guestToken,
-      };
-
-      // Best-effort: el pedido YA está confirmado en BD; un fallo de Resend
-      // jamás debe presentarse al cliente como checkout fallido.
-      // PRD-051: el log incluye id y orderNumber para que ops pueda reenviar
-      // manualmente desde admin → PRD-051 requiere endpoint resend (DEPENDENCIA-05).
-      try {
-        await sendOrderConfirmationEmail(confirmationPayload);
-      } catch (emailError) {
-        logError('order_confirmation_email_failed', emailError, { orderId: order.id, provider: 'resend', operation: 'send_confirmation' });
-      }
-    } else {
-      logWarn('order_confirmation_skipped_no_email', { orderId: order.id, operation: 'send_confirmation' });
     }
 
     // SESIÓN 06: para invitados devolver DTO mínimo + token raw; para autenticados el Order completo.

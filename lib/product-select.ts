@@ -65,6 +65,7 @@ export const PRODUCT_ADMIN_DETAIL_SELECT = {
   specs:         true,
   isActive:      true,
   createdAt:     true,
+  updatedAt:     true,
   freeShipping:  true,
   media:         { orderBy: { sortOrder: 'asc' as const } },
 } as const satisfies Prisma.ProductSelect;

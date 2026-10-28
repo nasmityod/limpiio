@@ -22,6 +22,7 @@ import { getCachedSiteShellData, buildContactFromShellData } from "@/lib/site-sh
 import { googleMapsBusinessUrl } from "@/lib/google-maps";
 import { getExchangeRateWithTimestamp } from "@/lib/load-exchange-rate-ssr";
 import { BRAND } from "@/config/brand";
+import { PublicBusinessProvider } from '@/context/PublicBusinessContext';
 
 const SITE_URL = BRAND.siteUrl;
 const META_PIXEL_ID = process.env.NEXT_PUBLIC_META_PIXEL_ID?.trim() || "";
@@ -192,7 +193,7 @@ export default async function RootLayout({
   };
 
   // SESIÓN 17: leer tasa actual con timestamp para hidratación del provider
-  const { rate: initialRate, updatedAt: initialUpdatedAt } = await getExchangeRateWithTimestamp();
+  const { rate: initialRate, updatedAt: initialUpdatedAt, stale: initialRateStale } = await getExchangeRateWithTimestamp();
 
   return (
     <html lang="es" data-scroll-behavior="smooth" className={jost.variable}>
@@ -245,12 +246,13 @@ export default async function RootLayout({
         </a>
         {/* Sin nonce: JSON-LD no es ejecutable; compatible con HTML cacheado (JsonLd.tsx). */}
         <JsonLd data={[websiteSchema, localBusinessSchema, organizationSchema]} />
+        <PublicBusinessProvider value={{ address: settings.address, phone: settings.phone }}>
         <AuthProvider>
           <MotionProvider>
           <CartProvider>
             <WishlistProvider>
               <ProductProvider>
-                <ExchangeRateProvider initialRate={initialRate} initialUpdatedAt={initialUpdatedAt}>
+                <ExchangeRateProvider initialRate={initialRate} initialUpdatedAt={initialUpdatedAt} initialStale={initialRateStale}>
                   {/*
                     Shell del layout: Navbar/CartDrawer en cliente (AppContent),
                     <main> y <Footer> en servidor para reducir JS bundle
@@ -275,6 +277,7 @@ export default async function RootLayout({
           </MotionProvider>
           <Toaster />
         </AuthProvider>
+        </PublicBusinessProvider>
       </body>
     </html>
   );

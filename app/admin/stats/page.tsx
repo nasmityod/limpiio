@@ -47,6 +47,7 @@ export default function AdminStatsPage() {
   const [sortBy, setSortBy] = useState<'quantity' | 'revenue'>('revenue');
   const [topViewed, setTopViewed] = useState<TopViewedProduct[]>([]);
   const [loadingViews, setLoadingViews] = useState(true);
+  const [costsAvailable, setCostsAvailable] = useState(false);
   const [productCosts, setProductCosts] = useState<Record<string, number>>({});
   const [loadError, setLoadError] = useState(false);
 
@@ -115,12 +116,13 @@ export default function AdminStatsPage() {
       return;
     }
     const controller = new AbortController();
+    setCostsAvailable(false); setProductCosts({});
     fetch(`/api/admin/product-costs?ids=${encodeURIComponent(topProductIdsKey)}`, {
       signal: controller.signal,
     })
       .then(r => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then(data => {
-        if (data && typeof data === 'object' && !Array.isArray(data)) setProductCosts(data);
+        if (data && typeof data === 'object' && !Array.isArray(data)) { setProductCosts(data); setCostsAvailable(true); }
       })
       .catch(err => {
         if (err instanceof DOMException && err.name === 'AbortError') return;
@@ -151,9 +153,8 @@ export default function AdminStatsPage() {
   const profitStats = useMemo(() => {
     let revenue = 0, cost = 0, uncovered = 0;
     for (const p of sortedProducts) {
-      revenue += p.revenue;
       const unitCost = productCosts[p.productId];
-      if (unitCost != null && unitCost > 0) cost += unitCost * p.quantity;
+      if (unitCost != null && unitCost > 0) { revenue += p.revenue; cost += unitCost * p.quantity; }
       else uncovered += p.quantity;
     }
     const profit = revenue - cost;
@@ -163,8 +164,7 @@ export default function AdminStatsPage() {
 
   // Pending verify orders (from the byStatus breakdown)
   const pendingVerifyCount = useMemo(() => {
-    const entry = stats?.byStatus?.find(s => s.status === 'Pendiente' || s.status === 'Pendiente verificación Binance');
-    return entry ? entry.count : 0;
+    return stats?.byStatus?.filter(s => s.status === 'Pendiente' || s.status === 'Pendiente verificación Binance').reduce((total, s) => total + s.count, 0) ?? 0;
   }, [stats]);
 
   const MEDAL_COLORS = ['text-yellow-500', 'text-gray-400', 'text-amber-600'];
@@ -437,25 +437,26 @@ export default function AdminStatsPage() {
       <div className="bg-white border border-gray-200 rounded-xl p-5 mb-8">
         <div className="flex items-center gap-2 mb-4">
           <Wallet size={18} className="text-green-600" />
-          <h2 className="font-semibold text-gray-800">Ganancia estimada (USD)</h2>
-          <span className="ml-2 text-xs text-gray-400">costo actual del producto · aproximado</span>
+          <h2 className="font-semibold text-gray-800">Ganancia estimada de los 20 productos del ranking (USD)</h2>
+          <span className="ml-2 text-xs text-gray-400">costo actual · antes de descuentos del pedido · aproximado</span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <p className="text-xs text-gray-500">Ganancia bruta</p>
-            <p className="text-2xl font-bold text-green-600">{formatUsd(profitStats.profit)}</p>
+            <p className="text-2xl font-bold text-green-600">{costsAvailable ? formatUsd(profitStats.profit) : 'No disponible'}</p>
           </div>
           <div>
             <p className="text-xs text-gray-500">Costo de lo vendido</p>
-            <p className="text-2xl font-bold text-gray-900">{formatUsd(profitStats.cost)}</p>
+            <p className="text-2xl font-bold text-gray-900">{costsAvailable ? formatUsd(profitStats.cost) : 'No disponible'}</p>
           </div>
           <div>
             <p className="text-xs text-gray-500">Margen</p>
-            <p className="text-2xl font-bold text-gray-900">{profitStats.marginPct.toFixed(1)}%</p>
+            <p className="text-2xl font-bold text-gray-900">{costsAvailable ? `${profitStats.marginPct.toFixed(1)}%` : 'No disponible'}</p>
           </div>
         </div>
-        {profitStats.uncovered > 0 && (
-          <p className="text-xs text-amber-600 mt-3">⚠️ {profitStats.uncovered} unidades sin costo registrado — el margen las ignora. Carga el costo en cada producto para mayor precisión.</p>
+        {!costsAvailable && <p role="status" className="text-xs text-amber-700 mt-3">Los costos no están disponibles o tu cuenta no tiene permiso de catálogo. No se puede estimar la ganancia.</p>}
+        {costsAvailable && profitStats.uncovered > 0 && (
+          <p className="text-xs text-amber-600 mt-3">⚠️ {profitStats.uncovered} unidades sin costo registrado — sus ingresos y costos se excluyen del cálculo. Carga el costo en cada producto para mayor precisión.</p>
         )}
       </div>
 

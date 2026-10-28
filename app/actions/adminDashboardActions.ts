@@ -131,6 +131,7 @@ async function fetchValidatedRevenueTotals(): Promise<ValidatedRevenueTotals> {
       )::int AS legacy_count
     FROM "Order" o
     WHERE o.status IN (${VALIDATED_STATUS_LIST})
+      AND (o."paidAt" IS NOT NULL OR o."legacyPaidConfirmed" = true)
   `);
 
   const row = rows[0];
@@ -139,14 +140,6 @@ async function fetchValidatedRevenueTotals(): Promise<ValidatedRevenueTotals> {
     revenueBs: roundMoney2(Number(row?.revenue_bs ?? 0)),
     hasLegacyUsdRevenue: Number(row?.legacy_count ?? 0) > 0,
   };
-}
-
-/** Número de categorías distintas presentes en el catálogo (un solo escalar). */
-async function countDistinctProductCategories(): Promise<number> {
-  const rows = await prisma.$queryRaw<Array<{ total: bigint | number }>>(
-    Prisma.sql`SELECT COUNT(DISTINCT category) AS total FROM "Product"`,
-  );
-  return Number(rows[0]?.total ?? 0);
 }
 
 export async function getAdminDashboardData(): Promise<AdminDashboardData> {
@@ -168,9 +161,9 @@ export async function getAdminDashboardData(): Promise<AdminDashboardData> {
     opsConfigRows,
   ] = await Promise.all([
     prisma.product.count(),
-    // Antes: findMany({ distinct: ['category'] }) sólo para hacer `.length`.
-    // Con muchas categorías traía una fila por cada una; ahora es un escalar.
-    countDistinctProductCategories(),
+    // La tarjeta enlaza al gestor Category: su contador corresponde a los
+    // registros editables allí, incluidos los que aún no tienen productos.
+    prisma.category.count(),
     prisma.product.count({ where: { stock: { gt: 0, lt: LOW_STOCK_THRESHOLD } } }),
     prisma.product.count({ where: { stock: 0 } }),
     prisma.product.findMany({

@@ -22,12 +22,20 @@ export function readR2PublicHostname(): string | null {
   }
 }
 
-export function isR2PublicHttpsUrl(url: string): boolean {
-  const hostname = readR2PublicHostname();
-  if (!hostname) return false;
+export function isR2PublicHttpsUrl(url: string, configuredBase = readR2PublicBaseUrl()): boolean {
+  if (!configuredBase) return false;
   try {
+    const base = new URL(configuredBase.replace(/\/$/, ''));
     const parsed = new URL(url);
-    return parsed.protocol === 'https:' && parsed.hostname === hostname;
+    if (base.protocol !== 'https:' || base.username || base.password || base.search || base.hash ||
+        parsed.protocol !== 'https:' || parsed.origin !== base.origin || parsed.username || parsed.password ||
+        parsed.search || parsed.hash || parsed.href !== url) return false;
+    const prefix = `${base.href.replace(/\/$/, '')}/`;
+    if (!url.startsWith(prefix)) return false;
+    const key = url.slice(prefix.length);
+    // Generated keys are ASCII. Reject aliases (query strings, encoding, dot
+    // segments or duplicated separators) so reference checks use one identity.
+    return /^[A-Za-z0-9][A-Za-z0-9_./-]*$/.test(key) && key.split('/').every(part => part && part !== '.' && part !== '..');
   } catch {
     return false;
   }

@@ -13,7 +13,8 @@ import { logError } from '@/lib/safe-logger';
 
 /** Lectura del contenido del sitio (es contenido público — la usa el editor). */
 export async function getSiteContent(): Promise<SiteContent> {
-  return readSiteContent();
+  await requirePermissionAction('SITE_CONTENT');
+  return readSiteContent(true);
 }
 
 export type UpdateSiteContentResult = { success: true } | { success: false; message: string };

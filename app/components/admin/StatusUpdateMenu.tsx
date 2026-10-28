@@ -57,6 +57,8 @@ export const StatusUpdateMenu = ({
   bulkCount = 0,
   allowedOnly,
   disabledStatuses,
+  shippingAddress,
+  casheaStatus,
 }: {
   onUpdate: (status: OrderStatus) => void;
   isBulk?: boolean;
@@ -65,16 +67,25 @@ export const StatusUpdateMenu = ({
   allowedOnly?: OrderStatus[];
   /** Botones deshabilitados con el motivo accesible (title/aria-label) a mostrar. */
   disabledStatuses?: Partial<Record<OrderStatus, string>>;
+  shippingAddress?: string;
+  casheaStatus?: string | null;
 }) => {
   // PRD-200 UI: en operación masiva no se permite 'Enviado' ni 'Entregado'
   // (requieren acción individual con tracking/email por pedido).
-  const BULK_EXCLUDED: readonly OrderStatus[] = ['Enviado', 'Entregado'];
+  const BULK_EXCLUDED: readonly OrderStatus[] = ['Pendiente', 'En Proceso', 'Enviado', 'Entregado'];
 
-  const options: ButtonStatus[] = allowedOnly?.length
+  const candidates: ButtonStatus[] = allowedOnly?.length
     ? validStatuses.filter((s): s is ButtonStatus => (allowedOnly as readonly string[]).includes(s))
     : isBulk
       ? validStatuses.filter((s): s is ButtonStatus => !BULK_EXCLUDED.includes(s))
       : [...validStatuses];
+  const options = isBulk ? candidates : candidates.filter((s) => {
+    if (casheaStatus && casheaStatus !== 'CONFIRMED') return false;
+    if (s === currentStatus) return true;
+    if (currentStatus === 'Cancelado' || currentStatus === 'Entregado') return false;
+    if (s === 'Cancelado') return !casheaStatus;
+    return (currentStatus === 'En Proceso' && (s === 'Enviado' || (s === 'Entregado' && /^Retiro en tienda\b/i.test(shippingAddress ?? '')))) || (currentStatus === 'Enviado' && s === 'Entregado');
+  });
 
   const handleClick = (status: OrderStatus) => {
     if (!isBulk && currentStatus === status) return;

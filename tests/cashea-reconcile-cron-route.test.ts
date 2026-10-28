@@ -176,7 +176,7 @@ describe('GET /api/cron/cashea-reconcile', () => {
         casheaStatus: { in: ['CREATED', 'REDIRECTED', 'RETURNED'] },
         casheaReservationExpiresAt: { lt: new Date('2026-07-16T12:00:00.000Z') },
       },
-      data: { casheaStatus: 'EXPIRED' },
+      data: { casheaStatus: 'EXPIRED', casheaReturnTokenHash: null },
     });
     expect(body.expired).toBe(3);
     // Nunca debe tocar el estado de pedido (Order.status) ni restaurar stock aquí.

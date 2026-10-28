@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { PAGE_SIZE, getCachedOfferProducts } from '@/lib/catalog-cache';
+import { PAGE_SIZE, getCachedOfferProducts, getCachedOfferCount } from '@/lib/catalog-cache';
 import ProductCard from '@/components/ProductCard';
 import PaginationBar from '@/app/components/PaginationBar';
 import JsonLd from '@/app/components/JsonLd';
@@ -26,8 +26,8 @@ function sanitizePage(raw: string | undefined, totalPages: number): number {
 
 export async function generateMetadata({ searchParams }: PageProps): Promise<Metadata> {
   const { page: rawPage } = await searchParams;
-  const offers = await getCachedOfferProducts();
-  const totalPages = Math.max(1, Math.ceil(offers.length / PAGE_SIZE));
+  const total = await getCachedOfferCount();
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const page = sanitizePage(rawPage, totalPages);
 
   const canonicalUrl =
@@ -65,8 +65,7 @@ const offersBreadcrumbSchema = {
 export default async function OfertasPage({ searchParams }: PageProps) {
   const { page: rawPage } = await searchParams;
 
-  const offers     = await getCachedOfferProducts();
-  const total      = offers.length;
+  const total      = await getCachedOfferCount();
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const page       = sanitizePage(rawPage, totalPages);
 
@@ -76,7 +75,7 @@ export default async function OfertasPage({ searchParams }: PageProps) {
     if (raw > totalPages) redirect(`/ofertas?page=${totalPages}`);
   }
 
-  const pageProducts = offers.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE) as Product[];
+  const pageProducts = await getCachedOfferProducts(page) as Product[];
 
   return (
     <div className="pb-10 sm:pb-12 w-full max-w-full">

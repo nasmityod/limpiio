@@ -1,7 +1,11 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import type { Prisma } from '@prisma/client';
+import { queueTransactionalEmails } from '@/lib/email-outbox-context';
+import { logError } from '@/lib/safe-logger';
 import { prisma } from '@/lib/prisma';
+import { orderSnapshotGuard } from '@/lib/order-lifecycle';
 import { prismaOrderToOrder, type Order, type OrderStatus } from '@/lib/definitions';
 import { requirePermissionAction } from '@/lib/admin-access-server';
 import { orderPathSegment } from '@/lib/order-ref';
@@ -29,6 +33,27 @@ export type ValidateOrderPaymentResult =
   | { success: true; message: string; order: Order }
   | { success: false; message: string };
 
+type EmailOrder = Prisma.OrderGetPayload<{ include: { items: true; customer: { select: { email: true; name: true } } } }>;
+
+async function queuePaymentEmail(tx: Prisma.TransactionClient, order: EmailOrder, rejectionReason?: string): Promise<void> {
+  const recipient = order.customerEmail?.trim() || order.customer?.email?.trim() || '';
+  if (!recipient) return;
+  const displayName = order.customerName?.trim() || order.customer?.name?.trim() || '';
+  await queueTransactionalEmails(tx, () => rejectionReason === undefined
+    ? sendPaymentValidatedEmail(recipient, firstNameFromCustomerName(displayName), String(order.orderNumber).padStart(4, '0'), order.id)
+    : sendPaymentRejectedEmail(recipient, firstNameFromCustomerName(displayName), String(order.orderNumber).padStart(4, '0'), rejectionReason, order.id));
+}
+
+export async function validateOrderPayment(orderId: string): Promise<ValidateOrderPaymentResult> {
+  try { return await validateOrderPaymentInternal(orderId); }
+  catch (error) { logError('validate_order_payment_failed', error, { orderId }); return { success: false, message: 'No se pudo validar el pago. Recarga e intenta de nuevo.' }; }
+}
+
+export async function rejectOrderPayment(orderId: string, reason: string): Promise<ValidateOrderPaymentResult> {
+  try { return await rejectOrderPaymentInternal(orderId, reason); }
+  catch (error) { logError('reject_order_payment_failed', error, { orderId }); return { success: false, message: 'No se pudo rechazar el pago. Recarga e intenta de nuevo.' }; }
+}
+
 /**
  * Confirma pago manual: Pendiente → En Proceso, y notifica al cliente por correo (si hay email).
  *
@@ -37,7 +62,7 @@ export type ValidateOrderPaymentResult =
  * PRD-196: locking optimista — la transición usa `updateMany` condicionado al
  * estado esperado; si otro admin lo cambió en paralelo, no hay last-write-wins.
  */
-export async function validateOrderPayment(orderId: string): Promise<ValidateOrderPaymentResult> {
+async function validateOrderPaymentInternal(orderId: string): Promise<ValidateOrderPaymentResult> {
   let adminEmail: string | null = null;
   try {
     const access = await requirePermissionAction('PAYMENTS');
@@ -60,6 +85,10 @@ export async function validateOrderPayment(orderId: string): Promise<ValidateOrd
     select: {
       id: true,
       status: true,
+      stockDeducted: true,
+      updatedAt: true,
+      paidAt: true,
+      casheaStatus: true,
     },
   });
 
@@ -67,7 +96,9 @@ export async function validateOrderPayment(orderId: string): Promise<ValidateOrd
     return { success: false, message: 'Pedido no encontrado.' };
   }
 
-  if (existing.status === ('En Proceso' satisfies OrderStatus)) {
+  if (existing.casheaStatus) return { success: false, message: 'Usa la verificación específica de Cashea.' };
+
+  if (existing.status === ('En Proceso' satisfies OrderStatus) && existing.paidAt) {
     const already = await loadFullOrder(orderId);
     return {
       success: true,
@@ -105,9 +136,9 @@ export async function validateOrderPayment(orderId: string): Promise<ValidateOrd
 
         const claim = await tx.order.updateMany({
           where: {
-            id: orderId,
-            status: 'Pendiente' satisfies OrderStatus,
-            stockDeducted: false,
+            ...orderSnapshotGuard(existing),
+            paidAt: null,
+            casheaStatus: null,
           },
           data: {
             status: 'En Proceso' satisfies OrderStatus,
@@ -143,7 +174,9 @@ export async function validateOrderPayment(orderId: string): Promise<ValidateOrd
           },
         });
 
-        return { kind: 'updated', order: order! };
+        if (!order) throw new Error('Order disappeared during payment validation.');
+        await queuePaymentEmail(tx, order);
+        return { kind: 'updated', order };
       });
     } catch (err) {
       if (err instanceof CheckoutError) {
@@ -173,18 +206,6 @@ export async function validateOrderPayment(orderId: string): Promise<ValidateOrd
 
     const updated = txResult.order;
 
-    const recipientEmail =
-      updated.customerEmail?.trim() || updated.customer?.email?.trim() || '';
-    const displayNameForEmail =
-      updated.customerName?.trim() || updated.customer?.name?.trim() || '';
-
-    await sendPaymentValidatedEmail(
-      recipientEmail,
-      firstNameFromCustomerName(displayNameForEmail),
-      String(updated.orderNumber).padStart(4, '0'),
-      updated.id
-    );
-
     revalidatePath('/admin/orders');
     revalidatePath(`/admin/orders/${orderId}`);
     revalidatePath('/account/orders');
@@ -192,47 +213,32 @@ export async function validateOrderPayment(orderId: string): Promise<ValidateOrd
 
     return {
       success: true,
-      message: 'Pago marcado como verificado y cliente notificado cuando hay correo válido.',
+      message: 'Pago marcado como verificado y notificación programada cuando hay correo válido.',
       order: prismaOrderToOrder(updated),
     };
   }
 
-  // Para pedidos normales (stockDeducted === true): comportamiento actual.
-  const transition = await prisma.order.updateMany({
-    where: { id: orderId, status: 'Pendiente' satisfies OrderStatus },
-    data: { status: 'En Proceso' satisfies OrderStatus, paidAt: new Date(), paymentVerifiedBy: adminEmail, paymentRejectionReason: null },
+  const updated = await prisma.$transaction(async (tx) => {
+    const transition = await tx.order.updateMany({
+      where: { ...orderSnapshotGuard(existing), paidAt: null, casheaStatus: null, stockDeducted: true },
+      data: { status: 'En Proceso' satisfies OrderStatus, paidAt: new Date(), paymentVerifiedBy: adminEmail, paymentRejectionReason: null },
+    });
+    if (transition.count !== 1) return null;
+    const current = await tx.order.findUniqueOrThrow({
+      where: { id: orderId },
+      include: { items: true, customer: { select: { email: true, name: true } } },
+    });
+    await queuePaymentEmail(tx, current);
+    return current;
   });
-
-  if (transition.count === 0) {
-    // Otro admin movió el pedido entre la lectura y la escritura.
-    const current = await prisma.order.findUnique({ where: { id: orderId }, select: { status: true } });
-    if (current?.status === ('En Proceso' satisfies OrderStatus)) {
+  if (!updated) {
+    const current = await prisma.order.findUnique({ where: { id: orderId }, select: { status: true, paidAt: true } });
+    if (current?.status === ('En Proceso' satisfies OrderStatus) && current.paidAt) {
       const already = await loadFullOrder(orderId);
-      return {
-        success: true,
-        message: 'El pago ya estaba validado.',
-        order: prismaOrderToOrder(already!),
-      };
+      return { success: true, message: 'El pago ya estaba validado.', order: prismaOrderToOrder(already!) };
     }
-    return {
-      success: false,
-      message: 'El pedido cambió de estado mientras se validaba. Recarga e intenta de nuevo.',
-    };
+    return { success: false, message: 'El pedido cambió de estado mientras se validaba. Recarga e intenta de nuevo.' };
   }
-
-  const updated = (await loadFullOrder(orderId))!;
-
-  const recipientEmail =
-    updated.customerEmail?.trim() || updated.customer?.email?.trim() || '';
-  const displayNameForEmail =
-    updated.customerName?.trim() || updated.customer?.name?.trim() || '';
-
-  await sendPaymentValidatedEmail(
-    recipientEmail,
-    firstNameFromCustomerName(displayNameForEmail),
-    String(updated.orderNumber).padStart(4, '0'),
-    updated.id
-  );
 
   revalidatePath('/admin/orders');
   revalidatePath(`/admin/orders/${orderId}`);
@@ -241,7 +247,7 @@ export async function validateOrderPayment(orderId: string): Promise<ValidateOrd
 
   return {
     success: true,
-    message: 'Pago marcado como verificado y cliente notificado cuando hay correo válido.',
+    message: 'Pago marcado como verificado y notificación programada cuando hay correo válido.',
     order: prismaOrderToOrder(updated),
   };
 }
@@ -261,7 +267,7 @@ const REJECTABLE_STATUSES: readonly OrderStatus[] = [
  * `Entregado`) — para esos casos el flujo correcto es el cambio de estado /
  * cancelación formal del panel, no el rechazo de pago.
  */
-export async function rejectOrderPayment(
+async function rejectOrderPaymentInternal(
   orderId: string,
   reason: string
 ): Promise<ValidateOrderPaymentResult> {
@@ -281,6 +287,9 @@ export async function rejectOrderPayment(
       id: true,
       status: true,
       stockDeducted: true,
+      updatedAt: true,
+      paidAt: true,
+      casheaStatus: true,
       items: { select: { productId: true, quantity: true } },
     },
   });
@@ -291,6 +300,7 @@ export async function rejectOrderPayment(
   if (existing.status === ('Cancelado' satisfies OrderStatus)) {
     return { success: false, message: 'El pedido ya está cancelado.' };
   }
+  if (existing.casheaStatus || existing.paidAt) return { success: false, message: 'El pedido requiere su operación de pago específica.' };
   if (!REJECTABLE_STATUSES.includes(existing.status as OrderStatus)) {
     return {
       success: false,
@@ -304,7 +314,7 @@ export async function rejectOrderPayment(
     // PRD-196: transición condicionada al estado leído — si otro admin lo
     // movió en paralelo (p. ej. ya validó el pago), no se toca nada.
     const transition = await tx.order.updateMany({
-      where: { id: orderId, status: { in: [...REJECTABLE_STATUSES] } },
+      where: { ...orderSnapshotGuard(existing), paidAt: null, casheaStatus: null },
       data: {
         status: 'Cancelado' satisfies OrderStatus,
         paymentRejectionReason: cleanReason,
@@ -326,13 +336,15 @@ export async function rejectOrderPayment(
       { stockClaimStatus: 'Cancelado' },
     );
 
-    return tx.order.findUnique({
+    const current = await tx.order.findUniqueOrThrow({
       where: { id: orderId },
       include: {
         items: true,
         customer: { select: { email: true, name: true } },
       },
     });
+    await queuePaymentEmail(tx, current, cleanReason);
+    return current;
   });
 
   if (!updated) {
@@ -342,19 +354,6 @@ export async function rejectOrderPayment(
     };
   }
 
-  const recipientEmail =
-    updated.customerEmail?.trim() || updated.customer?.email?.trim() || '';
-  const displayNameForEmail =
-    updated.customerName?.trim() || updated.customer?.name?.trim() || '';
-
-  await sendPaymentRejectedEmail(
-    recipientEmail,
-    firstNameFromCustomerName(displayNameForEmail),
-    String(updated.orderNumber).padStart(4, '0'),
-    cleanReason,
-    updated.id
-  );
-
   revalidatePath('/admin/orders');
   revalidatePath(`/admin/orders/${orderId}`);
   revalidatePath('/account/orders');
@@ -362,7 +361,7 @@ export async function rejectOrderPayment(
 
   return {
     success: true,
-    message: 'Pago rechazado: pedido cancelado, stock restaurado y cliente notificado.',
+    message: 'Pago rechazado: pedido cancelado, stock restaurado y notificación programada.',
     order: prismaOrderToOrder(updated),
   };
 }

@@ -69,8 +69,7 @@ export default async function ShippingPolicyPage() {
         confírmalo con nuestro equipo antes o después de pagar.
       </p>
       <p>
-        <strong>Retiro en tienda:</strong> gratis en Carrera 21 con esquina calle 21, Centro,
-        Barquisimeto 3001. Compra por la web y recoge cuando te convenga.
+        <strong>Retiro en tienda:</strong> gratis{settings.address ? ` en ${settings.address}` : ', con ubicación a confirmar con nuestro equipo'}. Compra por la web y coordina el retiro.
       </p>
       <p>
         Los precios del catálogo pueden mostrarse en USD con conversión a Bs. según la tasa vigente

@@ -27,7 +27,7 @@
  *     preguntas 14-15, docs/cashea-orquestacion.md). Vacía
  *     hoy — no relaja la CSP con el flag apagado ni con dominios inventados.
  *
- * @see middleware.ts — aplica estos builders con nonce por request
+ * @see proxy.ts — aplica estos builders con nonce por request
  */
 
 // ── Constantes de origen (allowlist fija) ──────────────────────────────────

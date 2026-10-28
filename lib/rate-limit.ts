@@ -30,7 +30,7 @@ export interface RateLimitConfig {
 export interface RateLimitResult {
   limited: boolean;
   retryAfterSeconds: number;
-  source: 'upstash' | 'memory';
+  source: 'upstash' | 'memory' | 'unavailable';
 }
 
 // ── Mapa en memoria para fallback de critical ────────────────────────────
@@ -43,13 +43,15 @@ interface MemoryEntry {
 const memoryStore = new Map<string, MemoryEntry>();
 let lastCleanup = Date.now();
 const CLEANUP_INTERVAL_MS = 5 * 60_000;
+const MAX_MEMORY_BUCKETS = 20_000;
+let lastCapacityCleanup = 0;
 
 function maybeCleanupMemory(): void {
   const now = Date.now();
   if (now - lastCleanup < CLEANUP_INTERVAL_MS) return;
   lastCleanup = now;
   for (const [key, entry] of memoryStore) {
-    if (now > entry.resetAt) memoryStore.delete(key);
+    if (now >= entry.resetAt) memoryStore.delete(key);
   }
 }
 
@@ -63,7 +65,17 @@ function memoryWindow(key: string, config: RateLimitConfig): { limited: boolean;
   const now = Date.now();
   const entry = memoryStore.get(key);
 
-  if (!entry || now > entry.resetAt) {
+  if (!entry || now >= entry.resetAt) {
+    if (!entry && memoryStore.size >= MAX_MEMORY_BUCKETS) {
+      // Do not evict active buckets: that would reset brute-force counters.
+      // Limit sweeps too, so unique identifiers cannot turn cleanup into O(n)
+      // work for every request when capacity is exhausted.
+      if (now - lastCapacityCleanup >= 5_000) {
+        lastCapacityCleanup = now;
+        for (const [storedKey, value] of memoryStore) if (now >= value.resetAt) memoryStore.delete(storedKey);
+      }
+      if (memoryStore.size >= MAX_MEMORY_BUCKETS) return { limited: true, retryAfterSeconds: 5 };
+    }
     memoryStore.set(key, { count: 1, resetAt: now + config.windowMs });
     return { limited: false, retryAfterSeconds: 0 };
   }
@@ -87,6 +99,8 @@ function memoryClearByPrefix(prefix: string): void {
 // ── Upstash Redis REST ────────────────────────────────────────────────────
 
 const UPSTASH_TIMEOUT_MS = 2_000;
+let upstashRetryAt = 0;
+const UPSTASH_RETRY_PAUSE_MS = 30_000;
 
 function upstashConfig(): { url: string; token: string } | null {
   const url = process.env.UPSTASH_REDIS_REST_URL?.trim();
@@ -105,6 +119,7 @@ async function upstashWindow(
 ): Promise<{ limited: boolean; retryAfterSeconds: number } | null> {
   const cfg = upstashConfig();
   if (!cfg) return null;
+  if (Date.now() < upstashRetryAt) return null;
 
   const redisKey = `rl:${key}`;
 
@@ -124,6 +139,7 @@ async function upstashWindow(
     });
 
     if (!res.ok) {
+      upstashRetryAt = Date.now() + UPSTASH_RETRY_PAUSE_MS;
       logError('upstash_http_error', new Error(`Upstash HTTP ${res.status}`), { provider: 'upstash', status: res.status });
       return null;
     }
@@ -131,6 +147,7 @@ async function upstashWindow(
     const data = (await res.json()) as Array<{ result?: unknown; error?: string }>;
     const count = Number(data?.[0]?.result);
     if (!Number.isFinite(count)) {
+      upstashRetryAt = Date.now() + UPSTASH_RETRY_PAUSE_MS;
       logError('upstash_unexpected_response', new Error('Unexpected Upstash response'), { provider: 'upstash' });
       return null;
     }
@@ -138,6 +155,7 @@ async function upstashWindow(
     // clave nunca expira y el bucket queda bloqueado para siempre. Se registra
     // y se cae al fallback en memoria (misma política, con expiración real).
     if (data?.[1]?.error) {
+      upstashRetryAt = Date.now() + UPSTASH_RETRY_PAUSE_MS;
       logError('upstash_pexpire_failed', new Error(String(data[1].error)), { provider: 'upstash' });
       return null;
     }
@@ -148,6 +166,7 @@ async function upstashWindow(
     const retryAfterSeconds = limited ? Math.ceil(config.windowMs / 1000) : 0;
     return { limited, retryAfterSeconds };
   } catch (_err) {
+    upstashRetryAt = Date.now() + UPSTASH_RETRY_PAUSE_MS;
     logWarn('upstash_fallback_to_memory', { provider: 'upstash' });
     return null;
   }
@@ -168,6 +187,11 @@ export async function rateLimitCritical(
   if (upstash !== null) {
     return { ...upstash, source: 'upstash' };
   }
+  // Multiple workers cannot enforce one quota with independent Maps. Production
+  // fails closed for sensitive endpoints while its required Redis is unavailable.
+  const requireDistributed = process.env.RATE_LIMIT_REQUIRE_DISTRIBUTED === 'true'
+    || (process.env.NODE_ENV === 'production' && process.env.RATE_LIMIT_REQUIRE_DISTRIBUTED !== 'false');
+  if (requireDistributed) return { limited: true, retryAfterSeconds: 30, source: 'unavailable' };
   // Fallback a memoria — mismo límite, nunca más laxo.
   const memory = memoryWindow(key, config);
   return { ...memory, source: 'memory' };
@@ -299,6 +323,9 @@ export function __memoryStoreSize(): number {
 
 export function __memoryStoreClear(): void {
   memoryStore.clear();
+  upstashRetryAt = 0;
+  lastCapacityCleanup = 0;
+  lastCleanup = Date.now();
 }
 
 export function __memoryClearByPrefix(prefix: string): void {

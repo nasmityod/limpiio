@@ -3,7 +3,6 @@ set -euo pipefail
 
 APP_SLUG="${APP_SLUG:-storefront}"
 ENV_FILE="${APP_ENV_FILE:-/etc/${APP_SLUG}/${APP_SLUG}.env}"
-ENDPOINT="${APP_BCV_ENDPOINT:-http://127.0.0.1:3000/api/cron/update-bcv-rate}"
 
 log() {
   printf '%s %s\n' "$(date --iso-8601=seconds)" "$*"
@@ -19,6 +18,9 @@ set -a
 source "$ENV_FILE"
 set +a
 
+BASE_URL="${APP_BASE_URL:-http://127.0.0.1:${PORT:-3000}}"
+ENDPOINT="${APP_BCV_ENDPOINT:-${BASE_URL%/}/api/cron/update-bcv-rate}"
+
 if [[ -z "${CRON_SECRET:-}" ]]; then
   log "ERROR cron_secret_missing"
   exit 1
@@ -30,6 +32,7 @@ header_file="$(mktemp)"
 trap 'rm -f "$response_file" "$header_file"' EXIT
 chmod 600 "$header_file"
 printf 'Authorization: Bearer %s\n' "$CRON_SECRET" > "$header_file"
+unset CRON_SECRET
 
 set +e
 http_code="$(

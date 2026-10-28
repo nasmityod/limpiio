@@ -1,0 +1,146 @@
+[
+  {
+    "id": "ADM-05",
+    "gallery": [
+      "/placeholder-product.png"
+    ],
+    "accepted": false,
+    "errors": [
+      {
+        "path": [
+          "imagesJson",
+          0
+        ],
+        "message": "URL de imagen inválida"
+      }
+    ]
+  },
+  {
+    "id": "ADM-23",
+    "externalImage": "https://ejemplo.com/imagen.jpg",
+    "acceptedByProductSchema": true,
+    "acceptedByEditableBannerValidator": true
+  },
+  {
+    "id": "ADM-23",
+    "developmentImageLoaderError": "Invalid src prop (https://ejemplo.com/imagen.jpg) on `next/image`, hostname \"ejemplo.com\" is not configured under images in your `next.config.js`\nSee more info: https://nextjs.org/docs/messages/next-image-unconfigured-host",
+    "productionLoaderThrows": false,
+    "productionImageLoaderUrl": "/_next/image?url=https%3A%2F%2Fejemplo.com%2Fimagen.jpg&w=640&q=75",
+    "productionOptimizerValidation": {
+      "errorMessage": "\"url\" parameter is not allowed"
+    },
+    "productionOutcome": "Optimizer rejects URL (HTTP400); no production page crash demonstrated"
+  },
+  {
+    "id": "ADM-12",
+    "resource": "banners",
+    "input": {
+      "type": "hero",
+      "imageUrl": "/banners/hero.png"
+    },
+    "createAccepted": true,
+    "editAccepted": false
+  },
+  {
+    "id": "ADM-12",
+    "resource": "promotions",
+    "input": {
+      "title": "Oferta de prueba",
+      "imageUrl": "/promos/test.png"
+    },
+    "createAccepted": true,
+    "editAccepted": false
+  },
+  {
+    "id": "ADM-06",
+    "selected": "__custom__",
+    "resultingCarrier": "",
+    "customInputVisible": false
+  },
+  {
+    "id": "ADM-19",
+    "profitActual": {
+      "profit": 150,
+      "cost": 50,
+      "marginPct": 75,
+      "uncovered": 1
+    },
+    "profitIfUnknownIgnored": {
+      "profit": 50,
+      "marginPct": 50
+    },
+    "pendingActual": 9,
+    "pendingExpected": 13
+  },
+  {
+    "id": "ADM-01",
+    "renamedCategory": "Accesorios y cables",
+    "productCategory": "Accesorios",
+    "matchesPublicCategoryFilter": false
+  },
+  {
+    "id": "ADM-08",
+    "errorPayload": {
+      "formErrors": [],
+      "fieldErrors": {
+        "name": [
+          "Too big: expected string to have <=80 characters"
+        ]
+      }
+    },
+    "renderError": "Objects are not valid as a React child (found: object with keys {formErrors, fieldErrors}). If you meant to render a collection of children, use an array instead."
+  },
+  {
+    "id": "ADM-13",
+    "browserInput": "2026-10-03T18:00",
+    "storedWithUtcServer": "2026-10-03T18:00:00.000Z",
+    "storedWithCaracasServer": "2026-10-03T22:00:00.000Z",
+    "hoursDifference": 4
+  },
+  {
+    "id": "ADM-11",
+    "baseFactorBefore": 1.5,
+    "currentFactor": 2,
+    "enteredPrice": 100,
+    "nextRecalculation": 133.35
+  },
+  {
+    "id": "ADM-11",
+    "factorAcceptedBySettings": true,
+    "factor": 1.234,
+    "storedFactor": 1.23,
+    "sameFactorRepeatedRecalculation": [
+      100.35,
+      100.7,
+      101.05
+    ]
+  },
+  {
+    "id": "ADM-07",
+    "deleteHttpStatus": 500,
+    "localBannersAfterFailedDelete": []
+  },
+  {
+    "id": "ADM-02",
+    "stockWhenModalOpened": 3,
+    "stockInDbAfterSale": 2,
+    "stockWrittenByDescriptionEdit": 3,
+    "actionSuccess": true
+  },
+  {
+    "id": "ADM-03",
+    "savedPhone": "original",
+    "savedBank": "banco-nuevo",
+    "bothChangesRetained": false
+  },
+  {
+    "id": "ADM-21",
+    "filterChangedDuringLoadMore": true,
+    "loadingMoreAfterRequestFinished": true
+  },
+  {
+    "id": "OPS-01",
+    "backupScheduled": false,
+    "casheaScheduled": false
+  }
+]

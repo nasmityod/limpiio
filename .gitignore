@@ -56,6 +56,11 @@ npm-debug.log*
 # Backups y artefactos de Vercel (nunca versionar)
 vercel.json.bak*
 
+# Archivos comprimidos locales (snapshots del proyecto, nunca son código fuente)
+*.rar
+*.zip
+*.7z
+
 # Archivos con credenciales en el nombre
 *credencial*
 *credential*

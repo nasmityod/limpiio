@@ -52,7 +52,7 @@ type Product = AdminProductListItem;
 interface InlineEdit {
   id:    string;
   field: 'stock' | 'price';
-  value: string;
+  value: string; originalValue: number;
 }
 
 /** Resultado del import CSV mostrado en panel (PRD-085: detalle por fila, no alert). */
@@ -432,9 +432,11 @@ function AdminProductsContent() {
       const csv = ev.target?.result as string;
       startImportTr(async () => {
         // PRD-085: resultado en panel con detalle por fila (antes: alert sin contexto)
+        try {
         const res = await importProductsFromCSV(csv);
         setImportResult(res);
         if (res.success) { void loadProducts(); void loadCategories(); }
+        } catch { setInlineError('No se pudo importar el archivo. Vuelve a intentarlo.'); }
         if (fileInputRef.current) fileInputRef.current.value = '';
       });
     };
@@ -449,7 +451,7 @@ function AdminProductsContent() {
   inlineEditRef.current = inlineEdit;
 
   const startInlineEdit = useCallback((id: string, field: 'stock' | 'price', current: number) => {
-    setInlineEdit({ id, field, value: current.toString() });
+    setInlineEdit({ id, field, value: current.toString(), originalValue: current });
   }, []);
   const cancelInlineEdit = useCallback(() => {
     inlineEditRef.current = null;
@@ -462,16 +464,16 @@ function AdminProductsContent() {
     inlineEditRef.current = null;
     setInlineEdit(null);
 
-    const { id, field, value } = current;
-    const parsed = parseFloat(value);
-    if (isNaN(parsed) || parsed < 0) return;
+    const { id, field, value, originalValue } = current;
+    const parsed = value.trim() === '' ? NaN : Number(value);
+    if (!Number.isFinite(parsed) || parsed < 0 || (field === 'stock' && !Number.isInteger(parsed))) { setInlineError('Escribe un número válido; el stock debe ser entero.'); return; }
 
     // PRD-086: la tabla solo refleja el nuevo valor si el servidor confirmó el
     // guardado; en error se conserva el valor real y se avisa al operador.
     startInlineTr(async () => {
       const nextValue = field === 'stock' ? Math.floor(parsed) : parsed;
       const res = field === 'stock'
-        ? await quickUpdateStockAction(id, nextValue)
+        ? await quickUpdateStockAction(id, nextValue, originalValue)
         : await quickUpdatePriceAction(id, nextValue);
 
       if (res.success) {
@@ -689,6 +691,7 @@ function AdminProductsContent() {
           <button
             type="button"
             onClick={handleImportClick}
+            title="Los precios importados se fijan como manuales a la tasa vigente; se eliminan costo, margen y oferta anteriores."
             disabled={isImporting}
             className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 min-h-[44px] px-3 bg-white border border-gray-200 text-gray-700 text-sm font-semibold rounded-xl active:bg-gray-100 disabled:opacity-50"
           >

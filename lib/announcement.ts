@@ -5,6 +5,7 @@
  */
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
+import { claimEditorialAssets } from '@/lib/products/product-asset-references';
 import { isSafeEditableLink } from '@/lib/safe-link';
 
 export const ANNOUNCEMENT_KEY = 'announcement_bar';
@@ -37,21 +38,26 @@ export const DEFAULT_ANNOUNCEMENT: Announcement = {
   textColor: '#FFFFFF',
 };
 
-export async function readAnnouncement(): Promise<Announcement> {
+export async function readAnnouncement(strict = false): Promise<Announcement> {
   try {
     const rec = await prisma.appConfig.findUnique({ where: { key: ANNOUNCEMENT_KEY } });
     if (!rec) return DEFAULT_ANNOUNCEMENT;
     const parsed = announcementSchema.safeParse(JSON.parse(rec.value));
+    if (!parsed.success && strict) throw new Error('Configuración guardada inválida.');
     return parsed.success ? parsed.data : DEFAULT_ANNOUNCEMENT;
-  } catch {
+  } catch (error) {
+    if (strict) throw error;
     return DEFAULT_ANNOUNCEMENT;
   }
 }
 
 export async function writeAnnouncement(a: Announcement): Promise<void> {
-  await prisma.appConfig.upsert({
+  await prisma.$transaction(async (tx) => {
+    await claimEditorialAssets(tx, a);
+    return tx.appConfig.upsert({
     where: { key: ANNOUNCEMENT_KEY },
     update: { value: JSON.stringify(a) },
     create: { key: ANNOUNCEMENT_KEY, value: JSON.stringify(a) },
+  });
   });
 }

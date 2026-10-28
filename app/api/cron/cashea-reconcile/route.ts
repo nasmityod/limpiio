@@ -131,7 +131,7 @@ export async function GET(request: Request): Promise<NextResponse> {
         casheaStatus: { in: [...EXPIRABLE_STATUSES] },
         casheaReservationExpiresAt: { lt: now },
       },
-      data: { casheaStatus: 'EXPIRED' },
+      data: { casheaStatus: 'EXPIRED', casheaReturnTokenHash: null },
     });
 
     logInfo('cron_cashea_reconcile', {

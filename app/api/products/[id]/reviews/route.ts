@@ -8,6 +8,7 @@ import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { rejectInvalidMutationOrigin, safeZodFlatten } from '@/lib/security';
 import {
   reviewInputSchema,
+  reviewPhotosBelongToUser,
   reviewToClient,
   getReviewSummary,
   getApprovedReviews,
@@ -15,6 +16,7 @@ import {
   hasPurchasedProduct,
 } from '@/lib/reviews';
 import { logError } from '@/lib/safe-logger';
+import { claimReviewPhotos, ReviewPhotoError } from '@/lib/review-photo-assets';
 
 /** GET /api/products/[id]/reviews — reseñas aprobadas + resumen (público). */
 export async function GET(
@@ -103,6 +105,9 @@ export async function POST(
     }
 
     const data = parsed.data;
+    if (!reviewPhotosBelongToUser(data.photos, userId)) {
+      return NextResponse.json({ error: 'Las fotos deben haber sido subidas desde tu cuenta.' }, { status: 422 });
+    }
     const sessionName = (session.user?.name ?? '').trim();
     const authorName = (data.authorName?.trim() || sessionName || 'Cliente').slice(0, 60);
 
@@ -115,7 +120,9 @@ export async function POST(
 
     let review;
     try {
-      review = await prisma.review.create({
+      review = await prisma.$transaction(async tx => {
+        await claimReviewPhotos(tx, data.photos ?? [], userId);
+        return tx.review.create({
         data: {
           productId,
           userId,
@@ -127,6 +134,7 @@ export async function POST(
           verifiedPurchase,
           status: approved ? 'APPROVED' : 'PENDING',
         },
+        });
       });
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
@@ -158,6 +166,7 @@ export async function POST(
       { status: 201 }
     );
   } catch (error) {
+    if (error instanceof ReviewPhotoError) return NextResponse.json({ error: error.message }, { status: 422 });
     logError('product_reviews_post_failed', error, { route: '/api/products/[id]/reviews' });
     return NextResponse.json({ error: 'No se pudo guardar la reseña.' }, { status: 500 });
   }

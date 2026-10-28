@@ -7,6 +7,7 @@ import { Stars } from '@/components/reviews/Stars';
 import type { ProductSpec } from '@/lib/definitions';
 import type { ProductFaqItem } from '@/lib/product-faq';
 import { isGenericBrand } from '@/lib/utils';
+import { usePublicBusiness } from '@/context/PublicBusinessContext';
 
 interface Props {
   description: string | null;
@@ -134,6 +135,7 @@ function SpecsPanel({
 }
 
 function ShippingPanel({ faq }: { faq?: ProductFaqItem[] }) {
+  const { address } = usePublicBusiness();
   return (
     <>
       <h2 className="text-base font-bold text-navy mb-3">Envío y garantía</h2>
@@ -149,7 +151,7 @@ function ShippingPanel({ faq }: { faq?: ProductFaqItem[] }) {
           </div>
           <div className="bg-slate-50 rounded-2xl p-4">
             <p className="text-sm font-semibold text-navy mb-1">Retiro en tienda</p>
-            <p className="text-[13px] text-slate-500">Gratis en Carrera 21, Centro Barquisimeto.</p>
+            <p className="text-[13px] text-slate-500">{address ? `Gratis en ${address}.` : 'Gratis, coordinando el retiro con la tienda.'}</p>
           </div>
           <div className="bg-slate-50 rounded-2xl p-4">
             <p className="text-sm font-semibold text-navy mb-1">Garantía de 7 días</p>

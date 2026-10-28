@@ -59,8 +59,8 @@ export async function PUT(
       );
     }
 
-    const coupon = await prisma.coupon.update({
-      where: { id },
+    const changed = await prisma.coupon.updateMany({
+      where: { id, ...(data.maxUses != null ? { usedCount: { lte: data.maxUses } } : {}) },
       data: {
         code,
         description: data.description ?? null,
@@ -75,6 +75,10 @@ export async function PUT(
         active: data.active ?? true,
       },
     });
+    if (changed.count !== 1) {
+      return NextResponse.json({ error: 'Los canjes cambiaron; recarga antes de reducir el límite.' }, { status: 409 });
+    }
+    const coupon = await prisma.coupon.findUniqueOrThrow({ where: { id } });
     return NextResponse.json(couponToClient(coupon));
   } catch (error) {
     logError('coupons_put_failed', error, { route: '/api/coupons/[id]' });
@@ -160,18 +164,8 @@ export async function DELETE(
       return NextResponse.json({ error: 'Cupón no encontrado.' }, { status: 404 });
     }
 
-    const wasUsed = coupon.usedCount > 0 || coupon._count.redemptions > 0;
-    if (wasUsed) {
-      await prisma.coupon.update({ where: { id }, data: { active: false } });
-      return NextResponse.json({
-        success: true,
-        softDeleted: true,
-        message: 'El cupón tiene canjes registrados: se desactivó para preservar el historial de pedidos.',
-      });
-    }
-
-    await prisma.coupon.delete({ where: { id } });
-    return NextResponse.json({ success: true, softDeleted: false });
+    await prisma.coupon.update({ where: { id }, data: { active: false } });
+    return NextResponse.json({ success: true, softDeleted: true, message: 'Cupón desactivado; se conserva su historial.' });
   } catch (error) {
     logError('coupons_delete_failed', error, { route: '/api/coupons/[id]' });
     return NextResponse.json({ error: 'Error al eliminar el cupón.' }, { status: 500 });

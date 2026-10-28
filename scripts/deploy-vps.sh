@@ -18,6 +18,8 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+exec 8>"$ROOT/.deploy.lock"
+flock -n 8 || { echo "ERROR: hay otro despliegue en curso." >&2; exit 1; }
 # Nombre de la instancia en el servidor: da nombre al servicio systemd, a
 # /var/www/<slug>, a /etc/<slug>/ y al sitio de nginx.
 APP_SLUG="${APP_SLUG:-storefront}"
@@ -25,7 +27,6 @@ SERVICE="${APP_SERVICE:-${APP_SLUG}.service}"
 STAGING=".next-staging"
 CURRENT=".next"
 PREVIOUS=".next-previous"
-HEALTH_URL="http://127.0.0.1:3000/api/health"
 # Chunks heredados de builds viejos se limpian pasados N días (los clientes con
 # HTML de hace más de una semana ya recargaron; el header immutable dura 1 año
 # pero el HTML ISR expira en 5 min).
@@ -54,6 +55,11 @@ set -a
 source <(sudo cat "$ENV_FILE")
 set +a
 
+# Resolve the instance URL after its environment has been loaded. Otherwise a
+# second instance on PORT=3001 can pass/fail against the unrelated port 3000.
+BASE_URL="${APP_BASE_URL:-http://127.0.0.1:${PORT:-3000}}"
+HEALTH_URL="${BASE_URL%/}/api/health"
+
 # Valida CHECKOUT_MODE antes de arrancar el build.
 MODE="${CHECKOUT_MODE:-}"
 if [[ "$MODE" != "whatsapp" && "$MODE" != "full" ]]; then
@@ -64,6 +70,12 @@ if [[ "$MODE" != "whatsapp" && "$MODE" != "full" ]]; then
 fi
 
 log "Modo de checkout para este build: ${MODE}"
+
+# El build ya no ejecuta migraciones automáticamente: Vercel debe poder compilar
+# sin mutar la BD durante cada despliegue. En VPS las aplicamos explícitamente
+# antes de generar el build staging, manteniendo el orden seguro del deploy.
+log "Aplicando migraciones Prisma antes del build staging…"
+NEXT_BUILD_DIR="$STAGING" npm run db:migrate
 
 # ── 1. Build en staging (servicio sigue arriba) ─────────────────────────────
 log "Build de producción en ${STAGING} (el servicio sigue sirviendo el build actual)…"
@@ -86,22 +98,56 @@ if [[ -d "$CURRENT/static" ]]; then
 fi
 
 # ── 3. Swap atómico ──────────────────────────────────────────────────────────
+rm -rf "$PREVIOUS"
+original_moved=0
+new_installed=0
+
+rollback() {
+  echo "ERROR: despliegue fallido — recuperando build anterior…" >&2
+  sudo systemctl stop "$SERVICE" || true
+  if [[ "$new_installed" -eq 1 ]]; then
+    rm -rf "${CURRENT}.failed" || return 1
+    mv "$CURRENT" "${CURRENT}.failed" || return 1
+  fi
+  if [[ "$original_moved" -eq 1 ]]; then
+    mv "$PREVIOUS" "$CURRENT" || return 1
+  fi
+  if [[ ! -d "$CURRENT" ]]; then
+    echo "ERROR: no existe build anterior; se requiere intervención." >&2
+    return 1
+  fi
+  sudo systemctl start "$SERVICE" || {
+    echo "ERROR: tampoco arrancó el servicio recuperado." >&2
+    return 1
+  }
+  echo "Build anterior restaurado; el fallido se conserva en ${CURRENT}.failed." >&2
+}
+
+deploy_failure() {
+  trap - ERR
+  rollback || true
+  exit 1
+}
+# Also restore the old service after a failed directory swap or stop command.
+trap deploy_failure ERR
 log "Swap: deteniendo ${SERVICE} (solo unos segundos)…"
 sudo systemctl stop "$SERVICE"
-
-rm -rf "$PREVIOUS"
 if [[ -d "$CURRENT" ]]; then
   mv "$CURRENT" "$PREVIOUS"
+  original_moved=1
 fi
 mv "$STAGING" "$CURRENT"
+new_installed=1
 
 log "Iniciando ${SERVICE} con el build nuevo…"
-sudo systemctl start "$SERVICE"
+if ! sudo systemctl start "$SERVICE"; then
+  deploy_failure
+fi
 
 # ── 4. Health-check + rollback ───────────────────────────────────────────────
 healthy=0
 for _ in $(seq 1 30); do
-  if curl -sf "$HEALTH_URL" >/dev/null 2>&1 || curl -sfI http://127.0.0.1:3000/ >/dev/null 2>&1; then
+  if curl -sf --connect-timeout 2 --max-time 5 "$HEALTH_URL" >/dev/null 2>&1; then
     healthy=1
     break
   fi
@@ -110,16 +156,9 @@ done
 
 if [[ "$healthy" -ne 1 ]]; then
   echo "ERROR: el build nuevo no respondió en 30 s — ROLLBACK al build anterior…" >&2
-  sudo systemctl stop "$SERVICE" || true
-  rm -rf "${CURRENT}.failed"
-  mv "$CURRENT" "${CURRENT}.failed"
-  if [[ -d "$PREVIOUS" ]]; then
-    mv "$PREVIOUS" "$CURRENT"
-  fi
-  sudo systemctl start "$SERVICE"
-  echo "Rollback completado. El build fallido quedó en ${CURRENT}.failed para inspección." >&2
-  exit 1
+  deploy_failure
 fi
+trap - ERR
 
 log "OK: ${SERVICE} responde con BUILD_ID $(cat "$CURRENT/BUILD_ID")."
 

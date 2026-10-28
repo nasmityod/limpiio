@@ -183,6 +183,7 @@ async function fetchRevenueSnapshot(bounds: StatsPeriodBounds): Promise<RevenueS
         COUNT(*)::int AS paid_count
       FROM "Order" o
       WHERE o.status IN (${VALIDATED_STATUS_LIST})
+        AND (o."paidAt" IS NOT NULL OR o."legacyPaidConfirmed" = true)
         AND ${revenueDateFilterSql(bounds, 'o')}
     `,
   );
@@ -203,6 +204,7 @@ async function fetchDailyStats(bounds: StatsPeriodBounds): Promise<DailyStats[]>
         COALESCE(SUM(${usdRevenueExpr('o')}), 0)::float8 AS revenue
       FROM "Order" o
       WHERE o.status IN (${VALIDATED_STATUS_LIST})
+        AND (o."paidAt" IS NOT NULL OR o."legacyPaidConfirmed" = true)
         AND ${revenueDateFilterSql(bounds, 'o')}
       GROUP BY 1
       ORDER BY 1
@@ -225,6 +227,7 @@ async function fetchByPayment(bounds: StatsPeriodBounds): Promise<ByPaymentStats
         COALESCE(SUM(${usdRevenueExpr('o')}), 0)::float8 AS revenue
       FROM "Order" o
       WHERE o.status IN (${VALIDATED_STATUS_LIST})
+        AND (o."paidAt" IS NOT NULL OR o."legacyPaidConfirmed" = true)
         AND ${revenueDateFilterSql(bounds, 'o')}
       GROUP BY 1
       ORDER BY revenue DESC
@@ -256,6 +259,7 @@ async function fetchTopProducts(bounds: StatsPeriodBounds, take: number): Promis
       FROM "OrderItem" oi
       INNER JOIN "Order" o ON oi."orderId" = o.id
       WHERE o.status IN (${VALIDATED_STATUS_LIST})
+        AND (o."paidAt" IS NOT NULL OR o."legacyPaidConfirmed" = true)
         AND ${revenueDateFilterSql(bounds, 'o')}
       GROUP BY oi."productId"
       ORDER BY revenue DESC
@@ -328,6 +332,7 @@ interface OrderRow {
   status: string;
   paymentMethod: string;
   paidAt: Date | null;
+  legacyPaidConfirmed?: boolean;
   createdAt: Date;
 }
 
@@ -358,7 +363,7 @@ function orderInRevenuePeriod(
   order: OrderRow,
   bounds: StatsPeriodBounds,
 ): boolean {
-  if (!isValidRevenueStatus(order.status)) return false;
+  if (!isValidRevenueStatus(order.status) || (!order.paidAt && !order.legacyPaidConfirmed)) return false;
   if (bounds.start === null) return true;
 
   const eventDate = periodDate(order);

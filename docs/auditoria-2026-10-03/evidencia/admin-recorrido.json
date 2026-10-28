@@ -1,0 +1,62 @@
+[
+  {
+    "label": "Analítica",
+    "url": "http://localhost:34567/admin/stats",
+    "main": "Estadísticas de Ventas\n\nProductos más vendidos — 30 Días\n\n7 Días\n30 Días\n90 Días\n1 Año\nTodo\n\nPedidos validados en el período\n\n—\n\nUnidades vendidas\n\n—\n\nIngresos validados del período\n\n—\n\nPendientes de verificación\n\n—\n\nTasa de cancelación\n\n—\n\nTendencia de ingresos (USD)\n30 Días\nCargando…\nPor método de pago\n\nSin datos en el período.\n\nPor estado (pedido)\n\nSin datos en el período.\n\nPedidos del período\n\n0\n\nValidados\n\n0\n\nTotales\n\nResumen\nTicket promedio\n$0.00\nCancelación\n0.0%\nTotal pedidos\n0\nGanancia estimada (USD)\ncosto actual del producto · aproximado\n\nGanancia bruta\n\n$0.00\n\nCosto de lo vendido\n\n$0.00\n\nMargen\n\n0.0%\n\nRanking de Productos\nPor unidades\nPor ingresos\nCargando estadísticas...\nProductos Más Vistos\n(vistas: últimos 90 días · conversión = unidades del período ÷ vistas, aprox.)\nCargando vistas…"
+  },
+  {
+    "label": "Categorías",
+    "url": "http://localhost:34567/admin/categories",
+    "main": "Categorías\n\n…\n\nNUEVA"
+  },
+  {
+    "label": "Reseñas",
+    "url": "http://localhost:34567/admin/reviews",
+    "main": "Reseñas\n\n0 pendientes · 0 aprobadas\n\nAuto-aprobar OFF\nPendientes\nAprobadas\nRechazadas\nTodas"
+  },
+  {
+    "label": "Pedidos",
+    "url": "http://localhost:34567/admin/orders",
+    "main": "Pedidos\n\nGestiona y actualiza el estado de todos los pedidos.\n\nExportar CSV\n\nFILTRAR POR ESTADO\n\nTodos\nPendientes (0)\nPagados (0)\nEn Proceso (0)\nEnviados (0)\nCompletados (0)\n\nMostrando 0 de 0 pedidos"
+  },
+  {
+    "label": "Cupones",
+    "url": "http://localhost:34567/admin/coupons",
+    "main": "Cupones\n\n…\n\nNUEVO"
+  },
+  {
+    "label": "Personalizar sitionuevo",
+    "url": "http://localhost:34567/admin/personalizar",
+    "main": "Cargando…"
+  },
+  {
+    "label": "Gestor Home",
+    "url": "http://localhost:34567/admin/home-manager",
+    "main": "Gestión de la Home\n\nEdita absolutamente todo lo que aparece en la página principal\n\n🗂 Categorías\n🏷 Ofertas del Día\n✅ Barra de Beneficios\n⚡ Flash Deals\n📚 Estanterías de productos\n🚚 Envío gratis MRW\n\nMarca categorías como destacadas para la fila de portadas. Para mostrar sus productos como estantería (igual que Novedades), usa la pestaña Estanterías de productos.\n\nSincronizar desde productos\n\nSin categorías\n\nHaz clic en “Sincronizar” para importar las categorías de tus productos\n\nSincronizar ahora"
+  },
+  {
+    "label": "Banners",
+    "url": "http://localhost:34567/admin/banners",
+    "main": "Banners & Cajas\n\nHero, cajas de departamento, CTA final y banners de promo\n\nNuevo Banner\n\nHero — Slide de carrusel\n\nDesliza en el banner principal. Añade varios para crear el carrusel.\n\nCaja de Departamento\n\n4 cajas debajo de las categorías (posición según Orden).\n\nBanner CTA (fondo)\n\nGran banner al final de la página con título, párrafo y botón.\n\nDescubre — Mosaico\n\nMosaico de banners debajo de Ofertas del Día. Sube tu diseño Canva en 4:3 (rec. 800×600).\n\nTodos (0)"
+  },
+  {
+    "label": "Barra de anuncios",
+    "url": "http://localhost:34567/admin/settings/announcement",
+    "main": "Cargando…"
+  },
+  {
+    "label": "SEO Local",
+    "url": "http://localhost:34567/admin/settings/seo-local",
+    "main": "SEO Local\n\nDatos del negocio físico. Lo que aquí guardes alimenta el JSON-LD, Footer, página de tienda y Google.\n\nIdentidad pública\nNOMBRE LEGAL\nESLOGAN\n\nAparece en el JSON-LD y en la página de la tienda.\n\nDirección física\nDIRECCIÓN DE CALLE\nCIUDAD\nESTADO\nCÓDIGO POSTAL\nPAÍS (ISO 2 LETRAS)\nCoordenadas GPS\n\nMejora la precisión del PIN en Google Maps. Si abres este panel desde el celular en la tienda, usa Detectar mi ubicación.\n\nLATITUD\nLONGITUD\nDetectar mi ubicación\nURL DE GOOGLE MAPS (FICHA DEL NEGOCIO)\n\nCompartir → Copiar vínculo desde Google Maps.\n\nURL DEL IFRAME EMBEBIDO\n\nCompartir → Insertar un mapa → solo el src del iframe.\n\nHorario de atención\nLun\nMar\nMié\nJue\nVie\nSáb\nDom\n–\nLun\nMar\nMié\nJue\nVie\nSáb\nDom\n–\nAgregar horario\nMétodos de pago aceptados\n\nToca para activar/desactivar. Aparecerán listados en el rich-snippet de Google.\n\nCash\nEfectivo USD/Bs.\nTransferencia\nPago Móvil\nBinance Pay\nTarjeta\nPayPal\nRANGO DE PRECIOS (GOOGLE)\n\nSímbolos $ ó $$ ó $$$. Indicador de poder adquisitivo.\n\nRedes y contacto extra\nWHATSAPP BUSINESS\nTIKTOK\nGUARDAR Y PUBLICAR"
+  },
+  {
+    "label": "Tienda y pagos",
+    "url": "http://localhost:34567/admin/settings",
+    "main": "Cargando…"
+  },
+  {
+    "label": "Usuarios",
+    "url": "http://localhost:34567/admin/settings/users",
+    "main": "Cargando…"
+  }
+]

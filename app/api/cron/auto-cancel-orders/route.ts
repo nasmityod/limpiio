@@ -4,6 +4,7 @@ import type { OrderStatus } from '@/lib/definitions';
 import { applyOrderCancellationEffectsInTransaction } from '@/lib/checkout-order';
 import { orderPathSegment } from '@/lib/order-ref';
 import { sendOrderCancelledEmail } from '@/lib/resend';
+import { queueTransactionalEmails } from '@/lib/email-outbox-context';
 import { verifyBearerSecret } from '@/lib/security';
 import { logInfo, logError } from '@/lib/safe-logger';
 
@@ -66,7 +67,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     let cancelled = 0;
     let skipped = 0;
     let emailAttempts = 0;
-    let emailErrors = 0;
+    const emailErrors = 0; // Provider attempts belong to the durable dispatcher.
 
     for (const candidate of candidates) {
       const result = await prisma.$transaction(async (tx) => {
@@ -78,6 +79,8 @@ export async function GET(request: Request): Promise<NextResponse> {
             createdAt: true,
             status: true,
             paidAt: true,
+            casheaStatus: true,
+            updatedAt: true,
             paymentProofKey: true,
             paymentReference: true,
             customerName: true,
@@ -104,6 +107,7 @@ export async function GET(request: Request): Promise<NextResponse> {
           !AUTO_CANCELLABLE_STATUSES.includes(current.status as (typeof AUTO_CANCELLABLE_STATUSES)[number]) ||
           current.createdAt > cutoff ||
           current.paidAt !== null ||
+          current.casheaStatus != null ||
           current.paymentProofKey !== null ||
           (current.paymentReference ?? '').trim() !== ''
         ) {
@@ -116,6 +120,10 @@ export async function GET(request: Request): Promise<NextResponse> {
             status: current.status,
             createdAt: { lte: cutoff },
             paidAt: null,
+            casheaStatus: null,
+            paymentProofKey: null,
+            OR: [{ paymentReference: null }, { paymentReference: '' }],
+            updatedAt: current.updatedAt,
           },
           data: {
             status: 'Cancelado' satisfies OrderStatus,
@@ -137,7 +145,13 @@ export async function GET(request: Request): Promise<NextResponse> {
           { stockClaimStatus: 'Cancelado' },
         );
 
+        const recipient = current.customerEmail?.trim() || current.customer?.email?.trim() || '';
+        const firstName = (current.customerName?.trim() || current.customer?.name?.trim() || '').split(/\s+/)[0] || 'Cliente';
+        if (recipient) await queueTransactionalEmails(tx, () => sendOrderCancelledEmail(
+          recipient, firstName, orderPathSegment(current.orderNumber), { expiredAfterHours: AUTO_CANCEL_AFTER_HOURS },
+        ));
         return {
+          emailQueued: !!recipient,
           id: current.id,
           orderNumber: current.orderNumber,
           customerName: current.customerName,
@@ -154,32 +168,8 @@ export async function GET(request: Request): Promise<NextResponse> {
 
       cancelled++;
 
-      const recipientEmail =
-        result.customerEmail?.trim() || result.fallbackCustomerEmail?.trim() || '';
-      const displayName =
-        result.customerName?.trim() || result.fallbackCustomerName?.trim() || '';
-      const firstName = displayName.split(/\s+/)[0] || 'Cliente';
+      if (result.emailQueued) emailAttempts++;
 
-      if (!recipientEmail) {
-        continue;
-      }
-
-      emailAttempts++;
-      try {
-        await sendOrderCancelledEmail(
-          recipientEmail,
-          firstName,
-          orderPathSegment(result.orderNumber),
-          { expiredAfterHours: AUTO_CANCEL_AFTER_HOURS },
-        );
-      } catch (err) {
-        emailErrors++;
-        logError('auto_cancel_order_email_failed', err, {
-          orderId: result.id,
-          provider: 'resend',
-          operation: 'auto_cancel_order_email',
-        });
-      }
     }
 
     await prisma.appConfig.upsert({

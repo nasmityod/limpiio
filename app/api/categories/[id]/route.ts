@@ -2,11 +2,11 @@ import { NextResponse } from 'next/server';
 import { logError } from '@/lib/safe-logger';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
+import { claimEditorialAssets } from '@/lib/products/product-asset-references';
 import { sanitizeOrderItemImageUrl } from '@/lib/r2-public-url';
-import { prisma } from '@/lib/prisma';
 import { requirePermission } from '@/lib/admin-access-server';
 import { revalidatePath, revalidateTag } from 'next/cache';
-import { saveSlugRedirect } from '@/lib/slug-redirects';
+import { withSerializableCategoryTransaction, CategoryNameError, normalizeCategoryName } from '@/lib/categories/ensure-product-category';
 import { rejectInvalidMutationOrigin } from '@/lib/security';
 import { CACHE_TAG_CATEGORIES, CACHE_TAG_SITE_SHELL } from '@/lib/site-shell-cache';
 
@@ -16,7 +16,7 @@ import { CACHE_TAG_CATEGORIES, CACHE_TAG_SITE_SHELL } from '@/lib/site-shell-cac
  * P85: añadidos description y seoTitle (opcionales, texto plano, sin HTML).
  */
 const categoryUpdateSchema = z.object({
-  name:        z.string().trim().min(1).max(80),
+  name:        z.string().transform(normalizeCategoryName).pipe(z.string().min(1).max(80).refine(v => /[\p{L}\p{N}]/u.test(v))),
   slug:        z.string().trim().min(1).max(120).regex(/^[a-z0-9-]+$/, 'Slug inválido (minúsculas, números y guiones).'),
   imageUrl:    z
     .string()
@@ -47,42 +47,45 @@ export async function PUT(
     const { id } = await params;
     const parsed = categoryUpdateSchema.safeParse(await request.json());
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+      return NextResponse.json({ error: 'Datos de categoría inválidos.', errors: parsed.error.flatten() }, { status: 400 });
     }
     const { name, slug, imageUrl, isFeatured, order, description, seoTitle, googleCategoryId } = parsed.data;
 
-    // PRD-066 / DEPENDENCIA-05: capture slug BEFORE update to detect renames.
-    const existing = await prisma.category.findUnique({
-      where: { id },
-      select: { slug: true },
+    const { category, previousSlug } = await withSerializableCategoryTransaction(async (tx) => {
+      await claimEditorialAssets(tx, imageUrl);
+      const existing = await tx.category.findUniqueOrThrow({ where: { id } });
+      const duplicate = await tx.category.findFirst({
+        where: { name: { equals: name, mode: 'insensitive' }, id: { not: id } },
+        select: { id: true },
+      });
+      if (duplicate) throw new CategoryNameError('Ya existe una categoría con ese nombre.');
+      const category = await tx.category.update({ where: { id }, data: {
+        name, slug, imageUrl: imageUrl ?? null, isFeatured: isFeatured ?? existing.isFeatured,
+        order: order ?? existing.order, description: description ?? null,
+        seoTitle: seoTitle ?? null, googleCategoryId: googleCategoryId ?? null,
+      } });
+      if (existing.name !== name) {
+        await tx.product.updateMany({
+          where: { category: { equals: existing.name, mode: 'insensitive' } },
+          data: { category: name },
+        });
+      }
+      if (existing.slug !== slug) {
+        await tx.appConfig.updateMany({ where: { key: { startsWith: 'slug_redirect:' }, value: existing.slug }, data: { value: slug } });
+        await tx.appConfig.deleteMany({ where: { key: `slug_redirect:${slug}` } });
+        await tx.appConfig.upsert({ where: { key: `slug_redirect:${existing.slug}` }, update: { value: slug }, create: { key: `slug_redirect:${existing.slug}`, value: slug } });
+      }
+      return { category, previousSlug: existing.slug };
     });
-    const slugChanged = !!existing && existing.slug !== slug;
-
-    const category = await prisma.category.update({
-      where: { id },
-      data: {
-        name,
-        slug,
-        imageUrl:         imageUrl         ?? null,
-        isFeatured:       isFeatured       ?? false,
-        order:            order            ?? 0,
-        description:      description      ?? null,
-        seoTitle:         seoTitle         ?? null,
-        googleCategoryId: googleCategoryId ?? null,
-      },
-    });
-
-    // PRD-066: persist old→new slug redirect so /categoria/{oldSlug} returns 301.
-    // Chain-flattening and cycle prevention are handled inside saveSlugRedirect.
-    if (slugChanged && existing) {
-      await saveSlugRedirect(existing.slug, slug);
-      revalidatePath(`/categoria/${existing.slug}`, 'page');
-    }
+    if (previousSlug !== slug) revalidatePath(`/categoria/${previousSlug}`, 'page');
+    revalidateTag('catalog', 'default');
     revalidatePath('/categoria/[slug]', 'page');
     revalidateTag(CACHE_TAG_CATEGORIES, 'default');
     revalidateTag(CACHE_TAG_SITE_SHELL, 'default');
     return NextResponse.json(category);
   } catch (error) {
+    if (error instanceof CategoryNameError) return NextResponse.json({ error: error.message }, { status: 409 });
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') return NextResponse.json({ error: 'El nombre o slug ya está en uso.' }, { status: 409 });
     // PRD-043: logging del fallo (antes el catch tragaba el error).
     logError('categories_put_failed', error, { route: '/api/categories/[id]' });
     return NextResponse.json({ error: 'Error al actualizar' }, { status: 500 });
@@ -101,12 +104,19 @@ export async function DELETE(
 
   try {
     const { id } = await params;
-    await prisma.category.delete({ where: { id } });
+    await withSerializableCategoryTransaction(async (tx) => {
+      const category = await tx.category.findUnique({ where: { id } });
+      if (!category) return;
+      const count = await tx.product.count({ where: { category: { equals: category.name, mode: 'insensitive' } } });
+      if (count > 0) throw new CategoryNameError('Reasigna los productos antes de eliminar la categoría.');
+      await tx.category.delete({ where: { id } });
+    });
     revalidateTag(CACHE_TAG_CATEGORIES, 'default');
     revalidateTag(CACHE_TAG_SITE_SHELL, 'default');
     revalidatePath('/', 'layout');
     return NextResponse.json({ success: true });
   } catch (error) {
+    if (error instanceof CategoryNameError) return NextResponse.json({ error: error.message }, { status: 409 });
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === 'P2025'

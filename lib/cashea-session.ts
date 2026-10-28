@@ -16,7 +16,6 @@
  * dentro de la misma transacción, sin tocar la lógica base del checkout.
  */
 
-import { randomBytes } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import {
@@ -38,17 +37,11 @@ import { d, dn } from '@/lib/decimal';
 import { roundMoney2 } from '@/lib/exchange-rate';
 import { emailSiteBaseUrl } from '@/emails/transactional/site';
 import { logInfo } from '@/lib/safe-logger';
+import { checkoutOperationKey, checkoutPayloadHash, checkoutCapability } from '@/lib/checkout-idempotency';
+import { readSettings } from '@/lib/data-store';
+import { assertBuyerReservationCapacity } from '@/lib/order-reservation';
 
 const CASHEA_SESSION_TX_MAX_RETRIES = 3;
-
-/**
- * Ventana anti doble-submit (Fase 4, punto 11 del documento de orquestación):
- * Cashea no tiene una referencia de pago propia (a diferencia de Pago
- * Móvil/Binance), así que la clave de idempotencia es (usuario + carrito)
- * dentro de una ventana corta — evita crear dos pedidos y dos reservas de
- * stock si el usuario hace doble clic o la petición se reintenta.
- */
-const CASHEA_DUPLICATE_WINDOW_MS = 10_000;
 
 export type CreateCasheaSessionInput = {
   userId: string;
@@ -67,7 +60,7 @@ type OrderWithItems = Prisma.OrderGetPayload<{ include: { items: true } }>;
 /** Reintenta transacciones ante conflictos de serialización de Postgres (P2034 / 40001). */
 function isSerializationFailure(error: unknown): boolean {
   if (error && typeof error === 'object' && 'code' in error) {
-    if ((error as { code: string }).code === 'P2034') return true;
+    if (['P2034', 'P2002'].includes((error as { code: string }).code)) return true;
   }
   const message = error instanceof Error ? error.message : String(error);
   return message.includes('40001') || message.includes('could not serialize');
@@ -89,54 +82,6 @@ async function runCasheaSessionTransaction<T>(
     }
   }
   throw new Error('Cashea session transaction retries exhausted');
-}
-
-/** Clave estable (productId → cantidad total) para comparar carritos, sin importar el orden de las líneas. */
-function normalizeItemKey(items: { productId: string; quantity: number }[]): string {
-  const totals = new Map<string, number>();
-  for (const item of items) {
-    totals.set(item.productId, (totals.get(item.productId) ?? 0) + item.quantity);
-  }
-  return JSON.stringify([...totals.entries()].sort(([a], [b]) => a.localeCompare(b)));
-}
-
-/**
- * Busca un pedido Cashea `CREATED` reciente del mismo usuario con el mismo
- * carrito. Si existe, el caller reutiliza el pedido en vez de crear uno
- * nuevo (anti doble-submit — Fase 4, punto 11).
- */
-async function findRecentCasheaSessionInTransaction(
-  tx: Prisma.TransactionClient,
-  params: { customerId: string; items: { productId: string; quantity: number }[] },
-): Promise<OrderWithItems | null> {
-  const since = new Date(Date.now() - CASHEA_DUPLICATE_WINDOW_MS);
-  const candidates = await tx.order.findMany({
-    where: {
-      customerId: params.customerId,
-      paymentMethodId: 'cashea',
-      casheaStatus: 'CREATED',
-      createdAt: { gte: since },
-    },
-    include: { items: true },
-    orderBy: { createdAt: 'desc' },
-    take: 5,
-  });
-
-  const incomingKey = normalizeItemKey(params.items);
-  return (
-    candidates.find(
-      (candidate) =>
-        normalizeItemKey(
-          candidate.items.map((item) => ({ productId: item.productId, quantity: item.quantity })),
-        ) === incomingKey,
-    ) ?? null
-  );
-}
-
-/** Token de retorno de un solo uso: 32 bytes aleatorios; solo el hash se persiste (Sección 3.6/5). */
-function buildCasheaReturnToken(): { rawToken: string; tokenHash: string } {
-  const rawToken = randomBytes(32).toString('base64url');
-  return { rawToken, tokenHash: hashToken(rawToken) };
 }
 
 /** `redirectUrl` apunta al token opaco — NUNCA al idNumber de Cashea (Sección 3.9). */
@@ -230,30 +175,28 @@ export async function createCasheaSession(
     channel: effectiveChannel,
   };
 
-  const { rawToken: returnToken, tokenHash: returnTokenHash } = buildCasheaReturnToken();
+  if (safeData.shippingMethod === 'tienda') {
+    const settings = await readSettings();
+    safeData.shippingDetails = { ...safeData.shippingDetails, address: `Retiro en tienda ${settings.storeName} — ${settings.address}` };
+  }
+  const operationKey = checkoutOperationKey(`user:${input.userId}`, safeData.attemptKey);
+  const payloadHash = checkoutPayloadHash(safeData);
+  const returnToken = checkoutCapability('cashea', operationKey);
+  const returnTokenHash = hashToken(returnToken);
   const redirectUrl = buildRedirectUrl(returnToken);
 
   const { order, reused } = await runCasheaSessionTransaction(async (tx) => {
-    const duplicate = await findRecentCasheaSessionInTransaction(tx, {
-      customerId: input.userId,
-      items: data.items,
-    });
-
+    const duplicate = await tx.order.findUnique({ where: { checkoutAttemptKey: operationKey }, include: { items: true } });
     if (duplicate) {
-      // Doble submit: NO se crea un segundo pedido ni se reserva stock otra
-      // vez. Se rota el token de retorno — el anterior nunca fue consumido
-      // (el pedido sigue en CREATED) — para que la respuesta siga siendo
-      // utilizable por el cliente sin duplicar nada en BD.
-      const rotated = await tx.order.update({
-        where: { id: duplicate.id },
-        data: { casheaReturnTokenHash: returnTokenHash },
-        include: { items: true },
-      });
-      return { order: rotated, reused: true as const };
+      if (duplicate.checkoutPayloadHash !== payloadHash || !['CREATED', 'REDIRECTED'].includes(duplicate.casheaStatus ?? '') || !duplicate.casheaReservationExpiresAt || duplicate.casheaReservationExpiresAt <= new Date()) throw new CheckoutError('El intento Cashea cambió o venció; revisa tu pedido antes de crear otro.', 409);
+      return { order: duplicate, reused: true as const };
     }
+    await assertBuyerReservationCapacity(tx, input.userId, safeData.items);
 
     const { order: created } = await executeCheckoutInTransactionWithMethod(tx, safeData, {
       orderStatus: 'Pendiente',
+      checkoutAttemptKey: operationKey,
+      checkoutPayloadHash: payloadHash,
       // Cashea SIEMPRE reserva inventario real (Sección 1/3), a diferencia
       // del modo WhatsApp normal (deductStock=false).
       deductStock: true,
@@ -294,6 +237,7 @@ export async function createCasheaSession(
 
   const payload = buildCasheaPayload({
     identificationNumber,
+    invoiceId: order.id,
     redirectUrl,
     shippingMethod: data.shippingMethod as InternalDeliveryMethod,
     products: casheaProducts,

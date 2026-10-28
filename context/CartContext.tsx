@@ -120,12 +120,25 @@ function apiItemToCartItem(item: CartItemAPI): CartItem {
 const REFRESH_MIN_INTERVAL_MS = 30_000;
 /** Debounce del sync de cantidades hacia la BD (PRD-097). */
 const SYNC_DEBOUNCE_MS = 400;
+const MAX_CART_ITEMS = 25;
+
+/** AbortSignal.timeout is unavailable in some browsers supported by this app. */
+async function cartFetch(url: string, options: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (options.signal?.aborted) controller.abort();
+  else options.signal?.addEventListener('abort', abort, { once: true });
+  const timer = setTimeout(() => controller.abort(), 15_000);
+  try { return await fetch(url, { ...options, signal: controller.signal }); }
+  finally { clearTimeout(timer); options.signal?.removeEventListener('abort', abort); }
+}
 
 export const CartProvider = ({ children }: CartProviderProps) => {
   const { data: session, status: sessionStatus } = useSession();
 
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartLoading, setIsCartLoading] = useState(true);
+  const [storageLoaded, setStorageLoaded] = useState(false);
   const [itemAdded, setItemAdded] = useState(false);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [notification, setNotification] = useState<{
@@ -161,7 +174,7 @@ export const CartProvider = ({ children }: CartProviderProps) => {
    * hasMergedRef: se activa al completar el merge al login para no repetirlo.
    * Se resetea al cerrar sesión.
    */
-  const hasMergedRef = useRef(false);
+  const mergedForUserRef = useRef<string | null>(null);
 
   /**
    * prevUserIdRef: distingue "logout real" (había sesión y dejó de haberla)
@@ -169,18 +182,102 @@ export const CartProvider = ({ children }: CartProviderProps) => {
    * su carrito local (PRD-261 / PRD-263).
    */
   const prevUserIdRef = useRef<string | null>(null);
+  const persistedOwnerRef = useRef<string | null>(null);
+  const storedAccountCartRef = useRef<CartItem[]>([]);
 
   /** Refs para el sync debounced por producto (PRD-097: evita PATCH fuera de orden). */
   const syncTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const pendingQtyRef = useRef<Map<string, number>>(new Map());
+  const pendingDeletesRef = useRef<Set<string>>(new Set());
+  const pendingClearRef = useRef(false);
+  const mutationQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const generationRef = useRef(0);
+  const mutationVersionRef = useRef(0);
+  const localEditsRef = useRef(new Map<string, number>());
+  const localClearVersionRef = useRef(0);
+  const syncFailedRef = useRef(false);
+  const refreshPromiseRef = useRef<Promise<void> | null>(null);
 
   /** Refs para refresh: estado vivo del carrito y throttle de refresco. */
   const cartRef = useRef<CartItem[]>(cart);
   cartRef.current = cart;
   const isAuthedRef = useRef(false);
-  isAuthedRef.current = !!session?.user?.id;
+  const userIdRef = useRef<string | null>(null);
+  const resolvedUserId = sessionStatus === 'loading' ? prevUserIdRef.current ?? undefined : session?.user?.id ?? null;
+  userIdRef.current = resolvedUserId ?? null;
+  isAuthedRef.current = !!userIdRef.current;
   const lastRefreshRef = useRef(0);
-  const refreshingRef = useRef(false);
+  const commitCart = useCallback((next: CartItem[] | ((items: CartItem[]) => CartItem[])) => {
+    const items = typeof next === 'function' ? next(cartRef.current) : next;
+    cartRef.current = items;
+    setCart(items);
+  }, []);
+
+  const cancelPendingSync = useCallback((productId: string) => {
+    const timer = syncTimersRef.current.get(productId);
+    if (timer) clearTimeout(timer);
+    syncTimersRef.current.delete(productId);
+    pendingQtyRef.current.delete(productId);
+  }, []);
+
+  /** Serialize all writes: a slow older PATCH must not win after DELETE/newer PATCH. */
+  const queueMutation = useCallback((url: string, options: RequestInit, retry?: () => void) => {
+    const actor = userIdRef.current;
+    const generation = generationRef.current;
+    if (!actor) return;
+    mutationVersionRef.current += 1;
+    const next = mutationQueueRef.current.then(async () => {
+      if (generation !== generationRef.current || actor !== userIdRef.current) return;
+      try {
+        const response = await cartFetch(url, options);
+        if (!response.ok) throw new Error(`Cart sync HTTP ${response.status}`);
+      } catch (error) {
+        if (generation !== generationRef.current || actor !== userIdRef.current) return;
+        syncFailedRef.current = true;
+        retry?.();
+        setNotification({ message: 'No se pudo sincronizar el carrito. Conservamos tu selección; vuelve a intentarlo.', type: 'error' });
+        console.error('[CartContext] Error sync:', error);
+      }
+    });
+    mutationQueueRef.current = next;
+  }, []);
+
+  const flushCartSync = useCallback(async () => {
+    const generation = generationRef.current;
+    const actor = userIdRef.current;
+    await mutationQueueRef.current;
+    if (generation !== generationRef.current || actor !== userIdRef.current) return false;
+    syncFailedRef.current = false;
+    if (pendingClearRef.current) {
+      pendingClearRef.current = false;
+      pendingDeletesRef.current.clear();
+      queueMutation('/api/cart', { method: 'DELETE' }, () => { pendingClearRef.current = true; });
+      for (const item of cartRef.current) pendingQtyRef.current.set(item.id, item.quantity);
+    }
+    for (const productId of [...pendingDeletesRef.current]) {
+      pendingDeletesRef.current.delete(productId);
+      if (cartRef.current.some(item => item.id === productId)) continue;
+      queueMutation(`/api/cart/items/${encodeURIComponent(productId)}`, { method: 'DELETE' }, () => {
+        if (!cartRef.current.some(item => item.id === productId)) pendingDeletesRef.current.add(productId);
+      });
+    }
+    for (const [productId, quantity] of [...pendingQtyRef.current]) {
+      cancelPendingSync(productId);
+      queueMutation('/api/cart/items', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId, quantity }),
+      }, () => {
+        if (cartRef.current.find(item => item.id === productId)?.quantity === quantity && !pendingQtyRef.current.has(productId)) pendingQtyRef.current.set(productId, quantity);
+      });
+    }
+    let queue = mutationQueueRef.current;
+    await queue;
+    while (queue !== mutationQueueRef.current) {
+      queue = mutationQueueRef.current;
+      await queue;
+    }
+    return !syncFailedRef.current;
+  }, [cancelPendingSync, queueMutation]);
 
   const showNotification = useCallback((message: string, type: 'success' | 'error') => {
     setNotification({ message, type });
@@ -191,39 +288,147 @@ export const CartProvider = ({ children }: CartProviderProps) => {
   useEffect(() => {
     try {
       const stored = localStorage.getItem('cart');
+      persistedOwnerRef.current = localStorage.getItem('cart-owner');
       if (stored) {
         const parsed = JSON.parse(stored) as (CartItem & { freeShipping?: unknown })[];
         // Fail-safe para carritos guardados antes de este campo: nunca asumir
         // `true` por ausencia/`undefined` — solo un `true` explícito califica.
-        setCart(parsed.map((item) => ({ ...item, freeShipping: item.freeShipping === true })));
+        if (Array.isArray(parsed)) {
+          const seen = new Set<string>();
+          const sanitized = parsed.filter(item => {
+            if (!item || typeof item.id !== 'string' || seen.has(item.id)) return false;
+            if (typeof item.name !== 'string' || typeof item.category !== 'string' || !Array.isArray(item.images) || !item.images.every(src => typeof src === 'string')) return false;
+            if (!Number.isFinite(item.quantity) || item.quantity < 1 || !Number.isFinite(item.price) || item.price < 0 || !Number.isFinite(item.stock) || item.stock < 1) return false;
+            seen.add(item.id);
+            return true;
+          }).slice(0, MAX_CART_ITEMS).map(item => ({ ...item, quantity: Math.min(Math.floor(item.quantity), Math.floor(item.stock)), freeShipping: item.freeShipping === true }));
+          if (persistedOwnerRef.current) storedAccountCartRef.current = sanitized;
+          else commitCart(sanitized);
+        }
       }
     } catch {
-      setCart([]);
+      commitCart([]);
     } finally {
       setIsCartLoading(false);
+      setStorageLoaded(true);
     }
-  }, []);
+  }, [commitCart]);
 
   // ── 2. Persistencia en localStorage (siempre, como respaldo) ──────────────
   useEffect(() => {
-    if (isCartLoading) return;
+    if (isCartLoading || !storageLoaded || sessionStatus === 'loading') return;
+    if (prevUserIdRef.current !== userIdRef.current || (persistedOwnerRef.current && persistedOwnerRef.current !== userIdRef.current)) return;
     try {
       localStorage.setItem('cart', JSON.stringify(cart));
+      if (userIdRef.current) localStorage.setItem('cart-owner', userIdRef.current);
+      else localStorage.removeItem('cart-owner');
     } catch {
       // Safari modo privado / cuota agotada
     }
-  }, [cart, isCartLoading]);
+  }, [cart, isCartLoading, sessionStatus, storageLoaded]);
+
+  const mergeAccountCart = useCallback((userId: string, generation: number, signal: AbortSignal = new AbortController().signal): Promise<void> => {
+    const controller = { signal };
+    const localItems = cartRef.current.map(item => ({ productId: item.id, quantity: item.quantity }));
+    setIsCartLoading(true);
+    const startedAtVersion = mutationVersionRef.current;
+    return cartFetch('/api/cart/merge', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: localItems }),
+      signal: controller.signal,
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error(`Cart merge HTTP ${r.status}`);
+        return r.json();
+      })
+      .then(async (data: { items?: CartItemAPI[] }) => {
+        if (controller.signal.aborted || generation !== generationRef.current || userId !== userIdRef.current) return;
+        if (Array.isArray(data.items)) {
+          // PRD-096: la respuesta del merge trae precio/stock frescos de BD —
+          // reemplaza el snapshot local para no arrastrar datos obsoletos.
+          // Preserve intents made while this request was pending. Subsequent
+          // writes wait for the merge, so its older snapshot cannot win in DB.
+          const current = cartRef.current;
+          const currentById = new Map(current.map(item => [item.id, item]));
+          const edited = (id: string) => (localEditsRef.current.get(id) ?? 0) > startedAtVersion;
+          const cleared = localClearVersionRef.current > startedAtVersion;
+          const fresh = data.items.map(apiItemToCartItem)
+            .filter(item => !cleared && (!edited(item.id) || currentById.has(item.id)))
+            .map(item => edited(item.id) ? { ...item, quantity: Math.min(currentById.get(item.id)!.quantity, item.stock) } : item)
+            .filter(item => item.quantity > 0 && item.stock > 0);
+          const freshIds = new Set(fresh.map(item => item.id));
+          const added = current.filter(item => edited(item.id) && !freshIds.has(item.id));
+          const combined = [...fresh, ...added];
+          const selected = combined.length <= MAX_CART_ITEMS ? combined :
+            [...combined.filter(item => edited(item.id)), ...combined.filter(item => !edited(item.id))].slice(0, MAX_CART_ITEMS);
+          commitCart(selected);
+          // Free the capacity discarded by the local reconciliation before
+          // the queued additions run. Otherwise a full account cart rejects
+          // the new line forever while the UI already shows it.
+          const selectedIds = new Set(selected.map(item => item.id));
+          for (const item of fresh) {
+            if (selectedIds.has(item.id)) continue;
+            if (controller.signal.aborted || generation !== generationRef.current || userId !== userIdRef.current) return;
+            pendingDeletesRef.current.add(item.id);
+            try {
+              const response = await cartFetch(`/api/cart/items/${encodeURIComponent(item.id)}`, { method: 'DELETE', signal: controller.signal });
+              if (controller.signal.aborted || generation !== generationRef.current || userId !== userIdRef.current) return;
+              if (!response.ok) throw new Error(`Cart capacity sync HTTP ${response.status}`);
+              pendingDeletesRef.current.delete(item.id);
+            } catch (error) {
+              if (controller.signal.aborted || generation !== generationRef.current || userId !== userIdRef.current) return;
+              syncFailedRef.current = true;
+              setNotification({ message: 'No se pudo sincronizar el carrito. Conservamos tu selección; vuelve a intentarlo.', type: 'error' });
+              console.error('[CartContext] Error capacity sync:', error);
+            }
+          }
+          if (controller.signal.aborted || generation !== generationRef.current || userId !== userIdRef.current) return;
+          mergedForUserRef.current = userId;
+          lastRefreshRef.current = Date.now();
+        }
+      })
+      .catch((err) => {
+        if (controller.signal.aborted) return;
+        console.error('[CartContext] Error en merge con BD:', err);
+        if (generation === generationRef.current) setNotification({ message: 'No se pudo cargar el carrito de tu cuenta. Conservamos tu selección.', type: 'error' });
+      })
+      .finally(() => {
+        if (generation === generationRef.current && userId === userIdRef.current) setIsCartLoading(false);
+      });
+  }, [commitCart]);
 
   // ── 3. Merge al detectar sesión activa ────────────────────────────────────
   useEffect(() => {
-    if (sessionStatus === 'loading') return;
-    if (isCartLoading) return; // esperar a que se cargue localStorage primero
+    if (resolvedUserId === undefined) return;
+    if (!storageLoaded) return;
 
-    const userId = session?.user?.id ?? null;
+    const userId = resolvedUserId;
+
+    const previousUserId = prevUserIdRef.current;
+    if (userId && previousUserId === userId && mergedForUserRef.current === userId) return;
+    const changedAccount = (previousUserId !== userId && previousUserId != null)
+      || (persistedOwnerRef.current != null && persistedOwnerRef.current !== userId);
+    if (persistedOwnerRef.current === userId && userId && storedAccountCartRef.current.length) {
+      commitCart(storedAccountCartRef.current);
+    }
+    persistedOwnerRef.current = userId;
+    storedAccountCartRef.current = [];
+    generationRef.current += 1;
+    const generation = generationRef.current;
+    const controller = new AbortController();
+    for (const id of [...pendingQtyRef.current.keys()]) cancelPendingSync(id);
+    pendingDeletesRef.current.clear();
+    pendingClearRef.current = false;
+    mutationQueueRef.current = Promise.resolve();
+    refreshPromiseRef.current = null;
+    syncFailedRef.current = false;
+    localEditsRef.current.clear();
+    localClearVersionRef.current = 0;
 
     if (!userId) {
       // El usuario cerró sesión: reiniciar flag para el próximo login
-      hasMergedRef.current = false;
+      mergedForUserRef.current = null;
 
       /*
        * PRD-261 / PRD-263: en un PC/tablet compartido (mostrador de la tienda)
@@ -232,77 +437,83 @@ export const CartProvider = ({ children }: CartProviderProps) => {
        * el carrito del usuario sigue guardado en BD y se restaura en su
        * próximo login vía /api/cart/merge.
        */
-      if (prevUserIdRef.current) {
+      if (prevUserIdRef.current || changedAccount) {
         prevUserIdRef.current = null;
-        setCart([]);
+        commitCart([]);
         try {
           localStorage.removeItem('cart');
+          localStorage.removeItem('cart-owner');
         } catch {
           /* Safari modo privado */
         }
       }
+      setIsCartLoading(false);
       return;
     }
 
     prevUserIdRef.current = userId;
 
-    if (hasMergedRef.current) return; // ya se hizo el merge en esta sesión
-    hasMergedRef.current = true;
+    if (changedAccount) {
+      commitCart([]);
+      mergedForUserRef.current = null;
+    }
+    if (mergedForUserRef.current === userId) return;
 
-    // Capturar ítems locales para fusionar con BD
-    const localItems = cart.map((item) => ({
-      productId: item.id,
-      quantity: item.quantity,
-    }));
+    mutationQueueRef.current = mergeAccountCart(userId, generation, controller.signal);
+    return () => controller.abort();
+  }, [resolvedUserId, storageLoaded, cancelPendingSync, commitCart, mergeAccountCart]);
 
-    setIsCartLoading(true);
-    fetch('/api/cart/merge', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items: localItems }),
-    })
-      .then((r) => r.json())
-      .then((data: { items?: CartItemAPI[] }) => {
-        if (Array.isArray(data.items)) {
-          // PRD-096: la respuesta del merge trae precio/stock frescos de BD —
-          // reemplaza el snapshot local para no arrastrar datos obsoletos.
-          setCart(data.items.map(apiItemToCartItem));
-          lastRefreshRef.current = Date.now();
-        }
-      })
-      .catch((err) => console.error('[CartContext] Error en merge con BD:', err))
-      .finally(() => setIsCartLoading(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.user?.id, sessionStatus, isCartLoading]);
+  useEffect(() => () => {
+    generationRef.current += 1;
+    for (const id of [...pendingQtyRef.current.keys()]) cancelPendingSync(id);
+  }, [cancelPendingSync]);
 
   // ── Refresh de precio/stock (PRD-061 invitado, PRD-096/234 sesión) ────────
 
   const refreshCart = useCallback(async () => {
-    if (refreshingRef.current) return;
+    if (refreshPromiseRef.current) return refreshPromiseRef.current;
     const items = cartRef.current;
-    if (items.length === 0) return;
-    refreshingRef.current = true;
+    if (items.length === 0 && !userIdRef.current) return;
+    const generation = generationRef.current;
+    const actor = userIdRef.current;
+    const refresh = (async () => {
 
     try {
-      if (isAuthedRef.current) {
+      if (actor) {
+        // A failed initial merge must be retried before accepting account GET.
+        await mutationQueueRef.current;
+        if (generation !== generationRef.current || actor !== userIdRef.current) return;
+        if (mergedForUserRef.current !== actor) {
+          const retry = mergeAccountCart(actor, generation);
+          mutationQueueRef.current = retry;
+          await retry;
+          if (mergedForUserRef.current !== actor) return;
+        }
+        if (!await flushCartSync()) return;
+        if (generation !== generationRef.current || actor !== userIdRef.current) return;
+        const version = mutationVersionRef.current;
         // Con sesión, la BD es la fuente de verdad del carrito.
-        const res = await fetch('/api/cart', { cache: 'no-store' });
+        const res = await cartFetch('/api/cart', { cache: 'no-store' });
         if (res.ok) {
           const data = (await res.json()) as { items?: CartItemAPI[] };
+          if (generation !== generationRef.current || actor !== userIdRef.current || version !== mutationVersionRef.current || pendingQtyRef.current.size > 0) return;
           if (Array.isArray(data.items)) {
-            setCart(data.items.map(apiItemToCartItem));
+            commitCart(data.items.map(apiItemToCartItem));
           }
         }
       } else {
         // Invitado: re-validar el snapshot de localStorage contra la BD.
         const snapshots = await getProductSnapshots(items.map((i) => i.id));
+        if (generation !== generationRef.current || actor !== userIdRef.current) return;
         if (snapshots) {
           const byId = new Map(snapshots.map((s) => [s.id, s]));
-          setCart((prev) =>
+          const requestedIds = new Set(items.map(item => item.id));
+          commitCart((prev) =>
             prev
-              .filter((i) => byId.has(i.id)) // producto eliminado del catálogo
+              .filter((i) => !requestedIds.has(i.id) || byId.has(i.id))
               .map((i) => {
-                const s = byId.get(i.id)!;
+                const s = byId.get(i.id);
+                if (!s) return i;
                 return {
                   ...i,
                   slug: s.slug,
@@ -325,9 +536,14 @@ export const CartProvider = ({ children }: CartProviderProps) => {
     } catch (err) {
       console.error('[CartContext] Error al refrescar carrito:', err);
     } finally {
-      refreshingRef.current = false;
+      // Clearing is done by the caller only for this exact in-flight promise.
     }
-  }, []);
+    })();
+    refreshPromiseRef.current = refresh;
+    try { await refresh; } finally {
+      if (refreshPromiseRef.current === refresh) refreshPromiseRef.current = null;
+    }
+  }, [commitCart, flushCartSync, mergeAccountCart]);
 
   /** Refresh con throttle: para eventos frecuentes (focus, abrir drawer). */
   const refreshCartThrottled = useCallback(() => {
@@ -362,6 +578,7 @@ export const CartProvider = ({ children }: CartProviderProps) => {
   const dbUpsertItem = useCallback((productId: string, quantity: number) => {
     if (!isAuthedRef.current) return;
     pendingQtyRef.current.set(productId, quantity);
+    mutationVersionRef.current += 1;
 
     const timers = syncTimersRef.current;
     const existing = timers.get(productId);
@@ -374,37 +591,34 @@ export const CartProvider = ({ children }: CartProviderProps) => {
         const qty = pendingQtyRef.current.get(productId);
         pendingQtyRef.current.delete(productId);
         if (qty === undefined) return;
-        fetch('/api/cart/items', {
+        queueMutation('/api/cart/items', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ productId, quantity: qty }),
-        }).catch((err) => console.error('[CartContext] Error sync upsert:', err));
+        }, () => {
+          if (cartRef.current.find(item => item.id === productId)?.quantity === qty && !pendingQtyRef.current.has(productId)) pendingQtyRef.current.set(productId, qty);
+        });
       }, SYNC_DEBOUNCE_MS),
     );
-  }, []);
-
-  const cancelPendingSync = (productId: string) => {
-    const timer = syncTimersRef.current.get(productId);
-    if (timer) clearTimeout(timer);
-    syncTimersRef.current.delete(productId);
-    pendingQtyRef.current.delete(productId);
-  };
+  }, [queueMutation]);
 
   const dbRemoveItem = useCallback((productId: string) => {
     cancelPendingSync(productId);
     if (!isAuthedRef.current) return;
-    fetch(`/api/cart/items/${productId}`, {
+    queueMutation(`/api/cart/items/${encodeURIComponent(productId)}`, {
       method: 'DELETE',
-    }).catch((err) => console.error('[CartContext] Error sync remove:', err));
-  }, []);
+    }, () => {
+      if (!cartRef.current.some(item => item.id === productId)) pendingDeletesRef.current.add(productId);
+    });
+  }, [cancelPendingSync, queueMutation]);
 
   const dbClearCart = useCallback(() => {
-    for (const id of [...syncTimersRef.current.keys()]) cancelPendingSync(id);
+    for (const id of [...pendingQtyRef.current.keys()]) cancelPendingSync(id);
     if (!isAuthedRef.current) return;
-    fetch('/api/cart', {
+    queueMutation('/api/cart', {
       method: 'DELETE',
-    }).catch((err) => console.error('[CartContext] Error sync clear:', err));
-  }, []);
+    }, () => { pendingClearRef.current = true; });
+  }, [cancelPendingSync, queueMutation]);
 
   // ── Operaciones del carrito (UI optimista + sync BD) ──────────────────────
 
@@ -414,21 +628,30 @@ export const CartProvider = ({ children }: CartProviderProps) => {
    */
   const applyAdd = useCallback(
     (product: Product, quantity: number) => {
-      setCart((prevItems) => {
+      if (!Number.isFinite(quantity) || quantity <= 0) return;
+      quantity = Math.floor(quantity);
+      if (quantity < 1 || !Number.isFinite(product.stock)) return;
+      const prevItems = cartRef.current;
         const prev = prevItems.find((i) => i.id === product.id);
         if (prev) {
           const q = prev.quantity + quantity;
-          if (q > product.stock) return prevItems;
+          if (q > product.stock) return;
+          localEditsRef.current.set(product.id, ++mutationVersionRef.current);
           dbUpsertItem(product.id, q);
-          return prevItems.map((i) => (i.id === product.id ? { ...i, quantity: q } : i));
+          commitCart(prevItems.map((i) => (i.id === product.id ? { ...i, quantity: q } : i)));
+          return;
         }
         const q = Math.min(quantity, product.stock);
-        if (q <= 0) return prevItems;
+        if (q <= 0) return;
+        if (prevItems.length >= MAX_CART_ITEMS) {
+          setNotification({ message: 'Puedes agregar hasta 25 productos distintos por pedido.', type: 'error' });
+          return;
+        }
+        localEditsRef.current.set(product.id, ++mutationVersionRef.current);
         dbUpsertItem(product.id, q);
-        return [...prevItems, { ...product, quantity: q }];
-      });
+        commitCart([...prevItems, { ...product, quantity: q }]);
     },
-    [dbUpsertItem],
+    [commitCart, dbUpsertItem],
   );
 
   const addToCart = useCallback((product: Product, quantity: number = 1) => {
@@ -460,8 +683,9 @@ export const CartProvider = ({ children }: CartProviderProps) => {
   }, [applyAdd]);
 
   const removeFromCart = useCallback((productId: string) => {
+    localEditsRef.current.set(productId, ++mutationVersionRef.current);
     const itemToRemove = cartRef.current.find((i) => i.id === productId);
-    setCart((prevItems) => prevItems.filter((i) => i.id !== productId));
+    commitCart((prevItems) => prevItems.filter((i) => i.id !== productId));
     dbRemoveItem(productId);
     if (itemToRemove) {
       announce(`"${safeName(itemToRemove.name)}" eliminado del carrito.`);
@@ -472,10 +696,13 @@ export const CartProvider = ({ children }: CartProviderProps) => {
         items: [toGa4Item(itemToRemove)],
       });
     }
-  }, [announce, showNotification, dbRemoveItem]);
+  }, [announce, showNotification, dbRemoveItem, commitCart]);
 
   const updateQuantity = useCallback((productId: string, quantity: number) => {
+    if (!Number.isFinite(quantity)) return;
+    quantity = Math.floor(quantity);
     const item = cartRef.current.find((i) => i.id === productId);
+    if (!item) return;
     if (quantity <= 0) {
       removeFromCart(productId);
       return;
@@ -485,7 +712,8 @@ export const CartProvider = ({ children }: CartProviderProps) => {
     } else if (item) {
       announce(`"${safeName(item.name)}" actualizado: ${quantity} unidad(es) en el carrito.`);
     }
-    setCart((prevItems) =>
+    localEditsRef.current.set(productId, ++mutationVersionRef.current);
+    commitCart((prevItems) =>
       prevItems.map((i) => {
         if (i.id !== productId) return i;
         const capped = Math.min(quantity, i.stock);
@@ -493,12 +721,13 @@ export const CartProvider = ({ children }: CartProviderProps) => {
         return { ...i, quantity: capped };
       }),
     );
-  }, [announce, removeFromCart, dbUpsertItem]);
+  }, [announce, removeFromCart, dbUpsertItem, commitCart]);
 
   const clearCart = useCallback(() => {
-    setCart([]);
+    localClearVersionRef.current = ++mutationVersionRef.current;
+    commitCart([]);
     dbClearCart();
-  }, [dbClearCart]);
+  }, [dbClearCart, commitCart]);
 
   /* Lee del ref: mantiene la identidad estable sin depender del estado. */
   const getCartTotal = useCallback(

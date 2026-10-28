@@ -15,16 +15,20 @@ cloudflare_purge_decision() {
       echo "Cloudflare: purga ejecutada (dry-run)."
       return 0
     fi
-    local purge_result
-    purge_result=$(curl -sS -X POST \
+    local purge_result header_file
+    header_file="$(mktemp)" || return 1
+    chmod 600 "$header_file"
+    printf 'Authorization: Bearer %s\n' "$CF_API_TOKEN" > "$header_file"
+    purge_result=$(curl -sS --connect-timeout 5 --max-time 30 -X POST \
       "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/purge_cache" \
-      -H "Authorization: Bearer ${CF_API_TOKEN}" \
+      -H "@$header_file" \
       -H "Content-Type: application/json" \
       --data '{"purge_everything":true}' || true)
+    rm -f "$header_file"
     if echo "$purge_result" | grep -q '"success":true'; then
       echo "Cloudflare: caché purgada."
     else
-      echo "AVISO: la purga de Cloudflare falló (no bloquea el deploy): $purge_result" >&2
+      echo "AVISO: la purga de Cloudflare falló; revisar el proveedor (no bloquea el deploy)." >&2
     fi
     return 0
   fi

@@ -1,0 +1,117 @@
+
+> ecommerce-platform@0.1.0 lint
+> eslint .
+
+
+D:\limpio\app\account\orders\[id]\page.tsx
+  32:40  warning  '_product' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\limpio\app\actions\abandonedCartActions.ts
+  100:47  warning  '_email' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\limpio\app\actions\orderLookupActions.ts
+  75:40  warning  '_product' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\limpio\app\actions\productActions.ts
+  273:25  warning  '_' is assigned a value but never used     @typescript-eslint/no-unused-vars
+  273:48  warning  '_op' is assigned a value but never used   @typescript-eslint/no-unused-vars
+  273:64  warning  '_sp' is assigned a value but never used   @typescript-eslint/no-unused-vars
+  273:80  warning  '_mp' is assigned a value but never used   @typescript-eslint/no-unused-vars
+  273:95  warning  '_cat' is assigned a value but never used  @typescript-eslint/no-unused-vars
+  404:25  warning  '_' is assigned a value but never used     @typescript-eslint/no-unused-vars
+  404:48  warning  '_op' is assigned a value but never used   @typescript-eslint/no-unused-vars
+  404:64  warning  '_sp' is assigned a value but never used   @typescript-eslint/no-unused-vars
+  404:80  warning  '_mp' is assigned a value but never used   @typescript-eslint/no-unused-vars
+  404:95  warning  '_cat' is assigned a value but never used  @typescript-eslint/no-unused-vars
+
+D:\limpio\app\actions\restockActions.ts
+  83:3  warning  'productName' is defined but never used      @typescript-eslint/no-unused-vars
+  84:3  warning  'productSlug' is defined but never used      @typescript-eslint/no-unused-vars
+  85:3  warning  'productImageUrl' is defined but never used  @typescript-eslint/no-unused-vars
+  86:3  warning  'productPrice' is defined but never used     @typescript-eslint/no-unused-vars
+
+D:\limpio\app\admin\AdminDashboardClient.tsx
+  224:30  warning  Do not use `window.location.href` to navigate to internal Next.js pages. Use `redirect()` in the render phase, or `useRouter().push()` in Client Components' event handlers instead. See: https://nextjs.org/docs/messages/no-location-assign-relative-destination  @next/next/no-location-assign-relative-destination
+
+D:\limpio\app\buscar\SearchFiltersBar.tsx
+   3:10  warning  'useEffect' is defined but never used  @typescript-eslint/no-unused-vars
+  31:6   warning  'SortValue' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\limpio\components\account\AddressFormModal.tsx
+  270:73  warning  Compilation Skipped: Use of incompatible library
+
+This API returns functions which cannot be memoized without leading to stale UI. To prevent this, by default React Compiler will skip memoizing this component/hook. However, you may see issues if values from this API are passed to other components/hooks that are memoized.
+
+D:\limpio\components\account\AddressFormModal.tsx:270:73
+  268 |                   options={mrwStateOptions}
+  269 |                   selectedIndex={(() => {
+> 270 |                     const i = mrwStateOptions.findIndex(o => o.name === watch('mrwState'));
+      |                                                                         ^^^^^ React Hook Form's `useForm()` API returns a `watch()` function which cannot be memoized safely.
+  271 |                     return i >= 0 ? i : null;
+  272 |                   })()}
+  273 |                   error={!!errors.mrwState}  react-hooks/incompatible-library
+
+D:\limpio\components\admin\AdminShell.tsx
+  6:85  warning  'NavGroup' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\limpio\components\admin\NewOrdersWatcher.tsx
+  266:5  warning  Unused eslint-disable directive (no problems were reported from 'react-hooks/exhaustive-deps')
+
+D:\limpio\components\auth\AuthForms.tsx
+  487:19  warning  Compilation Skipped: Use of incompatible library
+
+This API returns functions which cannot be memoized without leading to stale UI. To prevent this, by default React Compiler will skip memoizing this component/hook. However, you may see issues if values from this API are passed to other components/hooks that are memoized.
+
+D:\limpio\components\auth\AuthForms.tsx:487:19
+  485 |   };
+  486 |
+> 487 |   const pwWatch = form.watch('password');
+      |                   ^^^^ React Hook Form's `useForm()` API returns a `watch()` function which cannot be memoized safely.
+  488 |   const strength = passwordStrengthLabel(pwWatch ?? '');
+  489 |   const submitting = form.formState.isSubmitting;
+  490 |  react-hooks/incompatible-library
+
+D:\limpio\components\ui\use-toast.ts
+  16:7  warning  'actionTypes' is assigned a value but only used as a type  @typescript-eslint/no-unused-vars
+
+D:\limpio\context\CartContext.tsx
+  315:6  warning  React Hook useEffect has a missing dependency: 'commitCart'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  444:3  warning  Unused eslint-disable directive (no problems were reported from 'react-hooks/exhaustive-deps')
+
+D:\limpio\context\ProductContext.tsx
+  144:35  warning  '_product' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\limpio\lib\cashea.test.ts
+  178:36  warning  '_url' is defined but never used   @typescript-eslint/no-unused-vars
+  178:50  warning  '_init' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\limpio\lib\coupons.ts
+  163:30  warning  '_detail' is defined but never used         @typescript-eslint/no-unused-vars
+  163:47  warning  '_code' is defined but never used           @typescript-eslint/no-unused-vars
+  186:3   warning  '_customerEmail' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\limpio\lib\ga4.test.ts
+  30:15  warning  '_i' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\limpio\lib\rate-limit.ts
+  168:12  warning  '_err' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\limpio\lib\slugify.ts
+  25:3  warning  'excludeId' is defined but never used  @typescript-eslint/no-unused-vars
+
+D:\limpio\tests\email-delivery-provider.test.ts
+   3:126  error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  18:50   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+  20:55   error  Unexpected any. Specify a different type  @typescript-eslint/no-explicit-any
+
+D:\limpio\tests\wishlist-context-regressions.test.tsx
+   6:56  error  Unexpected any. Specify a different type       @typescript-eslint/no-explicit-any
+  13:64  error  Missing an explicit type attribute for button  react/button-has-type
+
+D:\limpio\types\next-auth.d.ts
+  1:8   warning  'NextAuth' is defined but never used  @typescript-eslint/no-unused-vars
+  2:10  warning  'JWT' is defined but never used       @typescript-eslint/no-unused-vars
+
+✖ 43 problems (5 errors, 38 warnings)
+  0 errors and 2 warnings potentially fixable with the `--fix` option.
+

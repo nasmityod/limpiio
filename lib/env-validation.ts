@@ -1,3 +1,4 @@
+import { CASHEA_AUTHORITATIVE_ADAPTER_READY } from '@/lib/cashea-readiness';
 /**
  * env-validation.ts — validación de variables de entorno al arranque.
  * Importado desde lib/prisma.ts para que cualquier ruta que toque la BD
@@ -126,6 +127,7 @@ function validateCasheaEnv(): void {
     process.env.NEXT_PUBLIC_CASHEA_ENABLED,
   );
 
+  if (enabled && !CASHEA_AUTHORITATIVE_ADAPTER_READY) throw new Error('[env] Cashea automático no está disponible: falta el adaptador autoritativo. Mantén CASHEA_ENABLED=false.');
   if (enabled !== publicEnabled) {
     throw new Error(
       '[env] CASHEA_ENABLED y NEXT_PUBLIC_CASHEA_ENABLED deben coincidir (espejo del flag para el cliente).',
@@ -179,13 +181,16 @@ let validated = false;
 
 export function validateEnv(): void {
   if (validated) return;
-  validated = true;
 
   // Durante `next build` no hay runtime real; la validación dura ocurre en el
   // primer request / arranque del servidor de producción.
-  if (process.env.NEXT_PHASE === 'phase-production-build') return;
+  if (process.env.NEXT_PHASE === 'phase-production-build') { validated = true; return; }
 
   const isProduction = process.env.NODE_ENV === 'production';
+
+  if (isProduction && (process.env.EMAIL_DELIVERY_SECRET || process.env.NEXTAUTH_SECRET || '').length < 16) {
+    throw new Error('[env] EMAIL_DELIVERY_SECRET o NEXTAUTH_SECRET debe contener al menos 16 caracteres para cifrar la cola de correo.');
+  }
 
   const missing = REQUIRED_ALWAYS.filter((k) => !process.env[k]?.trim());
   if (missing.length > 0) {
@@ -258,6 +263,7 @@ export function validateEnv(): void {
   // Cashea (Sección 5/9 del documento maestro): con el flag apagado no exige
   // nada; con el flag encendido exige el set completo de configuración.
   validateCasheaEnv();
+  validated = true;
 }
 
 validateEnv();

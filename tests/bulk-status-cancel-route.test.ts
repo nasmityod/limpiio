@@ -119,6 +119,9 @@ describe('POST /api/orders/bulk-status-update Cancelado', () => {
         items: [{ productId: 'p1', quantity: 1 }],
       },
       {
+        id: 'order-c', orderNumber: 3, status: 'Cancelado', stockDeducted: false, customerEmail: null, customerName: 'C', items: [],
+      },
+      {
         id: 'order-a',
         orderNumber: 1,
         status: 'En Proceso',
@@ -141,7 +144,7 @@ describe('POST /api/orders/bulk-status-update Cancelado', () => {
     expect(txFindManyMock).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          status: { not: 'Cancelado' },
+          id: { in: ['order-b', 'order-a', 'order-c'] },
         }),
       }),
     );

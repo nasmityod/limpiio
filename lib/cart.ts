@@ -7,6 +7,10 @@ type Decimal = Prisma.Decimal;
 
 /** Selección base de campos de producto que expone la API de carrito. */
 const PRODUCT_SELECT = PRODUCT_CARD_SELECT;
+export const MAX_CART_ITEMS = 25;
+export class CartLimitError extends Error {
+  constructor() { super('Puedes agregar hasta 25 productos diferentes al carrito.'); this.name = 'CartLimitError'; }
+}
 
 /** Mapea un CartItem con producto incluido al shape CartItemAPI. */
 function toCartItemAPI(item: {
@@ -52,6 +56,8 @@ export async function getUserCart(userId: string): Promise<CartItemAPI[]> {
     where: { userId },
     include: {
       items: {
+        where: { product: { isActive: true, stock: { gt: 0 } } },
+        take: MAX_CART_ITEMS,
         include: { product: { select: PRODUCT_SELECT } },
         orderBy: { createdAt: 'asc' },
       },
@@ -60,7 +66,7 @@ export async function getUserCart(userId: string): Promise<CartItemAPI[]> {
 
   if (!cart) return [];
 
-  return cart.items.map(toCartItemAPI);
+  return cart.items.map(item => toCartItemAPI({ ...item, quantity: Math.min(item.quantity, item.product.stock) }));
 }
 
 /**
@@ -76,57 +82,70 @@ export async function upsertCartItem(
   productId: string,
   quantity: number,
 ): Promise<void> {
-  const cart = await prisma.cart.upsert({
+  if (!Number.isSafeInteger(quantity) || quantity < 0) throw new Error('Cantidad inválida.');
+  await prisma.$transaction(async (tx) => {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'cart:' + userId}, 0))`;
+  const cart = await tx.cart.upsert({
     where: { userId },
     create: { userId, updatedAt: new Date() },
     update: { updatedAt: new Date() },
     select: { id: true },
   });
 
-  const product = await prisma.product.findUnique({
+  const product = await tx.product.findUnique({
     where: { id: productId },
-    select: { stock: true },
+    select: { stock: true, isActive: true },
   });
 
-  const clampedQuantity = product ? Math.min(quantity, product.stock) : 0;
+  const clampedQuantity = product?.isActive ? Math.min(quantity, product.stock) : 0;
 
   if (clampedQuantity <= 0) {
-    await prisma.cartItem.deleteMany({
+    await tx.cartItem.deleteMany({
       where: { cartId: cart.id, productId },
     });
     return;
   }
 
-  await prisma.cartItem.upsert({
+  await tx.cartItem.deleteMany({ where: { cartId: cart.id, product: { OR: [{ isActive: false }, { stock: { lte: 0 } }] } } });
+  const existing = await tx.cartItem.findUnique({ where: { cartId_productId: { cartId: cart.id, productId } }, select: { id: true } });
+  if (!existing && await tx.cartItem.count({ where: { cartId: cart.id } }) >= MAX_CART_ITEMS) throw new CartLimitError();
+  await tx.cartItem.upsert({
     where: { cartId_productId: { cartId: cart.id, productId } },
     create: { cartId: cart.id, productId, quantity: clampedQuantity },
     update: { quantity: clampedQuantity, updatedAt: new Date() },
+  });
   });
 }
 
 /** Elimina un ítem del carrito por productId. */
 export async function removeCartItem(userId: string, productId: string): Promise<void> {
-  const cart = await prisma.cart.findUnique({
+  await prisma.$transaction(async (tx) => {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'cart:' + userId}, 0))`;
+  const cart = await tx.cart.findUnique({
     where: { userId },
     select: { id: true },
   });
   if (!cart) return;
 
-  await prisma.cartItem.deleteMany({
+  await tx.cartItem.deleteMany({
     where: { cartId: cart.id, productId },
+  });
   });
 }
 
 /** Elimina todos los ítems del carrito del usuario. */
 export async function clearUserCart(userId: string): Promise<void> {
-  const cart = await prisma.cart.findUnique({
+  await prisma.$transaction(async (tx) => {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'cart:' + userId}, 0))`;
+  const cart = await tx.cart.findUnique({
     where: { userId },
     select: { id: true },
   });
   if (!cart) return;
 
-  await prisma.cartItem.deleteMany({ where: { cartId: cart.id } });
-  await prisma.cart.update({ where: { id: cart.id }, data: { updatedAt: new Date() } });
+  await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
+  await tx.cart.update({ where: { id: cart.id }, data: { updatedAt: new Date() } });
+  });
 }
 
 /**
@@ -138,18 +157,20 @@ export async function mergeCart(
   userId: string,
   localItems: { productId: string; quantity: number }[],
 ): Promise<CartItemAPI[]> {
+  localItems = localItems.filter(i => typeof i.productId === 'string' && i.productId.length <= 40 && Number.isSafeInteger(i.quantity) && i.quantity > 0).slice(0, MAX_CART_ITEMS);
   // Si no hay ítems locales, simplemente devolvemos el carrito actual
   if (localItems.length === 0) {
     return getUserCart(userId);
   }
 
   const result = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'cart:' + userId}, 0))`;
     // Obtener o crear el carrito
     const cart = await tx.cart.upsert({
       where: { userId },
       create: { userId, updatedAt: new Date() },
       update: { updatedAt: new Date() },
-      include: { items: { select: { productId: true, quantity: true } } },
+      include: { items: { orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], select: { productId: true, quantity: true } } },
     });
 
     // Recopilar todos los productIds involucrados
@@ -162,7 +183,7 @@ export async function mergeCart(
 
     // Consultar stock actual de todos los productos
     const products = await tx.product.findMany({
-      where: { id: { in: allProductIds } },
+      where: { id: { in: allProductIds }, isActive: true },
       select: { id: true, stock: true },
     });
     const stockMap = new Map(products.map((p) => [p.id, p.stock]));
@@ -179,16 +200,18 @@ export async function mergeCart(
     // PRD-023: el recorte a stock aplica a TODAS las líneas resultantes —
     // también a las que ya estaban en BD con cantidades viejas — para que el
     // checkout no falle tarde por inventario que bajó mientras tanto.
+    let accepted = 0;
     for (const [productId, quantity] of merged.entries()) {
       const stock = stockMap.get(productId) ?? 0;
       const clamped = Math.min(quantity, stock);
 
-      if (clamped <= 0) {
+      if (clamped <= 0 || accepted >= MAX_CART_ITEMS) {
         await tx.cartItem.deleteMany({
           where: { cartId: cart.id, productId },
         });
         continue;
       }
+      accepted++;
 
       await tx.cartItem.upsert({
         where: { cartId_productId: { cartId: cart.id, productId } },
@@ -205,6 +228,8 @@ export async function mergeCart(
     where: { id: result },
     include: {
       items: {
+        where: { product: { isActive: true, stock: { gt: 0 } } },
+        take: MAX_CART_ITEMS,
         include: { product: { select: PRODUCT_SELECT } },
         orderBy: { createdAt: 'asc' },
       },

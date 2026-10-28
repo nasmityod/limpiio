@@ -1,5 +1,9 @@
 'use client';
 
+import { CASHEA_AUTHORITATIVE_ADAPTER_READY } from '@/lib/cashea-readiness';
+
+import { getCheckoutAttemptKey, finishCheckoutAttempt } from '@/lib/checkout-attempt';
+
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
@@ -25,7 +29,7 @@ import type { CasheaPayload } from '@/lib/cashea';
 import { BRAND } from '@/config/brand';
 
 /** Espejo cliente del master switch — nunca `lib/cashea-config.ts` (servidor). */
-const CASHEA_AUTOMATIC_ENABLED = process.env.NEXT_PUBLIC_CASHEA_ENABLED === 'true';
+const CASHEA_AUTOMATIC_ENABLED = process.env.NEXT_PUBLIC_CASHEA_ENABLED === 'true' && CASHEA_AUTHORITATIVE_ADAPTER_READY;
 
 type CasheaSession = {
   orderId: string;
@@ -349,7 +353,7 @@ const ReviewStep = ({ shippingData, paymentData, checkoutPaymentMethods = [], wh
 
       const response = await fetch('/api/cashea/session', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': await getCheckoutAttemptKey(orderPayload) },
         body: JSON.stringify(orderPayload),
       });
 
@@ -381,6 +385,7 @@ const ReviewStep = ({ shippingData, paymentData, checkoutPaymentMethods = [], wh
 
       // El pedido ya quedó creado (con reserva de inventario) en el servidor
       // — igual que el resto de métodos, el carrito local se limpia aquí.
+      finishCheckoutAttempt();
       clearCart();
       setCasheaSession({
         orderId: body.orderId,
@@ -393,7 +398,7 @@ const ReviewStep = ({ shippingData, paymentData, checkoutPaymentMethods = [], wh
     } catch (err) {
       console.error('[checkout] handleCasheaConfirm:', err);
       if (err instanceof TypeError) {
-        setError('Sin conexión con la tienda. Revisa tu internet e intenta de nuevo: no se creó ningún pedido.');
+        setError('Sin conexión con la tienda. No pudimos confirmar el resultado. Reintenta para recuperar el mismo intento de compra.');
       } else {
         setError(err instanceof Error ? err.message : 'Hubo un problema. Por favor, inténtalo de nuevo.');
       }
@@ -455,7 +460,7 @@ const ReviewStep = ({ shippingData, paymentData, checkoutPaymentMethods = [], wh
 
       const response = await fetch('/api/orders', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': await getCheckoutAttemptKey(orderPayload) },
         body: JSON.stringify(orderPayload),
       });
 
@@ -490,6 +495,7 @@ const ReviewStep = ({ shippingData, paymentData, checkoutPaymentMethods = [], wh
 
       // PRD-180: el carrito abandonado se marca RECOVERED en el servidor
       // (POST /api/orders) — aquí ya no se invoca ninguna Server Action pública.
+      finishCheckoutAttempt();
       clearCart();
 
       if (whatsappMode) {
@@ -561,7 +567,7 @@ const ReviewStep = ({ shippingData, paymentData, checkoutPaymentMethods = [], wh
       // Redes venezolanas: distinguir "sin conexión" (fetch lanza TypeError)
       // de un error del servidor — el mensaje crudo era "Failed to fetch".
       if (err instanceof TypeError) {
-        setError('Sin conexión con la tienda. Revisa tu internet e intenta de nuevo: no se creó ningún pedido.');
+        setError('Sin conexión con la tienda. No pudimos confirmar el resultado. Reintenta para recuperar el mismo intento de compra.');
       } else {
         setError(err instanceof Error ? err.message : 'Hubo un problema. Por favor, inténtalo de nuevo.');
       }

@@ -1,5 +1,7 @@
 'use client';
 
+import { CASHEA_AUTHORITATIVE_ADAPTER_READY } from '@/lib/cashea-readiness';
+
 import { useState, useRef, useCallback, useMemo, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Phone, Building, ChevronRight, Copy, Check, UploadCloud, X, Wallet, AlertTriangle, Banknote } from 'lucide-react';
@@ -61,7 +63,7 @@ const PROOF_FILE_ACCEPT = 'image/jpeg,image/png,image/webp,image/heic,image/heif
  * (canal `whatsapp`) sigue en modo manual — no prometer el botón de Cashea
  * cuando `whatsappMode` es true hasta que ese componente también se integre.
  */
-const CASHEA_AUTOMATIC_ENABLED = process.env.NEXT_PUBLIC_CASHEA_ENABLED === 'true';
+const CASHEA_AUTOMATIC_ENABLED = process.env.NEXT_PUBLIC_CASHEA_ENABLED === 'true' && CASHEA_AUTHORITATIVE_ADAPTER_READY;
 
 const selectCls =
   'block w-full min-h-[48px] px-3.5 text-base bg-slate-50/70 border border-slate-200 rounded-xl text-navy focus:outline-none focus:bg-white focus:border-navy';

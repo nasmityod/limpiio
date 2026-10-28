@@ -7,6 +7,8 @@ import { brandWhatsappHref } from '@/lib/social-links';
 import Logo from '@/components/Logo';
 import { useReducedMotion, reducedTransition } from '@/lib/motion';
 import { BRAND } from '@/config/brand';
+import { usePublicBusiness } from '@/context/PublicBusinessContext';
+import { whatsappHref } from '@/lib/social-links';
 
 export type AuthSplitVariant = 'login' | 'register' | 'recovery';
 
@@ -45,11 +47,10 @@ export default function AuthSplitLayout({
 }: AuthSplitLayoutProps) {
   const prefersReduced = useReducedMotion();
   const { tagline } = COPY[variant];
-  // Desde NEXT_PUBLIC_WHATSAPP_URL: este componente es cliente y no recibe
-  // StoreSettings. Sin la variable, waHref es null y el párrafo no se pinta.
-  const waHref = brandWhatsappHref(
-    `Hola ${BRAND.name}, necesito ayuda con mi cuenta en la página web.`,
-  );
+  const { address, phone } = usePublicBusiness();
+  // Public contact comes from the configured site shell; env is a fallback.
+  const message = `Hola ${BRAND.name}, necesito ayuda con mi cuenta en la página web.`;
+  const waHref = whatsappHref(phone, message) ?? brandWhatsappHref(message);
 
   return (
     <div className="w-full">
@@ -104,7 +105,7 @@ export default function AuthSplitLayout({
             <div className="flex flex-col gap-2 text-[12px] text-slate-500">
               <span className="inline-flex items-start gap-2">
                 <MapPin size={13} className="mt-0.5 flex-shrink-0 text-brand-yellowDk" aria-hidden />
-                Tienda física: Carrera 21 con esquina calle 21, Centro, Barquisimeto 3001.
+                {address ? `Tienda física: ${address}.` : 'Consulta nuestra ubicación en la sección de contacto.'}
               </span>
               <span className="inline-flex items-start gap-2">
                 <ShieldCheck size={13} className="mt-0.5 flex-shrink-0 text-brand-yellowDk" aria-hidden />

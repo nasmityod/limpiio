@@ -6,6 +6,7 @@ import { persistExchangeRateWithBcvDate } from '@/lib/persist-exchange-rate';
 import { prisma } from '@/lib/prisma';
 import { verifyBearerSecret } from '@/lib/security';
 import { logInfo, logError } from '@/lib/safe-logger';
+import { normalizeBcvDate } from '@/lib/bcv-date';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
@@ -59,8 +60,19 @@ export async function GET(request: Request): Promise<NextResponse> {
       );
     }
 
-    const storedDate = await getStoredBcvDate();
-    if (storedDate === fetched.date) {
+    const date = normalizeBcvDate(fetched.date);
+    if (!date || Date.parse(date) < Date.now() - 7 * 86_400_000 || Date.parse(date) > Date.now() + 4 * 86_400_000) {
+      return NextResponse.json({ ok: false, needsReview: true, reason: 'invalid-or-stale-publication' }, { status: 409 });
+    }
+    fetched.date = date;
+    const rawStoredDate = await getStoredBcvDate();
+    const storedDate = rawStoredDate ? normalizeBcvDate(rawStoredDate) : null;
+    const hasStored = await hasStoredExchangeRate(prisma);
+    const actual = await getExchangeRate();
+    if (storedDate && Date.parse(storedDate) > Date.parse(fetched.date)) {
+      return NextResponse.json({ ok: false, reason: 'older-publication' }, { status: 409 });
+    }
+    if (storedDate === fetched.date && hasStored && Math.abs(actual - fetched.rate) < 0.00005) {
       await recordBcvSuccess();
       return NextResponse.json({ ok: true, sinCambios: true });
     }
@@ -68,8 +80,6 @@ export async function GET(request: Request): Promise<NextResponse> {
     // SEC-2026-09 (#16): sin tasa persistida válida no hay «salto» que medir —
     // comparar contra el default de compilación (36,5) bloqueaba el cron para
     // siempre en una instancia nueva o tras un restore (deadlock de arranque).
-    const hasStored = await hasStoredExchangeRate(prisma);
-    const actual = await getExchangeRate();
     const jumpRatio = hasStored ? Math.abs(fetched.rate - actual) / actual : 0;
     if (hasStored && jumpRatio > MAX_RATE_JUMP_RATIO) {
       logError('cron_bcv_suspicious_jump', new Error(`Rate jump ${(jumpRatio * 100).toFixed(1)}%`), { operation: 'bcv_rate_update' });
@@ -91,6 +101,7 @@ export async function GET(request: Request): Promise<NextResponse> {
 
     return NextResponse.json({ ok: true, rate: fetched.rate, date: fetched.date });
   } catch (error) {
+    if (error instanceof Error && error.message.startsWith('BCV_INTEGRITY:')) return NextResponse.json({ ok: false, needsReview: true, reason: error.message.slice(14) }, { status: 409 });
     logError('cron_bcv_unexpected_error', error, { operation: 'bcv_rate_update' });
     return NextResponse.json(
       { ok: false },

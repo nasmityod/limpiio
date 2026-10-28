@@ -1,3 +1,4 @@
+import { sanitizeOrderItemImageUrl } from '@/lib/r2-public-url';
 /**
  * safe-link.ts — validación de enlaces e imágenes editables desde el admin
  * (PRD-212 / PRD-257 / PRD-283 / PRD-259).
@@ -76,12 +77,5 @@ export function isGoogleMapsEmbedUrl(value: string): boolean {
  * Evita strings basura que rompen next/image en runtime (PRD-259).
  */
 export function isSafeEditableImageUrl(value: string): boolean {
-  const v = value.trim();
-  if (v === '') return true;
-  if (isInternalPath(v)) return true;
-  try {
-    return new URL(v).protocol === 'https:';
-  } catch {
-    return false;
-  }
+  return value.trim() === '' || sanitizeOrderItemImageUrl(value) !== null;
 }

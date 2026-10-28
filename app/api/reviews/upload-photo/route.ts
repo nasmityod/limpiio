@@ -5,8 +5,11 @@ import { rateLimit } from '@/lib/rate-limit';
 import { rejectInvalidMutationOrigin } from '@/lib/security';
 import { detectImageMimeFromBuffer, isAllowedProofMime } from '@/lib/detect-image-mime';
 import { processImageWithFallback } from '@/lib/image-processing';
-import { buildKey, uploadToR2 } from '@/lib/r2';
+import { buildKey, uploadToR2, R2_PUBLIC_BASE_URL } from '@/lib/r2';
 import { logError } from '@/lib/safe-logger';
+import { reviewPhotoPrefix } from '@/lib/reviews';
+import { reserveReviewPhotoUpload, ReviewPhotoError } from '@/lib/review-photo-assets';
+import { prisma } from '@/lib/prisma';
 
 /** sharp usa módulos nativos; no compatible con Edge. */
 export const runtime = 'nodejs';
@@ -33,6 +36,7 @@ export async function POST(request: Request) {
     );
   }
 
+  let uploadId: string | undefined;
   try {
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
@@ -68,11 +72,19 @@ export async function POST(request: Request) {
       buffer,
       { maxWidth: 1600 },
     );
-    const key = buildKey('reviews', ext);
+    const key = reviewPhotoPrefix(userId) + buildKey('reviews', ext).slice('reviews/'.length);
+    const upload = await reserveReviewPhotoUpload(userId, `${R2_PUBLIC_BASE_URL}/${key}`, key);
+    uploadId = upload.id;
     const url = await uploadToR2({ buffer: processed, key, contentType });
+    await prisma.reviewPhotoUpload.update({ where: { id: upload.id }, data: { status: 'READY', url } });
 
     return NextResponse.json({ url, publicId: key, width, height });
   } catch (err) {
+    if (err instanceof ReviewPhotoError) return NextResponse.json({ error: err.message }, { status: 429 });
+    if (uploadId) {
+      try { await prisma.reviewPhotoUpload.updateMany({ where: { id: uploadId }, data: { status: 'FAILED', expiresAt: new Date() } }); }
+      catch { /* The original UPLOADING reservation expires and is retried by cron. */ }
+    }
     logError('reviews_upload_photo_failed', err, { operation: 'review_photo_upload' });
     return NextResponse.json(
       { error: 'No pudimos subir la foto. Intenta con otra imagen o más tarde.' },

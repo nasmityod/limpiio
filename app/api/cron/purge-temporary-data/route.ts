@@ -146,7 +146,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         });
         if (records.length > 0) {
           const { count: deleted } = await prisma.passwordResetToken.deleteMany({
-            where: { id: { in: records.map((r) => r.id) } },
+            where: { ...where, id: { in: records.map((r) => r.id) } },
           });
           passwordResetTokens.deleted = deleted;
         }
@@ -175,7 +175,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         });
         if (records.length > 0) {
           const { count: cleared } = await prisma.user.updateMany({
-            where: { id: { in: records.map((r) => r.id) } },
+            // Recheck expiry in the write: a new request may renew the token
+            // after the batch IDs were selected.
+            where: { ...where, id: { in: records.map((r) => r.id) } },
             data: {
               emailChangeToken: null,
               emailChangeTokenExpiry: null,
@@ -209,7 +211,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         });
         if (records.length > 0) {
           const { count: deleted } = await prisma.paymentUpload.deleteMany({
-            where: { id: { in: records.map((r) => r.id) } },
+            where: { ...where, id: { in: records.map((r) => r.id) } },
           });
           deletedUploads.deleted = deleted;
         }
@@ -236,7 +238,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         });
         if (records.length > 0) {
           const { count: deleted } = await prisma.productView.deleteMany({
-            where: { id: { in: records.map((r) => r.id) } },
+            where: { ...where, id: { in: records.map((r) => r.id) } },
           });
           productViews.deleted = deleted;
         }
@@ -263,7 +265,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         });
         if (records.length > 0) {
           const { count: deleted } = await prisma.abandonedCart.deleteMany({
-            where: { id: { in: records.map((r) => r.id) } },
+            // A renewed cart must survive a batch selected before its activity.
+            where: { ...where, id: { in: records.map((r) => r.id) } },
           });
           abandonedCartsPending.deleted = deleted;
         }
@@ -290,7 +293,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         });
         if (records.length > 0) {
           const { count: deleted } = await prisma.abandonedCart.deleteMany({
-            where: { id: { in: records.map((r) => r.id) } },
+            where: { ...where, id: { in: records.map((r) => r.id) } },
           });
           abandonedCartsTerminal.deleted = deleted;
         }

@@ -5,6 +5,8 @@ import * as Sentry from '@sentry/nextjs';
 export type LogLevel = 'info' | 'warn' | 'error';
 
 export type SafeLogContext = {
+  actorId?: string;
+  filter?: string;
   requestId?: string;
   orderId?: string;
   route?: string;
@@ -86,6 +88,8 @@ export function sanitizeContext(context?: SafeLogContext): SafeLogContext | unde
     return undefined;
   }
   const safe: SafeLogContext = {};
+  if (context.actorId) safe.actorId = sanitizeText(context.actorId);
+  if (context.filter) safe.filter = sanitizeText(context.filter);
   if (context.requestId) {
     safe.requestId = sanitizeText(context.requestId);
   }

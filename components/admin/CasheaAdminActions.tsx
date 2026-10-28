@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { RefreshCw, Ban, Loader2 } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import type { Order } from '@/lib/definitions';
+import { CASHEA_AUTHORITATIVE_ADAPTER_READY } from '@/lib/cashea-readiness';
 
 const VERIFY_CONFIRM_MSG =
   'Esto vuelve a consultar a Cashea el estado real de la inicial. Si no hay evidencia de pago, el pedido queda pendiente.';
@@ -89,6 +90,7 @@ export function CasheaAdminActions({
   };
 
   if (isFinal) return null;
+  if (!CASHEA_AUTHORITATIVE_ADAPTER_READY) return <p className="text-sm text-amber-800">La verificación automática de Cashea no está disponible. Revisa esta reserva antes de liberar inventario.</p>;
 
   return (
     <div className="flex flex-wrap gap-2">

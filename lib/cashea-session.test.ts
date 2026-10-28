@@ -1,7 +1,12 @@
+vi.mock('@/lib/cashea-readiness', () => ({ CASHEA_AUTHORITATIVE_ADAPTER_READY: true }));
+vi.mock('@/lib/data-store', () => ({ readSettings: async () => ({ storeName: 'Demo', address: 'Server address' }) }));
+import { checkoutPayloadHash } from '@/lib/checkout-idempotency';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const transactionMock = vi.fn();
 const orderFindManyMock = vi.fn();
+const orderFindUniqueMock = vi.fn();
+const orderCountMock = vi.fn();
 const orderUpdateMock = vi.fn();
 const productFindManyMock = vi.fn();
 
@@ -31,10 +36,12 @@ vi.mock('@/lib/safe-logger', () => ({
   logError: vi.fn(),
 }));
 
+const { checkoutSchema } = await import('@/lib/checkout-order');
 const { createCasheaSession } = await import('@/lib/cashea-session');
 const { CheckoutError } = await import('@/lib/checkout-error');
 
 const CASHEA_ENV_KEYS = [
+  'NEXTAUTH_SECRET',
   'CASHEA_ENABLED',
   'CASHEA_ENV',
   'CASHEA_API_BASE_URL',
@@ -54,6 +61,7 @@ const CASHEA_ENV_KEYS = [
 let originalEnv: Record<string, string | undefined>;
 
 function setFullValidConfig(): void {
+  process.env.NEXTAUTH_SECRET = 'isolated-vitest-checkout-secret';
   process.env.CASHEA_ENABLED = 'true';
   process.env.NEXT_PUBLIC_CASHEA_ENABLED = 'true';
   process.env.CASHEA_ENV = 'sandbox';
@@ -73,6 +81,7 @@ function setFullValidConfig(): void {
 
 function baseBody(overrides: Record<string, unknown> = {}) {
   return {
+    attemptKey: 'test-attempt-key-1234567890',
     customerName: 'Cliente Prueba',
     customerIdNumber: 'V12345678',
     shippingMethod: 'mrw',
@@ -109,6 +118,8 @@ function makeTx() {
   return {
     order: {
       findMany: orderFindManyMock,
+      findUnique: orderFindUniqueMock,
+      count: orderCountMock,
       update: orderUpdateMock,
     },
   };
@@ -126,6 +137,8 @@ beforeEach(() => {
 
   transactionMock.mockImplementation(async (cb: (tx: unknown) => unknown) => cb(makeTx()));
   orderFindManyMock.mockResolvedValue([]);
+  orderFindUniqueMock.mockReset().mockResolvedValue(null);
+  orderCountMock.mockResolvedValue(0);
   executeCheckoutInTransactionWithMethodMock.mockResolvedValue({ order: fakeCreatedOrder() });
   orderUpdateMock.mockImplementation(
     async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) =>
@@ -250,7 +263,7 @@ describe('createCasheaSession — creación del pedido', () => {
     setFullValidConfig();
     const result = await createCasheaSession({
       userId: 'user-1',
-      body: baseBody({ items: [{ productId: 'prod-1', quantity: 999 }] }), // cantidad manipulada
+      body: baseBody({ items: [{ productId: 'prod-1', quantity: 99 }] }), // cantidad manipulada
     });
 
     expect(result.payload.deliveryPrice).toBe(0);
@@ -267,47 +280,34 @@ describe('createCasheaSession — creación del pedido', () => {
   });
 });
 
-describe('createCasheaSession — anti doble submit', () => {
-  it('no crea un segundo pedido si detecta el mismo carrito reciente', async () => {
+describe('createCasheaSession — durable attempts', () => {
+  function existing(overrides: Record<string, unknown> = {}) {
+    return fakeCreatedOrder({
+      id: 'order-existing', casheaStatus: 'CREATED', casheaReservationExpiresAt: new Date(Date.now() + 60_000),
+      checkoutPayloadHash: checkoutPayloadHash({ ...checkoutSchema.parse(baseBody()), customerId: 'user-1', channel: 'web' }),
+      ...overrides,
+    });
+  }
+  it('reuses the persisted attempt and keeps the exact same return token', async () => {
     setFullValidConfig();
-    orderFindManyMock.mockResolvedValue([fakeCreatedOrder({ id: 'order-existing' })]);
-
-    const result = await createCasheaSession({ userId: 'user-1', body: baseBody() });
-
+    orderFindUniqueMock.mockResolvedValue(existing());
+    const first = await createCasheaSession({ userId: 'user-1', body: baseBody() });
+    const second = await createCasheaSession({ userId: 'user-1', body: baseBody() });
+    expect(first.orderId).toBe('order-existing');
+    expect(second.returnToken).toBe(first.returnToken);
+    expect(orderUpdateMock).not.toHaveBeenCalled();
     expect(executeCheckoutInTransactionWithMethodMock).not.toHaveBeenCalled();
-    expect(result.orderId).toBe('order-existing');
-    expect(logInfoMock).toHaveBeenCalledWith(
-      'cashea_session_duplicate_prevented',
-      expect.objectContaining({ orderId: 'order-existing' }),
-    );
   });
-
-  it('rota el hash del token en el pedido reutilizado (nunca reexpone el token anterior)', async () => {
+  it('rejects changed buyer/shipping/cart for an already persisted attempt', async () => {
     setFullValidConfig();
-    orderFindManyMock.mockResolvedValue([fakeCreatedOrder({ id: 'order-existing' })]);
-
-    const result = await createCasheaSession({ userId: 'user-1', body: baseBody() });
-
-    expect(orderUpdateMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: 'order-existing' },
-        data: { casheaReturnTokenHash: expect.any(String) },
-      }),
-    );
-    expect(result.returnToken).toBeTypeOf('string');
+    orderFindUniqueMock.mockResolvedValue(existing());
+    await expect(createCasheaSession({ userId: 'user-1', body: baseBody({ customerIdNumber: 'V99999999' }) })).rejects.toMatchObject({ httpStatus: 409 });
+    expect(executeCheckoutInTransactionWithMethodMock).not.toHaveBeenCalled();
   });
-
-  it('carritos distintos del mismo usuario SÍ crean pedidos separados', async () => {
+  it('limits every unpaid reservation before creating another Cashea order', async () => {
     setFullValidConfig();
-    orderFindManyMock.mockResolvedValue([
-      fakeCreatedOrder({
-        id: 'order-existing',
-        items: [{ productId: 'prod-2', productName: 'Otro', quantity: 1, price: 100, imageUrl: null }],
-      }),
-    ]);
-
-    await createCasheaSession({ userId: 'user-1', body: baseBody() });
-
-    expect(executeCheckoutInTransactionWithMethodMock).toHaveBeenCalled();
+    orderFindManyMock.mockResolvedValue([{ items: [] }, { items: [] }, { items: [] }]);
+    await expect(createCasheaSession({ userId: 'user-1', body: baseBody() })).rejects.toMatchObject({ httpStatus: 409 });
+    expect(executeCheckoutInTransactionWithMethodMock).not.toHaveBeenCalled();
   });
 });

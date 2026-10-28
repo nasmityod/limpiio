@@ -5,6 +5,7 @@ import { prismaOrderToOrder } from '@/lib/definitions';
 import { rejectInvalidMutationOrigin } from '@/lib/security';
 import { dn } from '@/lib/decimal';
 import { logError, logInfo } from '@/lib/safe-logger';
+import { orderSnapshotGuard, UNPAID_ORDER_STATUSES } from '@/lib/order-lifecycle';
 
 /**
  * POST /api/orders/[id]/revert-divisa-discount
@@ -36,6 +37,11 @@ export async function POST(
         subtotalBeforeDiscount: true,
         couponDiscount: true,
         total: true,
+        status: true,
+        paidAt: true,
+        stockDeducted: true,
+        updatedAt: true,
+        casheaStatus: true,
       },
     });
 
@@ -44,6 +50,9 @@ export async function POST(
     }
 
     const paymentDiscount = dn(order.paymentDiscount);
+    if (order.paidAt || order.casheaStatus || !(UNPAID_ORDER_STATUSES as readonly string[]).includes(order.status)) {
+      return NextResponse.json({ message: 'Solo puedes ajustar el descuento de un pedido pendiente de pago.' }, { status: 409 });
+    }
     // Idempotente: ya revertido (null o 0) → devolver orden actual sin mutar.
     if (paymentDiscount == null || paymentDiscount <= 0) {
       const already = await prisma.order.findUnique({
@@ -67,15 +76,16 @@ export async function POST(
     const couponDiscount = dn(order.couponDiscount) ?? 0;
     const newTotal = Math.round(Math.max(0, subtotalBeforeDiscount - couponDiscount) * 100) / 100;
 
-    const updated = await prisma.order.update({
-      where: { id: orderId },
+    const changed = await prisma.order.updateMany({
+      where: { ...orderSnapshotGuard(order), paidAt: null, casheaStatus: null },
       data: {
         paymentDiscount: null,
         paymentDiscountPercent: null,
         total: newTotal,
       },
-      include: { items: true },
     });
+    if (changed.count !== 1) return NextResponse.json({ message: 'El pedido cambió durante el ajuste. Recarga y vuelve a intentarlo.' }, { status: 409 });
+    const updated = await prisma.order.findUniqueOrThrow({ where: { id: orderId }, include: { items: true } });
 
     logInfo('payment_divisa_discount_reverted', {
       orderId,

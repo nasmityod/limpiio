@@ -58,4 +58,6 @@ export type OrderConfirmationPayload = {
   freeShipping?: boolean;
   /** SESIÓN 06: token de acceso guest (raw, una sola vez). Null para pedidos autenticados. */
   guestToken?: string | null;
+  /** Guest ownership determines the durable fallback link when its token is unavailable. */
+  customerIsGuest?: boolean;
 };

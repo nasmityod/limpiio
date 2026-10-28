@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { logError } from '@/lib/safe-logger';
-import { getExchangeRate } from '@/app/actions/configActions';
+import { readExchangeRateStatus } from '@/lib/exchange-rate-status';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 
 export const dynamic = 'force-dynamic';
@@ -21,8 +21,8 @@ export async function GET(request: Request) {
       );
     }
 
-    const rate = await getExchangeRate();
-    return NextResponse.json({ rate }, {
+    const status = await readExchangeRateStatus();
+    return NextResponse.json(status, {
       headers: { 'Cache-Control': 'no-store' },
     });
   } catch (error) {

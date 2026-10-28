@@ -74,6 +74,7 @@ function Toggle({
 
 export default function AdminPersonalizarPage() {
   const [data, setData] = useState<SiteContent>(DEFAULT_SITE_CONTENT);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [pending, startTransition] = useTransition();
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
@@ -82,21 +83,25 @@ export default function AdminPersonalizarPage() {
     getSiteContent().then((c) => {
       setData(c);
       setLoading(false);
-    });
+    }).catch(() => { setLoadFailed(true); setLoading(false); });
   }, []);
 
   const flash = (type: 'success' | 'error', msg: string) => {
     setFeedback({ type, msg });
-    setTimeout(() => setFeedback(null), 4000);
+    if (type === 'success') setTimeout(() => setFeedback(current => current?.type === 'success' ? null : current), 4000);
   };
 
   const save = () => {
     startTransition(async () => {
+      try {
       const res = await updateSiteContent(data);
       if (res.success) flash('success', 'Personalización guardada. El sitio ya muestra los cambios.');
       else flash('error', res.message);
+      } catch { flash('error', 'Error de conexión. Los cambios pendientes se conservan.'); }
     });
   };
+
+  if (loadFailed) return <p role="alert" className="p-6 text-red-700">No se pudo cargar la configuración. <button type="button" className="underline" onClick={() => window.location.reload()}>Volver a intentarlo</button></p>;
 
   if (loading) {
     return <div className="py-16 text-center text-gray-400 text-sm">Cargando…</div>;

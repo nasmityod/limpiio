@@ -29,6 +29,11 @@ export default function LoginClient({ serverCallbackUrl }: Props) {
   const explicitCallbackRef = useRef<string | null>(null);
 
   const [callbackUrl, setCallbackUrl] = useState(serverCallbackUrl);
+  useEffect(() => {
+    if (params.get('error') === 'OAuthAccountNotLinked') {
+      toast({ title: 'Este correo ya tiene una cuenta', description: 'Inicia sesión con tu contraseña. Si no la conoces, usa «Olvidé mi contraseña» para recuperar el acceso.', variant: 'destructive' });
+    }
+  }, [params]);
 
   /** Orden: query explícita > sessionStorage cliente > servidor (cookie/etc.). */
   useEffect(() => {

@@ -141,6 +141,8 @@ model Banner {
 model User {
   id                        String               @id @default(cuid())
   email                     String               @unique
+  /// OAuth identity is linked by verified provider subject, never by email alone.
+  googleSubject             String?              @unique
   password                  String
   name                      String?
   /// PRD-127: roles canónicos en MAYÚSCULAS ('CLIENT' | 'ADMIN').
@@ -310,6 +312,11 @@ model Order {
   exchangeRateUsdBs          Decimal?          @db.Decimal(12, 4)
   /// * Fecha en que se validó el pago (Validar Pago / equivalente). Para reportes por día de cobro.
   paidAt                     DateTime?
+  /// Explicit evidence for imported historical paid orders; never inferred from status.
+  legacyPaidConfirmed        Boolean           @default(false)
+  /// Durable identity of a checkout operation (scoped buyer + client attempt).
+  checkoutAttemptKey         String?           @unique
+  checkoutPayloadHash        String?
   /// /** Código del cupón aplicado al pedido (en mayúsculas). Null si no se usó cupón.
   couponCode                 String?
   /// * Descuento aplicado por el cupón, en Bs (misma moneda que `total`). PRD-204: Decimal.
@@ -368,8 +375,10 @@ model Order {
   customer                   User?             @relation(fields: [customerId], references: [id])
   paymentUpload              PaymentUpload?
   items                      OrderItem[]
+  checkoutAttempt            CheckoutAttempt?
 
   @@index([customerId])
+  @@index([customerId, createdAt, id])
   @@index([status])
   /// PRD-195: índice compuesto para paginación cursor (createdAt DESC, id DESC).
   /// El `id` es discriminante de tie-break cuando varias filas comparten createdAt.
@@ -384,6 +393,15 @@ model Order {
   @@index([casheaStatus])
   /// Cashea: cron de reconciliación para reservas vencidas (EXPIRED).
   @@index([casheaReservationExpiresAt])
+}
+
+/// Tombstone outlives deletion of an unpaid order: a replay must never reserve stock again.
+model CheckoutAttempt {
+  key         String   @id
+  payloadHash String
+  orderId     String?  @unique
+  order       Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
 }
 
 model OrderItem {
@@ -452,6 +470,7 @@ model Review {
 
   @@unique([productId, userId])
   @@index([productId, status])
+  @@index([photos], type: Gin)
   @@index([status])
   @@index([createdAt])
   /// Moderación admin: pestañas Pendientes/Aprobadas/Rechazadas ordenadas por
@@ -498,7 +517,7 @@ model CouponRedemption {
   /// * Marca de auditoría al revertir canje (cancelación); null = canje activo.
   revertedAt  DateTime?
   createdAt   DateTime  @default(now())
-  coupon      Coupon    @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  coupon      Coupon    @relation(fields: [couponId], references: [id], onDelete: Restrict)
   order       Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   // Índice único parcial (couponId, userId, perUserSlot) WHERE revertedAt IS NULL:
@@ -513,6 +532,7 @@ model RestockSubscription {
   productId  String
   /// * Fecha en que se envió el aviso. Null = aún pendiente.
   notifiedAt DateTime?
+  generation Int      @default(0)
   createdAt  DateTime  @default(now())
 
   @@unique([email, productId])
@@ -603,6 +623,7 @@ enum ProductMediaType {
 
 model VideoJob {
   id        String   @id @default(cuid())
+  uploadedById String?
   status    String   @default("PROCESSING") // PROCESSING | READY | FAILED
   videoUrl  String
   posterUrl String?
@@ -614,6 +635,61 @@ model VideoJob {
   updatedAt DateTime @updatedAt
 
   @@index([status])
+}
+
+/// Durable provider acceptance, with retry leases and a frozen encrypted payload.
+/// SENT means accepted by the provider, never delivered to the recipient.
+model EmailDelivery {
+  id                String   @id @default(cuid())
+  dedupKey          String   @unique
+  kind              String
+  resourceId        String
+  recipient         String
+  payload           Json
+  providerPayload   String?
+  status            String   @default("PENDING")
+  attempts          Int      @default(0)
+  nextAttemptAt     DateTime @default(now())
+  leaseId           String?
+  lockedUntil       DateTime?
+  firstAttemptAt    DateTime?
+  acceptedAt        DateTime?
+  providerMessageId String?
+  lastError         String?
+  recoveryTokenHash String?  @unique
+  tokenExpiresAt    DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([status, nextAttemptAt])
+  @@index([kind, resourceId])
+  @@index([recipient, status])
+  @@index([status, updatedAt])
+}
+
+/// Registered public review uploads: owner, association state and orphan TTL.
+model ReviewPhotoUpload {
+  id        String   @id @default(cuid())
+  userId    String
+  url       String   @unique
+  objectKey String   @unique
+  status    String   @default("UPLOADING")
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, status])
+  @@index([status, expiresAt])
+}
+
+/// Opt-out survives cart recovery, new checkout snapshots and reminder waves.
+model CartReminderPreference {
+  id                   String   @id @default(cuid())
+  email                String   @unique
+  unsubscribeTokenHash String?  @unique
+  optedOutAt           DateTime?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 }
 
 /// PRD-122: estados de moderación de reseñas (coincide 1:1 con ReviewStatus de
@@ -667,6 +743,7 @@ model PaymentUpload {
 
   /// Índice para búsqueda eficiente de expirados (cron de purga).
   @@index([status, expiresAt])
+  @@index([status, updatedAt])
   /// Índice para correlación por usuario (opcional).
   @@index([userId])
 }

@@ -58,7 +58,10 @@ export async function GET(request: Request) {
   });
 
   // PRD-156: auditoría del acceso a PII
-  logInfo('orders_export_executed', { count: filtered.length, operation: 'export' });
+  logInfo('orders_export_executed', {
+    count: filtered.length, operation: 'export', actorId: auth.access.userId,
+    filter: `${tab}${q.trim() ? ':search' : ''}`,
+  });
 
   const rows = filtered.map(o => ({
     Pedido: String(o.orderNumber).padStart(4, '0'),

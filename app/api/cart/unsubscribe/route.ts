@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { markCartOptedOut, findAbandonedCartByRecoveryToken } from '@/lib/abandoned-cart';
+import { markCartOptedOut, findCartReminderRecipientByToken } from '@/lib/abandoned-cart';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { rejectInvalidMutationOrigin } from '@/lib/security';
 import { emailSiteBaseUrl } from '@/emails/transactional/site';
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   }
 
   // PRD-219: validar que el token exista antes de redirigir a confirmación.
-  const cart = await findAbandonedCartByRecoveryToken(token);
+  const cart = await findCartReminderRecipientByToken(token);
   if (!cart) {
     return NextResponse.redirect(`${base}/?unsubscribed=invalid`);
   }
@@ -70,11 +70,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'invalid' }, { status: 400 });
   }
 
-  const cart = await findAbandonedCartByRecoveryToken(token);
+  const cart = await findCartReminderRecipientByToken(token);
   if (!cart) {
     return NextResponse.json({ error: 'invalid' }, { status: 400 });
   }
 
-  await markCartOptedOut(token);
+  if (!await markCartOptedOut(token)) return NextResponse.json({ error: 'No se pudo guardar la baja. Intenta de nuevo.' }, { status: 503 });
   return NextResponse.json({ ok: true });
 }

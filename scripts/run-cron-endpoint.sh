@@ -9,7 +9,7 @@
 #   /var/www/$APP_SLUG/scripts/run-cron-endpoint.sh purge-temporary-data
 #
 # Variables: APP_SLUG (instancia), APP_ENV_FILE (por defecto /etc/$APP_SLUG/$APP_SLUG.env),
-# APP_BASE_URL (por defecto http://127.0.0.1:3000).
+# APP_BASE_URL o PORT (por defecto http://127.0.0.1:3000).
 set -euo pipefail
 
 endpoint_name="${1:-}"
@@ -19,8 +19,11 @@ if [[ -z "$endpoint_name" || ! "$endpoint_name" =~ ^[a-z0-9-]+$ ]]; then
 fi
 
 APP_SLUG="${APP_SLUG:-storefront}"
+[[ "$APP_SLUG" =~ ^[a-zA-Z0-9_-]+$ ]] || exit 2
 ENV_FILE="${APP_ENV_FILE:-/etc/${APP_SLUG}/${APP_SLUG}.env}"
-BASE_URL="${APP_BASE_URL:-http://127.0.0.1:3000}"
+# Prevent overlapping invocations on this VPS; durable DB leases protect replicas.
+exec 9>"/var/lock/${APP_SLUG}-${endpoint_name}.lock"
+flock -n 9 || exit 0
 
 log() { printf '%s [%s] %s\n' "$(date --iso-8601=seconds)" "$endpoint_name" "$*"; }
 
@@ -29,8 +32,30 @@ if [[ ! -r "$ENV_FILE" ]]; then
   exit 1
 fi
 
-# Solo CRON_SECRET; no exportar el resto del entorno al proceso de curl.
-CRON_SECRET="$(grep -E '^CRON_SECRET=' "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'")"
+# Read only the values this runner needs; never execute/export the env file or
+# pass unrelated application credentials to curl. Outer quotes are removed
+# without deleting quote characters inside a secret or expanding shell code.
+read_env_value() {
+  local key="$1" line value
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%$'\r'}"
+    if [[ "$line" =~ ^[[:space:]]*(export[[:space:]]+)?${key}=(.*)$ ]]; then
+      value="${BASH_REMATCH[2]}"
+      case "$value" in
+        \"*\") value="${value:1:-1}" ;;
+        \'*\') value="${value:1:-1}" ;;
+      esac
+      printf '%s' "$value"
+      return
+    fi
+  done < "$ENV_FILE"
+}
+
+CRON_SECRET="$(read_env_value CRON_SECRET)"
+env_base_url="$(read_env_value APP_BASE_URL)"
+env_port="$(read_env_value PORT)"
+BASE_URL="${env_base_url:-${APP_BASE_URL:-http://127.0.0.1:${env_port:-${PORT:-3000}}}}"
+BASE_URL="${BASE_URL%/}"
 if [[ -z "$CRON_SECRET" ]]; then
   log "ERROR cron_secret_missing"
   exit 1

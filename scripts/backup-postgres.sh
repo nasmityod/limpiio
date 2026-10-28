@@ -19,6 +19,7 @@
 #      detenida: sudo systemctl stop "$APP_SLUG").
 #   3. sudo systemctl start "$APP_SLUG" && curl -s localhost:3000/api/health
 set -euo pipefail
+umask 077
 
 # Nombre de la instancia: prefija los dumps para no mezclar backups de
 # varias tiendas en el mismo directorio ni en el mismo bucket.
@@ -30,10 +31,17 @@ LOCAL_RETENTION_DAYS=7
 
 mkdir -p "$LOCAL_DIR"
 
-# DIRECT_URL desde el .env del repo (sin exportar todo el archivo).
-DIRECT_URL="$(grep -E '^DIRECT_URL=' "$ROOT/.env" | head -1 | cut -d= -f2- | tr -d '"')"
+# Same environment file as systemd/deploy; no credential-bearing argv.
+ENV_FILE="${APP_ENV_FILE:-/etc/${APP_SLUG}/${APP_SLUG}.env}"
+[[ -r "$ENV_FILE" ]] || { echo "[backup] ERROR: entorno no legible: $ENV_FILE" >&2; exit 1; }
+set -a
+# shellcheck source=/dev/null
+source "$ENV_FILE"
+set +a
+[[ "$APP_SLUG" =~ ^[a-zA-Z0-9_-]+$ ]] || { echo '[backup] ERROR: instancia inválida' >&2; exit 1; }
+DIRECT_URL="${DIRECT_URL:-}"
 if [[ -z "$DIRECT_URL" ]]; then
-  echo "[backup] ERROR: DIRECT_URL no encontrado en $ROOT/.env" >&2
+  echo "[backup] ERROR: DIRECT_URL no configurado" >&2
   exit 1
 fi
 
@@ -52,6 +60,6 @@ cd "$ROOT"
 node scripts/lib/backup-r2.mjs "$DUMP"
 
 # Copia local: solo los últimos N días (el histórico completo vive en R2).
-find "$LOCAL_DIR" -name "${APP_SLUG}_*.dump" -mtime "+${LOCAL_RETENTION_DAYS}" -delete
+find "$LOCAL_DIR" -maxdepth 1 -type f -regextype posix-extended -regex "$LOCAL_DIR/${APP_SLUG}_[0-9]{8}_[0-9]{6}\.dump" -mtime "+${LOCAL_RETENTION_DAYS}" -delete
 
 echo "[backup] $(date -Is) OK"

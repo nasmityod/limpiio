@@ -103,7 +103,7 @@ function buildAdminWhere(filters: NormalizedAdminProductFilters): Prisma.Sql {
   if (filters.stockFilter === 'out') {
     conditions.push(Prisma.sql`stock = 0`);
   } else if (filters.stockFilter === 'low') {
-    conditions.push(Prisma.sql`stock > 0 AND stock <= ${filters.lowThreshold}`);
+    conditions.push(Prisma.sql`stock > 0 AND stock < ${filters.lowThreshold}`);
   }
   if (filters.status === 'active') {
     conditions.push(Prisma.sql`"isActive" = true`);

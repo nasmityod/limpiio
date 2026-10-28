@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { logError } from '@/lib/safe-logger';
 import { z } from 'zod';
+import { Prisma } from '@prisma/client';
+import { claimEditorialAssets } from '@/lib/products/product-asset-references';
+import { withSerializableCategoryTransaction, CategoryNameError, normalizeCategoryName } from '@/lib/categories/ensure-product-category';
 import { sanitizeOrderItemImageUrl } from '@/lib/r2-public-url';
 import { prisma } from '@/lib/prisma';
 import { requirePermission } from '@/lib/admin-access-server';
@@ -10,7 +13,7 @@ import { rejectInvalidMutationOrigin } from '@/lib/security';
 import { CACHE_TAG_CATEGORIES, CACHE_TAG_SITE_SHELL } from '@/lib/site-shell-cache';
 
 const categorySchema = z.object({
-  name:        z.string().trim().min(1).max(80),
+  name:        z.string().transform(normalizeCategoryName).pipe(z.string().min(1).max(80).refine(v => /[\p{L}\p{N}]/u.test(v))),
   slug:        z.string().trim().min(1).max(120).regex(/^[a-z0-9-]+$/, 'Slug inválido (minúsculas, números y guiones).'),
   // SEC-2026-09 (#11): solo ruta interna o CDN R2 — un host ajeno rompe `next/image`
   // en CategoryRow (home) para todos los visitantes.
@@ -78,10 +81,14 @@ export async function POST(request: Request) {
   try {
     const parsed = categorySchema.safeParse(await request.json());
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+      return NextResponse.json({ error: 'Datos de categoría inválidos.', errors: parsed.error.flatten() }, { status: 400 });
     }
     const { name, slug, imageUrl, isFeatured, order, description, seoTitle, googleCategoryId } = parsed.data;
-    const category = await prisma.category.create({
+    const category = await withSerializableCategoryTransaction(async (tx) => {
+      await claimEditorialAssets(tx, imageUrl);
+      const duplicate = await tx.category.findFirst({ where: { name: { equals: name, mode: 'insensitive' } }, select: { id: true } });
+      if (duplicate) throw new CategoryNameError('Ya existe una categoría con ese nombre.');
+      return tx.category.create({
       data: {
         name,
         slug,
@@ -93,11 +100,14 @@ export async function POST(request: Request) {
         googleCategoryId: googleCategoryId ?? null,
       },
     });
+    });
     revalidatePath('/categoria/[slug]', 'page');
     revalidateTag(CACHE_TAG_CATEGORIES, 'default');
     revalidateTag(CACHE_TAG_SITE_SHELL, 'default');
     return NextResponse.json(category, { status: 201 });
   } catch (error) {
+    if (error instanceof CategoryNameError) return NextResponse.json({ error: error.message }, { status: 409 });
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') return NextResponse.json({ error: 'El nombre o slug ya está en uso.' }, { status: 409 });
     logError('categories_post_failed', error, { route: '/api/categories' });
     return NextResponse.json({ error: 'Error al crear categoría' }, { status: 500 });
   }

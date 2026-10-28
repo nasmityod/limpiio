@@ -3,7 +3,7 @@ import { logError } from '@/lib/safe-logger';
 import { z } from 'zod';
 import { requireUser } from '@/lib/api-auth';
 import { rejectInvalidMutationOrigin, safeZodIssues } from '@/lib/security';
-import { upsertCartItem } from '@/lib/cart';
+import { upsertCartItem, CartLimitError } from '@/lib/cart';
 
 const bodySchema = z.object({
   productId: z.string().min(1),
@@ -28,6 +28,7 @@ export async function PATCH(request: Request) {
     await upsertCartItem(auth.session.user.id, productId, quantity);
     return NextResponse.json({ ok: true });
   } catch (error) {
+    if (error instanceof CartLimitError) return NextResponse.json({ error: error.message }, { status: 409 });
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: 'Datos inválidos.', details: safeZodIssues(error.issues) }, { status: 400 });
     }

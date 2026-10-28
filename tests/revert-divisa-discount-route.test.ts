@@ -17,7 +17,8 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     order: {
       findUnique: findUniqueMock,
-      update: updateMock,
+      updateMany: updateMock,
+      findUniqueOrThrow: findUniqueMock,
     },
   },
 }));
@@ -46,6 +47,7 @@ function buildRequest(): Request {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  updateMock.mockResolvedValue({ count: 1 });
   rejectInvalidMutationOriginMock.mockReturnValue(null);
   requirePermissionMock.mockResolvedValue({ authorized: true });
 });
@@ -63,14 +65,14 @@ describe('POST /api/orders/[id]/revert-divisa-discount', () => {
 
   it('revierte descuento y recalcula total', async () => {
     findUniqueMock.mockResolvedValueOnce({
-      id: 'order-1',
+      id: 'order-1', status: 'Pendiente', paidAt: null, stockDeducted: true, casheaStatus: null,
       paymentDiscount: 10,
       paymentDiscountPercent: 10,
       subtotalBeforeDiscount: 100,
       couponDiscount: 5,
       total: 85,
     });
-    updateMock.mockResolvedValue({
+    findUniqueMock.mockResolvedValue({
       id: 'order-1',
       orderNumber: 1,
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
@@ -114,13 +116,12 @@ describe('POST /api/orders/[id]/revert-divisa-discount', () => {
     const res = await POST(buildRequest(), { params: Promise.resolve({ id: 'order-1' }) });
     expect(res.status).toBe(200);
     expect(updateMock).toHaveBeenCalledWith({
-      where: { id: 'order-1' },
+      where: { id: 'order-1', status: 'Pendiente', stockDeducted: true, paidAt: null, casheaStatus: null },
       data: {
         paymentDiscount: null,
         paymentDiscountPercent: null,
         total: 95,
       },
-      include: { items: true },
     });
     expect(logInfoMock).toHaveBeenCalledWith(
       'payment_divisa_discount_reverted',
@@ -172,7 +173,7 @@ describe('POST /api/orders/[id]/revert-divisa-discount', () => {
 
     findUniqueMock
       .mockResolvedValueOnce({
-        id: 'order-1',
+        id: 'order-1', status: 'Pendiente', paidAt: null, stockDeducted: true, casheaStatus: null,
         paymentDiscount: 10,
         paymentDiscountPercent: 10,
         subtotalBeforeDiscount: 100,
@@ -181,7 +182,7 @@ describe('POST /api/orders/[id]/revert-divisa-discount', () => {
       })
       .mockResolvedValue(afterRevert);
 
-    updateMock.mockResolvedValue(afterRevert);
+    updateMock.mockResolvedValue({ count: 1 });
 
     const first = await POST(buildRequest(), { params: Promise.resolve({ id: 'order-1' }) });
     expect(first.status).toBe(200);

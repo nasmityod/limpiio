@@ -1,6 +1,8 @@
 'use client';
 
-import { useEffect, useState, useTransition } from 'react';
+import { useAdminDialog } from '@/hooks/useAdminDialog';
+
+import { useCallback, useEffect, useState, useTransition } from 'react';
 import Image from 'next/image';
 import {
   Tag, Plus, Edit, Trash2, Check, X, Loader2, Star, AlertCircle, Package,
@@ -36,12 +38,12 @@ export default function AdminCategoriesPage() {
   const [creating, setCreating]     = useState(false);
   const [feedback, setFeedback]     = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
 
-  const flash = (type: 'success' | 'error', msg: string) => {
+  const flash = useCallback((type: 'success' | 'error', msg: string) => {
     setFeedback({ type, msg });
-    setTimeout(() => setFeedback(null), 3500);
-  };
+    if (type === 'success') setTimeout(() => setFeedback(current => current?.type === 'success' ? null : current), 3500);
+  }, []);
 
-  const fetchCategories = async () => {
+  const fetchCategories = useCallback(async () => {
     setLoading(true);
     try {
       const res = await fetch(`/api/categories?t=${Date.now()}`, { cache: 'no-store' });
@@ -57,23 +59,26 @@ export default function AdminCategoriesPage() {
       flash('error', 'Error de conexión al cargar categorías.');
     }
     setLoading(false);
-  };
+  }, [flash]);
 
-  useEffect(() => { fetchCategories(); }, []);
+  useEffect(() => { void fetchCategories(); }, [fetchCategories]);
 
   const handleDelete = async (cat: Category) => {
     if (cat.productCount && cat.productCount > 0) {
-      if (!confirm(`Esta categoría tiene ${cat.productCount} productos asociados. ¿Eliminar de todas formas?`)) return;
+      flash('error', 'Reasigna los productos antes de eliminar la categoría.'); return;
     } else if (!confirm(`¿Eliminar la categoría "${cat.name}"?`)) {
       return;
     }
+    try {
     const res = await fetch(`/api/categories/${cat.id}`, { method: 'DELETE' });
     if (res.ok) {
       flash('success', 'Categoría eliminada.');
       fetchCategories();
     } else {
-      flash('error', 'No se pudo eliminar.');
+      const data = await res.json().catch(() => ({}));
+      flash('error', typeof data.error === 'string' ? data.error : 'No se pudo eliminar.');
     }
+    } catch { flash('error', 'Error de conexión al eliminar la categoría.'); }
   };
 
   const columns: DataTableColumn<Category>[] = [
@@ -209,12 +214,16 @@ function CategoryDialog({
     if (!slugTouched) setSlug(slugify(name));
   }, [name, slugTouched]);
 
+  const [dialogError, setDialogError] = useState('');
+  const showError = (message: string) => { setDialogError(message); onError(message); };
+
   const submit = () => {
     if (!name.trim() || !slug.trim()) {
-      onError('Nombre y slug son obligatorios.');
+      showError('Nombre y slug son obligatorios.');
       return;
     }
     startTransition(async () => {
+      try {
       const url = category ? `/api/categories/${category.id}` : '/api/categories';
       const method = category ? 'PUT' : 'POST';
       const res = await fetch(url, {
@@ -229,21 +238,24 @@ function CategoryDialog({
           description:      description.trim() || null,
           seoTitle:         seoTitle.trim()    || null,
           googleCategoryId: googleCategoryId.trim() !== ''
-            ? parseInt(googleCategoryId.trim(), 10)
+            ? Number(googleCategoryId.trim())
             : null,
         }),
       });
       if (res.ok) onSaved(category ? 'Categoría actualizada.' : 'Categoría creada.');
       else {
         const err = await res.json().catch(() => ({}));
-        onError(err.error ?? 'No se pudo guardar la categoría.');
+        showError(typeof err.error === 'string' ? err.error : 'No se pudo guardar la categoría.');
       }
+      } catch { showError('Error de conexión al guardar categoría. Tus cambios se conservan.'); }
     });
   };
 
+  const { dialogRef, close } = useAdminDialog(onClose, true, pending);
+
   return (
-    <div className="fixed inset-0 z-50 flex sm:items-center sm:justify-center" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Categoría" className="fixed inset-0 z-50 flex sm:items-center sm:justify-center" onClick={(e) => { if (e.target === e.currentTarget) close(); }}>
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={close} />
       <div
         className="relative z-10 w-full sm:w-[460px] sm:max-w-[92vw] sm:my-6 bg-white sm:rounded-2xl shadow-2xl flex flex-col max-h-screen max-h-[100dvh] sm:max-h-[88vh]"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
@@ -253,16 +265,18 @@ function CategoryDialog({
           <h2 className="text-base font-black text-navy truncate">
             {category ? 'Editar categoría' : 'Nueva categoría'}
           </h2>
-          <button type="button" onClick={onClose} aria-label="Cerrar" className="w-11 h-11 flex items-center justify-center rounded-full active:bg-gray-100">
+          <button type="button" onClick={close} aria-label="Cerrar" className="w-11 h-11 flex items-center justify-center rounded-full active:bg-gray-100">
             <X size={20} className="text-gray-500" />
           </button>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+        <div inert={pending} className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+          {dialogError && <p role="alert" className="p-3 bg-red-50 text-red-700 rounded-lg text-sm">{dialogError}</p>}
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wide text-gray-700 mb-1.5">Nombre</label>
-            <input
+            <label htmlFor="category-name" className="block text-xs font-bold uppercase tracking-wide text-gray-700 mb-1.5">Nombre</label>
+            <input id="category-name"
               type="text"
+              maxLength={80}
               value={name}
               onChange={e => setName(e.target.value)}
               autoFocus
@@ -271,13 +285,14 @@ function CategoryDialog({
           </div>
 
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wide text-gray-700 mb-1.5">
+            <label htmlFor="category-slug" className="block text-xs font-bold uppercase tracking-wide text-gray-700 mb-1.5">
               Slug <span className="text-[10px] font-medium text-gray-400 normal-case">— se usa en la URL pública</span>
             </label>
             <div className="flex items-center gap-2">
               <span className="text-sm text-gray-400 font-mono">/categoria/</span>
-              <input
+              <input id="category-slug"
                 type="text"
+                maxLength={120}
                 value={slug}
                 onChange={e => { setSlug(slugify(e.target.value)); setSlugTouched(true); }}
                 className="flex-1 min-h-[48px] px-3.5 py-2 border border-gray-200 rounded-xl bg-gray-50 text-base font-mono focus:outline-none focus:ring-2 focus:ring-navy/20 focus:border-navy"
@@ -290,17 +305,18 @@ function CategoryDialog({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wide text-gray-700 mb-1.5">Orden</label>
-              <input
+              <label htmlFor="category-order" className="block text-xs font-bold uppercase tracking-wide text-gray-700 mb-1.5">Orden</label>
+              <input id="category-order"
                 type="number"
+                min={0} max={9999} step={1}
                 value={order}
                 onChange={e => setOrder(Number(e.target.value))}
                 className="w-full min-h-[48px] px-3.5 py-2 border border-gray-200 rounded-xl bg-gray-50 text-base focus:outline-none focus:ring-2 focus:ring-navy/20"
               />
             </div>
             <div>
-              <label className="block text-xs font-bold uppercase tracking-wide text-gray-700 mb-1.5">Destacada</label>
-              <button
+              <label htmlFor="category-featured" className="block text-xs font-bold uppercase tracking-wide text-gray-700 mb-1.5">Destacada</label>
+              <button id="category-featured" role="switch" aria-checked={isFeatured}
                 type="button"
                 onClick={() => setIsFeatured(v => !v)}
                 className={`w-full min-h-[48px] rounded-xl border text-sm font-bold transition flex items-center justify-center gap-2 ${
@@ -326,13 +342,13 @@ function CategoryDialog({
 
           {/* P85: campos SEO ─────────────────────────────────────────── */}
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wide text-gray-700 mb-1.5">
+            <label htmlFor="category-seoTitle" className="block text-xs font-bold uppercase tracking-wide text-gray-700 mb-1.5">
               Título SEO{' '}
               <span className="text-[10px] font-medium text-gray-400 normal-case">
                 — reemplaza el título automático (opcional, máx. 70 chars)
               </span>
             </label>
-            <input
+            <input id="category-seoTitle"
               type="text"
               value={seoTitle}
               onChange={e => setSeoTitle(e.target.value)}
@@ -347,13 +363,13 @@ function CategoryDialog({
           </div>
 
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wide text-gray-700 mb-1.5">
+            <label htmlFor="category-description" className="block text-xs font-bold uppercase tracking-wide text-gray-700 mb-1.5">
               Descripción SEO{' '}
               <span className="text-[10px] font-medium text-gray-400 normal-case">
                 — meta description y hero de la página (opcional, máx. 300 chars)
               </span>
             </label>
-            <textarea
+            <textarea id="category-description"
               value={description}
               onChange={e => setDescription(e.target.value)}
               maxLength={300}
@@ -369,11 +385,11 @@ function CategoryDialog({
 
           {/* Google Product Category ID ─────────────────────────── */}
           <div>
-            <label className="block text-xs font-bold uppercase tracking-wide text-gray-700 mb-1.5">
+            <label htmlFor="category-googleCategoryId" className="block text-xs font-bold uppercase tracking-wide text-gray-700 mb-1.5">
               ID de categoría Google{' '}
               <span className="text-[10px] font-medium text-gray-400 normal-case">— opcional</span>
             </label>
-            <input
+            <input id="category-googleCategoryId"
               type="number"
               min={1}
               value={googleCategoryId}
@@ -397,7 +413,7 @@ function CategoryDialog({
 
         <footer className="sticky bottom-0 bg-white sm:rounded-b-2xl border-t border-gray-100 px-4 py-3 flex gap-2"
           style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
-          <button type="button" onClick={onClose} disabled={pending} className="flex-1 min-h-[52px] bg-white border border-gray-200 text-gray-700 text-sm font-semibold rounded-xl active:bg-gray-100">
+          <button type="button" onClick={close} disabled={pending} className="flex-1 min-h-[52px] bg-white border border-gray-200 text-gray-700 text-sm font-semibold rounded-xl active:bg-gray-100">
             Cancelar
           </button>
           <button type="button" onClick={submit} disabled={pending} className="flex-[2] min-h-[52px] inline-flex items-center justify-center gap-2 bg-brand-yellow border border-yellow-400 text-navy text-sm font-black uppercase rounded-xl active:bg-yellow-300 disabled:opacity-60">

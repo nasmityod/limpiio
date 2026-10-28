@@ -1,32 +1,11 @@
 import { NextResponse } from 'next/server';
 import { logError } from '@/lib/safe-logger';
-import { z } from 'zod';
+import { promotionSchema } from '@/lib/editorial-schemas';
 import { prisma } from '@/lib/prisma';
+import { claimEditorialAssets } from '@/lib/products/product-asset-references';
 import { requirePermission } from '@/lib/admin-access-server';
-import { isSafeEditableLink } from '@/lib/safe-link';
 import { revalidatePath, revalidateTag } from 'next/cache';
 import { rejectInvalidMutationOrigin } from '@/lib/security';
-
-const promotionSchema = z.object({
-  title:        z.string().min(1, 'El título es obligatorio.').max(200),
-  subtitle:     z.string().max(300).optional().nullable(),
-  discountText: z.string().max(100).optional().nullable(),
-  imageUrl:     z.string().url('URL de imagen inválida.').max(500).optional().nullable(),
-  bgColor:      z
-    .string()
-    .regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, 'Color HEX inválido.')
-    .optional()
-    .default('#FFD700'),
-  // PRD-042/283: solo rutas internas (/...) o https — sin javascript:/data:.
-  link:   z
-    .string()
-    .max(500)
-    .refine((v) => isSafeEditableLink(v), 'Enlace no permitido: usa ruta interna (/...) o https.')
-    .optional()
-    .default('/productos'),
-  active: z.boolean().optional().default(true),
-  order:  z.number({ message: 'El orden debe ser un número.' }).int().min(0).max(9999).optional().default(1),
-});
 
 export async function PUT(
   request: Request,
@@ -50,9 +29,13 @@ export async function PUT(
   }
 
   try {
-    const promo = await prisma.promotion.update({
+    const { link, ...data } = parsed.data;
+    const promo = await prisma.$transaction(async (tx) => {
+      await claimEditorialAssets(tx, parsed.data.imageUrl);
+      return tx.promotion.update({
       where: { id },
-      data:  parsed.data,
+      data: { ...data, ...(link !== undefined ? { link: link ?? '/productos' } : {}) },
+    });
     });
     revalidatePath('/');
     revalidateTag('promotions', 'default');

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { ChevronRight, Search, SearchX } from 'lucide-react';
 import { searchProductsFull } from '@/app/actions/search';
 import { SEARCH_PAGE_SIZE, fullProductToCardModel } from '@/lib/search-shared';
@@ -29,7 +30,7 @@ interface PageProps {
 
 export async function generateMetadata({ searchParams }: PageProps): Promise<Metadata> {
   const params = await searchParams;
-  const q     = (params.q ?? '').trim();
+  const q     = (params.q ?? '').trim().slice(0, 120);
   const cat   = (params.cat ?? '').trim();
   const brand = (params.brand ?? '').trim();
   const page  = (params.page ?? '').trim();
@@ -60,14 +61,13 @@ export async function generateMetadata({ searchParams }: PageProps): Promise<Met
 
 export default async function BuscarPage({ searchParams }: PageProps) {
   const params = await searchParams;
-  const q     = (params.q     ?? '').trim();
+  const q     = (params.q     ?? '').trim().slice(0, 120);
   const cat   = (params.cat   ?? '').trim();
   const brand = (params.brand ?? '').trim();
   const sort  = (params.sort  ?? 'default').trim();
   const disp  = (params.disp  ?? '').trim();
   const parsed = parseProductQuery(params);
-  const pageParsed = parseInt(params.page ?? '1', 10);
-  const page  = Math.max(1, Number.isFinite(pageParsed) ? pageParsed : 1);
+  const page = parsed.page;
   const includeOutOfStock = disp === 'all';
 
   // PRD-168: una consulta de 1 carácter no debe listar el catálogo completo.
@@ -87,6 +87,18 @@ export default async function BuscarPage({ searchParams }: PageProps) {
       });
 
   const totalPages   = Math.ceil(totalCount / SEARCH_PAGE_SIZE);
+  if (page > Math.max(1, totalPages)) {
+    const canonical = new URLSearchParams();
+    if (q) canonical.set('q', q);
+    if (cat) canonical.set('cat', cat);
+    if (brand) canonical.set('brand', brand);
+    if (sort !== 'default') canonical.set('sort', sort);
+    if (includeOutOfStock) canonical.set('disp', 'all');
+    if (parsed.minPrice != null) canonical.set('minPrice', String(parsed.minPrice));
+    if (parsed.maxPrice != null) canonical.set('maxPrice', String(parsed.maxPrice));
+    if (totalPages > 1) canonical.set('page', String(totalPages));
+    redirect(`/buscar?${canonical}`);
+  }
   const hasFilters   = !!cat || !!brand || parsed.minPrice != null || parsed.maxPrice != null;
   const showEmpty    = (!q && !hasFilters) || queryTooShort;
   const activeCount  = (cat ? 1 : 0) + (brand ? 1 : 0) + (includeOutOfStock ? 1 : 0)

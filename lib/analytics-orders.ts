@@ -141,7 +141,7 @@ export function createdAtPeriodWhere(bounds: StatsPeriodBounds): Prisma.OrderWhe
 
 /**
  * Métricas de ingreso: cobro validado en el período por paidAt.
- * Legado sin paidAt: solo si status validado y createdAt cae en el período.
+ * Legado sin paidAt: exige legacyPaidConfirmed y createdAt dentro del período.
  */
 export function revenuePeriodWhere(bounds: StatsPeriodBounds): Prisma.OrderWhereInput {
   const statusFilter: Prisma.OrderWhereInput = {
@@ -149,7 +149,7 @@ export function revenuePeriodWhere(bounds: StatsPeriodBounds): Prisma.OrderWhere
   };
 
   if (bounds.start === null) {
-    return statusFilter;
+    return { ...statusFilter, OR: [{ paidAt: { not: null } }, { legacyPaidConfirmed: true }] };
   }
 
   return {
@@ -163,6 +163,7 @@ export function revenuePeriodWhere(bounds: StatsPeriodBounds): Prisma.OrderWhere
       },
       {
         paidAt: null,
+        legacyPaidConfirmed: true,
         createdAt: {
           gte: bounds.start,
           lte: bounds.end,

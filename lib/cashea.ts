@@ -299,6 +299,12 @@ export class CasheaVerificationNotImplemented extends Error {
 export type VerifyCasheaOrderResult = {
   confirmed: boolean;
   initialAmount?: number;
+  /** Normalized server-side evidence. These are adapter fields, not an invented provider wire contract. */
+  localOrderReference?: string;
+  customerIdentification?: string;
+  merchantId?: string;
+  currency?: string;
+  totalAmount?: number;
   raw: unknown;
 };
 

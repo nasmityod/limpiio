@@ -21,6 +21,7 @@ const txPaymentUploadUpdateManyMock = vi.fn();
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     $transaction: transactionMock,
+    paymentUpload: { updateMany: txPaymentUploadUpdateManyMock },
   },
 }));
 
@@ -50,7 +51,7 @@ function makeTx() {
       update: vi.fn(),
     },
     coupon: { updateMany: vi.fn() },
-    paymentUpload: { updateMany: txPaymentUploadUpdateManyMock },
+    paymentUpload: { updateMany: txPaymentUploadUpdateManyMock, upsert: vi.fn().mockResolvedValue({}) },
   };
 }
 
@@ -83,7 +84,7 @@ describe('DELETE /api/orders/[id]', () => {
 
     expect(res.status).toBe(200);
     expect(txUpdateManyMock).toHaveBeenCalledWith({
-      where: { id: 'order-1', status: 'Pendiente', stockDeducted: true },
+      where: { id: 'order-1', status: 'Cancelado', stockDeducted: true },
       data: { stockDeducted: false },
     });
     expect(txProductUpdateManyMock).toHaveBeenCalled();
@@ -155,7 +156,7 @@ describe('SEC-2026-09 (#22): retención del comprobante al borrar', () => {
     expect(res.status).toBe(200);
     expect(txPaymentUploadUpdateManyMock).toHaveBeenCalledWith({
       where: { orderId: 'order-9' },
-      data: { status: 'DELETED' },
+      data: { status: 'DELETING' },
     });
     expect(deletePrivateProofMock).toHaveBeenCalledWith('proofs/abc-123.webp');
   });

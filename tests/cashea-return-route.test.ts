@@ -126,7 +126,7 @@ describe('GET /checkout/cashea/return', () => {
     const res = await GET(buildRequest('?token=raw-token&idNumber=CASHEA-123'));
 
     expect(updateManyMock).toHaveBeenCalledWith({
-      where: { id: 'order-1', casheaReturnTokenHash: 'hash:raw-token' },
+      where: expect.objectContaining({ id: 'order-1', casheaReturnTokenHash: 'hash:raw-token', casheaStatus: { in: ['CREATED', 'REDIRECTED'] }, paidAt: null, stockDeducted: true }),
       data: {
         casheaReturnTokenHash: null,
         casheaReturnedAt: expect.any(Date),

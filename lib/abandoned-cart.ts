@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import type { AbandonedCartItem, AbandonedCartStatus } from '@/lib/definitions';
 import { d } from '@/lib/decimal';
 import { logError } from '@/lib/safe-logger';
+import type { Prisma } from '@prisma/client';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PRD-178 — Tokens de recuperación hasheados.
@@ -37,7 +38,12 @@ export async function upsertAbandonedCart(params: {
   if (!email.trim() || items.length === 0) return;
 
   try {
-    const existing = await prisma.abandonedCart.findFirst({
+    await prisma.$transaction(async (tx) => {
+    const normalizedEmail = email.toLowerCase().trim();
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'reminder:' + normalizedEmail}, 0))`;
+    const preference = await tx.cartReminderPreference.findUnique({ where: { email: normalizedEmail } });
+    if (preference?.optedOutAt) return;
+    const existing = await tx.abandonedCart.findFirst({
       where: {
         email: email.toLowerCase().trim(),
         status: { in: ['PENDING', 'EMAILED_24H'] },
@@ -49,7 +55,7 @@ export async function upsertAbandonedCart(params: {
       // PRD-177: actualizar ítems/total/actividad SIN reiniciar el ciclo de
       // emails. Antes esto devolvía EMAILED_24H → PENDING y borraba emailSentAt,
       // con lo que el cron re-enviaba el correo de 24h casi de inmediato.
-      await prisma.abandonedCart.update({
+      await tx.abandonedCart.update({
         where: { id: existing.id },
         data: {
           items:          items as object[],
@@ -59,7 +65,7 @@ export async function upsertAbandonedCart(params: {
         },
       });
     } else {
-      await prisma.abandonedCart.create({
+      await tx.abandonedCart.create({
         data: {
           email:    email.toLowerCase().trim(),
           userId:   userId ?? null,
@@ -72,6 +78,7 @@ export async function upsertAbandonedCart(params: {
         },
       });
     }
+    });
   } catch (err) {
     logError('abandoned_cart_upsert_failed', err, { operation: 'upsert_abandoned_cart' });
   }
@@ -98,16 +105,35 @@ export async function markCartRecovered(email: string): Promise<void> {
 
 /** Marca el carrito como OPTED_OUT por su token de recuperación (enlace de baja
  *  del email). Recibe el token EN CLARO y lo hashea para buscar en BD. */
-export async function markCartOptedOut(recoveryToken: string): Promise<void> {
-  if (!recoveryToken.trim()) return;
+export async function markCartOptedOut(recoveryToken: string): Promise<boolean> {
+  if (!recoveryToken.trim()) return false;
   try {
-    await prisma.abandonedCart.updateMany({
-      where:  { recoveryTokenHash: hashRecoveryToken(recoveryToken.trim()) },
-      data:   { status: 'OPTED_OUT' satisfies AbandonedCartStatus },
+    const recipient = await findCartReminderRecipientByToken(recoveryToken);
+    if (!recipient) return false;
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'reminder:' + recipient.email}, 0))`;
+      await tx.cartReminderPreference.upsert({
+        where: { email: recipient.email }, create: { email: recipient.email, optedOutAt: new Date() }, update: { optedOutAt: new Date() },
+      });
+      await tx.abandonedCart.updateMany({ where: { email: recipient.email, status: { in: ['PENDING', 'EMAILED_24H', 'EMAILED_72H'] } }, data: { status: 'OPTED_OUT' } });
+      await tx.emailDelivery.updateMany({ where: { recipient: recipient.email, kind: { in: ['ABANDONED_24H', 'ABANDONED_72H'] }, status: { in: ['PENDING', 'PROCESSING', 'REVIEW'] } }, data: { status: 'CANCELED', leaseId: null, lockedUntil: null } });
     });
+    return true;
   } catch (err) {
     logError('abandoned_cart_opted_out_failed', err, { operation: 'mark_cart_opted_out' });
+    return false;
   }
+}
+
+/** Unsubscribe tokens remain valid across waves and after recovery expiry. */
+export async function findCartReminderRecipientByToken(token: string): Promise<{ email: string } | null> {
+  if (!/^[a-f0-9]{64}$/i.test(token.trim())) return null;
+  const hash = hashRecoveryToken(token.trim());
+  const preference = await prisma.cartReminderPreference.findUnique({ where: { unsubscribeTokenHash: hash }, select: { email: true } });
+  if (preference) return preference;
+  const delivery = await prisma.emailDelivery.findUnique({ where: { recoveryTokenHash: hash }, select: { recipient: true } });
+  if (delivery) return { email: delivery.recipient };
+  return prisma.abandonedCart.findUnique({ where: { recoveryTokenHash: hash }, select: { email: true } });
 }
 
 /** Busca un carrito abandonado por su token en claro (para el flujo de
@@ -121,10 +147,17 @@ export async function findAbandonedCartByRecoveryToken(recoveryToken: string): P
 } | null> {
   if (!recoveryToken.trim()) return null;
   try {
-    return await prisma.abandonedCart.findUnique({
-      where:  { recoveryTokenHash: hashRecoveryToken(recoveryToken.trim()) },
-      select: { id: true, email: true, items: true, status: true },
+    const hash = hashRecoveryToken(recoveryToken.trim());
+    const delivery = await prisma.emailDelivery.findUnique({ where: { recoveryTokenHash: hash }, select: { resourceId: true, tokenExpiresAt: true } });
+    if (delivery && (!delivery.tokenExpiresAt || delivery.tokenExpiresAt <= new Date())) return null;
+    const cart = await prisma.abandonedCart.findUnique({
+      where: delivery ? { id: delivery.resourceId } : { recoveryTokenHash: hash },
+      select: { id: true, email: true, items: true, status: true, createdAt: true },
     });
+    if (!cart || (!delivery && Date.now() - cart.createdAt.getTime() > 30 * 24 * 60 * 60_000)) return null;
+    const preference = await prisma.cartReminderPreference.findUnique({ where: { email: cart.email }, select: { optedOutAt: true } });
+    if (preference?.optedOutAt) return null;
+    return cart;
   } catch (err) {
     logError('abandoned_cart_find_by_token_failed', err, { operation: 'find_by_recovery_token' });
     return null;
@@ -142,13 +175,16 @@ export async function getCartsFor24hEmail(): Promise<{
   totalUsd: number;
 }[]> {
   const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const rows = await prisma.abandonedCart.findMany({
-    where: {
-      status:          'PENDING',
-      lastActivityAt:  { lt: cutoff },
-    },
-    select: { id: true, email: true, items: true, totalUsd: true },
-  });
+  const rows = await prisma.$queryRaw<Array<{ id: string; email: string; items: unknown; totalUsd: Prisma.Decimal }>>`
+    SELECT c.id, c.email, c.items, c."totalUsd" FROM "AbandonedCart" c
+    WHERE c.status = 'PENDING' AND c."lastActivityAt" < ${cutoff}
+      AND NOT EXISTS (SELECT 1 FROM "CartReminderPreference" p WHERE p.email = c.email AND p."optedOutAt" IS NOT NULL)
+      AND NOT EXISTS (
+        SELECT 1 FROM "EmailDelivery" e
+        WHERE e.kind = 'ABANDONED_24H' AND e."resourceId" = c.id
+          AND e.payload->>'activityAt' = to_char(c."lastActivityAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
+      )
+    ORDER BY c."lastActivityAt" ASC, c.id ASC LIMIT 100`;
   // PRD-204: totalUsd es Decimal en BD → convertir a number
   return rows.map(r => ({ ...r, totalUsd: d(r.totalUsd) }));
 }
@@ -164,48 +200,19 @@ export async function getCartsFor72hEmail(): Promise<{
   totalUsd: number;
 }[]> {
   const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
-  const rows = await prisma.abandonedCart.findMany({
-    where: {
-      status:      'EMAILED_24H',
-      emailSentAt: { lt: cutoff },
-    },
-    select: { id: true, email: true, items: true, totalUsd: true },
-  });
+  const rows = await prisma.$queryRaw<Array<{ id: string; email: string; items: unknown; totalUsd: Prisma.Decimal }>>`
+    SELECT c.id, c.email, c.items, c."totalUsd" FROM "AbandonedCart" c
+    WHERE c.status = 'EMAILED_24H' AND c."emailSentAt" < ${cutoff}
+      AND c."lastActivityAt" < ${new Date(Date.now() - 72 * 60 * 60_000)}
+      AND NOT EXISTS (SELECT 1 FROM "CartReminderPreference" p WHERE p.email = c.email AND p."optedOutAt" IS NOT NULL)
+      AND NOT EXISTS (
+        SELECT 1 FROM "EmailDelivery" e
+        WHERE e.kind = 'ABANDONED_72H' AND e."resourceId" = c.id
+          AND e.payload->>'activityAt' = to_char(c."lastActivityAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
+      )
+    ORDER BY c."lastActivityAt" ASC, c.id ASC LIMIT 100`;
   // PRD-204: totalUsd es Decimal en BD → convertir a number
   return rows.map(r => ({ ...r, totalUsd: d(r.totalUsd) }));
-}
-
-export type MarkCartEmailedResult =
-  | { claimed: true; recoveryToken: string }
-  | { claimed: false };
-
-/** Reclama el carrito para email (updateMany con guard de estado), rota el token
- *  y devuelve si esta ejecución lo reclamó — ANTES de enviar el email (PRD-211).
- *
- *  - expectedStatus 'PENDING'     → nuevo estado EMAILED_24H (oleada 24h).
- *  - expectedStatus 'EMAILED_24H' → nuevo estado EMAILED_72H (oleada 72h).
- *
- *  Si el carrito pasó a RECOVERED/OPTED_OUT o otra corrida ya lo reclamó,
- *  count !== 1 y el llamador no debe enviar correo. */
-export async function markCartEmailedAndRotateToken(
-  cartId: string,
-  expectedStatus: 'PENDING' | 'EMAILED_24H',
-): Promise<MarkCartEmailedResult> {
-  const newStatus: AbandonedCartStatus =
-    expectedStatus === 'PENDING' ? 'EMAILED_24H' : 'EMAILED_72H';
-  const { token, hash } = generateRecoveryToken();
-  const res = await prisma.abandonedCart.updateMany({
-    where: { id: cartId, status: expectedStatus },
-    data: {
-      status:            newStatus,
-      emailSentAt:       new Date(),
-      recoveryTokenHash: hash,
-    },
-  });
-  if (res.count === 1) {
-    return { claimed: true, recoveryToken: token };
-  }
-  return { claimed: false };
 }
 
 /** Convierte items del JSON de Prisma al tipo tipado AbandonedCartItem[].
@@ -219,8 +226,9 @@ export function parseAbandonedCartItems(raw: unknown): AbandonedCartItem[] {
       typeof (i as AbandonedCartItem).id       === 'string' &&
       typeof (i as AbandonedCartItem).name     === 'string' &&
       typeof (i as AbandonedCartItem).price    === 'number' &&
-      typeof (i as AbandonedCartItem).quantity === 'number',
-  );
+      Number.isFinite((i as AbandonedCartItem).price) && (i as AbandonedCartItem).price >= 0 &&
+      Number.isSafeInteger((i as AbandonedCartItem).quantity) && (i as AbandonedCartItem).quantity > 0,
+  ).slice(0, 25);
 }
 
 /**
@@ -238,7 +246,7 @@ export async function refreshAbandonedCartItems(
   if (snapshot.length === 0) return null;
 
   const products = await prisma.product.findMany({
-    where: { id: { in: [...new Set(snapshot.map((i) => i.id))] } },
+    where: { id: { in: [...new Set(snapshot.map((i) => i.id))] }, isActive: true },
     select: { id: true, name: true, slug: true, price: true, stock: true, images: true },
   });
   const productById = new Map(products.map((p) => [p.id, p]));

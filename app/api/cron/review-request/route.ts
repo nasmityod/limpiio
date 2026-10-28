@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { sendReviewRequestEmail } from '@/lib/resend';
+import { enqueueReviewRequest, processEmailDeliveries, reviewRequestCandidateIds } from '@/lib/email-delivery';
 import type { ReviewRequestProduct } from '@/emails/transactional/ReviewRequestEmail';
 import { verifyBearerSecret } from '@/lib/security';
 import { logInfo, logError } from '@/lib/safe-logger';
 import { BRAND } from '@/config/brand';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 /**
  * FASE 4.5 (MEJORA 2.2) — cron de solicitud de reseña post-entrega.
@@ -21,9 +21,8 @@ export const maxDuration = 60;
  *   bombardea a clientes de pedidos antiguos.
  * - deliveredAt (backfilled con updatedAt en la migración) como fecha base.
  * - Máx. 25 emails por corrida (el cron corre a diario).
- * - reviewRequestSentAt se marca con updateMany condicional ANTES de enviar:
- *   dos corridas concurrentes no pueden duplicar el email (el que no "ganó"
- *   la marca, no envía).
+ * - La cola durable deduplica por pedido y reclama una lease antes de enviar;
+ *   reviewRequestSentAt solo se marca después de aceptación del proveedor.
  *
  * Crontab (root, TZ America/Caracas — ver deploy/crontab.vps):
  *   0 10 * * * . /etc/$APP_SLUG/$APP_SLUG.env; curl -fsS -H "Authorization: Bearer $CRON_SECRET" http://127.0.0.1:3000/api/cron/review-request >> /var/log/$APP_SLUG-cron.log 2>&1
@@ -56,8 +55,10 @@ export async function GET(request: Request): Promise<NextResponse> {
   const oldestEligible = new Date(now - WINDOW_MAX_DAYS * 24 * 60 * 60 * 1000);
 
   try {
+    const candidateIds = await reviewRequestCandidateIds(oldestEligible, newestEligible, BATCH_LIMIT);
     const candidates = await prisma.order.findMany({
       where: {
+        id: { in: candidateIds },
         status: 'Entregado',
         reviewRequestSentAt: null,
         deliveredAt: { gte: oldestEligible, lte: newestEligible },
@@ -105,37 +106,26 @@ export async function GET(request: Request): Promise<NextResponse> {
         });
       }
 
-      // Reclamar el pedido de forma atómica ANTES de enviar: si otra corrida
-      // concurrente ya lo marcó, count === 0 y no se duplica el email.
-      const claimed = await prisma.order.updateMany({
-        where: { id: order.id, reviewRequestSentAt: null },
-        data: { reviewRequestSentAt: new Date() },
-      });
-      if (claimed.count === 0) {
-        skipped++;
-        continue;
-      }
-
       if (products.length === 0) {
-        // Sin fichas activas que reseñar — se marca para no reintentar.
+        // El catálogo pudo cambiar después de seleccionar los candidatos.
         skipped++;
         continue;
       }
 
-      const ok = await sendReviewRequestEmail({
-        email,
+      await enqueueReviewRequest(order.id, email, {
         customerName: firstNameFrom(order.customerName),
         products,
       });
-      if (ok) sent++;
-      else skipped++;
     }
+    const delivery = await processEmailDeliveries(['REVIEW_REQUEST'], BATCH_LIMIT);
+    sent = delivery.accepted.REVIEW_REQUEST || 0;
+    skipped += delivery.deferred;
 
     if (sent > 0 || skipped > 0) {
       logInfo('cron_review_request', { count: sent, operation: 'review_request' });
     }
 
-    return NextResponse.json({ ok: true, sent, skipped, candidates: candidates.length });
+    return NextResponse.json({ ok: delivery.failed === 0 && delivery.review === 0, sent, skipped, errors: delivery.failed, needsReview: delivery.review, candidates: candidates.length });
   } catch (error) {
     logError('cron_review_request_error', error, { operation: 'review_request' });
     return NextResponse.json({ ok: false }, { status: 500 });

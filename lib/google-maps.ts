@@ -11,7 +11,7 @@ import { BRAND } from '@/config/brand';
 
 
 export const GOOGLE_MAPS_LOCATION_QUERY =
-  `${BRAND.legalName}, Carrera 21 con esquina calle 21, Centro, Barquisimeto 3001, Lara, Venezuela`;
+  `${BRAND.legalName}, ${process.env.NEXT_PUBLIC_STORE_ADDRESS?.trim() || 'Barquisimeto, Lara, Venezuela'}`;
 
 export function googleMapsBusinessUrl(query?: string): string {
   const custom = process.env.NEXT_PUBLIC_GOOGLE_MAPS_BUSINESS_URL?.trim();

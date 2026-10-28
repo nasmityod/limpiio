@@ -26,6 +26,8 @@ import { prisma } from '@/lib/prisma';
 import { CasheaVerificationNotImplemented, verifyCasheaOrder } from '@/lib/cashea';
 import { sendPaymentValidatedEmail } from '@/lib/resend';
 import { logError, logInfo, logWarn } from '@/lib/safe-logger';
+import { getCasheaConfig } from '@/lib/cashea-config';
+import { queueTransactionalEmails } from '@/lib/email-outbox-context';
 
 /** Estados desde los que es válido lanzar una verificación (Sección 6: máquina de estados). */
 const VERIFIABLE_FROM = ['RETURNED', 'VERIFYING'] as const;
@@ -52,6 +54,7 @@ type OrderForReconcile = {
   casheaStatus: string | null;
   casheaOrderId: string | null;
   casheaAttemptCount: number;
+  stockDeducted: boolean;
   casheaConfirmedAt: Date | null;
   customerName: string | null;
   customerEmail: string | null;
@@ -67,6 +70,13 @@ const ORDER_SELECT = {
   casheaAttemptCount: true,
   casheaConfirmedAt: true,
   casheaInitialAmount: true,
+  customerIdNumber: true,
+  casheaCurrency: true,
+  total: true,
+  exchangeRateUsdBs: true,
+  stockDeducted: true,
+  paidAt: true,
+  updatedAt: true,
   customerName: true,
   customerEmail: true,
   customer: { select: { email: true, name: true } },
@@ -110,6 +120,8 @@ export async function processCasheaConfirmation(orderId: string): Promise<Cashea
     return { outcome: 'already_final', casheaStatus: order.casheaStatus };
   }
 
+  if (order.status !== 'Pendiente' || order.paidAt || !order.stockDeducted) return { outcome: 'not_verifiable', casheaStatus: order.casheaStatus };
+
   if (!VERIFIABLE_FROM.includes(order.casheaStatus as (typeof VERIFIABLE_FROM)[number])) {
     // CREATED/REDIRECTED/EXPIRED/CANCEL_PENDING/FAILED: aún no hay retorno o
     // ya está en un flujo de cancelación — no verificar (Sección 6: transiciones válidas).
@@ -124,7 +136,7 @@ export async function processCasheaConfirmation(orderId: string): Promise<Cashea
   // Transición optimista a VERIFYING: si otra petición concurrente ya avanzó
   // el estado (p. ej. ya confirmó o canceló), esta llamada se vuelve un no-op.
   const claimed = await prisma.order.updateMany({
-    where: { id: order.id, casheaStatus: { in: [...VERIFIABLE_FROM] } },
+    where: { id: order.id, status: 'Pendiente', paidAt: null, stockDeducted: true, updatedAt: order.updatedAt, OR: [{ casheaStatus: 'RETURNED' }, { casheaStatus: 'VERIFYING', updatedAt: { lt: new Date(Date.now() - 5 * 60_000) } }] },
     data: { casheaStatus: 'VERIFYING' },
   });
 
@@ -141,18 +153,22 @@ export async function processCasheaConfirmation(orderId: string): Promise<Cashea
       return { outcome: 'pending_not_confirmed', casheaStatus: 'RETURNED' };
     }
 
-    // SEC-2026-09: `casheaOrderId` puede venir del parámetro `idNumber` de la URL
-    // de retorno (controlado por el cliente). Si Cashea informa un monto inicial
-    // y no coincide con el reservado para ESTE pedido, no se confirma: alguien
-    // podría apuntar la verificación a otra orden Cashea ya pagada.
+    // Fail closed until the provider can prove the link to this local order,
+    // buyer, merchant, currency and both expected amounts. Browser IDs are not evidence.
     const expected = order.casheaInitialAmount == null ? null : Number(order.casheaInitialAmount);
-    if (
-      verification.initialAmount != null &&
-      expected != null &&
-      Math.abs(verification.initialAmount - expected) > 0.01
-    ) {
-      logWarn('cashea_reconcile_amount_mismatch', { operation: 'cashea_reconcile', orderId: order.id });
-      await revertToReturnedAfterFailedVerification(order.id, 'AMOUNT_MISMATCH');
+    const rate = order.exchangeRateUsdBs == null ? null : Number(order.exchangeRateUsdBs);
+    const expectedTotal = order.casheaCurrency === 'USD' && rate && rate > 0 ? Number(order.total) / rate : Number(order.total);
+    const config = getCasheaConfig();
+    const matches = expected != null && Number.isFinite(expected) && expected > 0 &&
+      verification.initialAmount != null && Math.abs(verification.initialAmount - expected) <= 0.01 &&
+      verification.localOrderReference === order.id &&
+      verification.customerIdentification === order.customerIdNumber &&
+      verification.merchantId === config.externalClientId &&
+      verification.currency === order.casheaCurrency &&
+      verification.totalAmount != null && Number.isFinite(verification.totalAmount) && Math.abs(verification.totalAmount - expectedTotal) <= 0.01;
+    if (!matches) {
+      logWarn('cashea_reconcile_correlation_incomplete', { operation: 'cashea_reconcile', orderId: order.id });
+      await revertToReturnedAfterFailedVerification(order.id, 'CORRELATION_INCOMPLETE');
       return { outcome: 'pending_not_confirmed', casheaStatus: 'RETURNED' };
     }
 
@@ -184,9 +200,10 @@ async function confirmCasheaOrder(
 
   const { transitioned, updated } = await prisma.$transaction(async (tx) => {
     const transition = await tx.order.updateMany({
-      where: { id: order.id, casheaStatus: 'VERIFYING' },
+      where: { id: order.id, casheaStatus: 'VERIFYING', status: 'Pendiente', stockDeducted: true, paidAt: null },
       data: {
         casheaStatus: 'CONFIRMED',
+        casheaReturnTokenHash: null,
         casheaConfirmedAt: now,
         casheaLastResponseCode: 'CONFIRMED',
         ...(initialAmount != null ? { casheaInitialAmount: initialAmount } : {}),
@@ -200,6 +217,22 @@ async function confirmCasheaOrder(
       select: { ...ORDER_SELECT, casheaConfirmedAt: true },
     });
 
+    if (transition.count === 1) {
+      const recipientEmail = order.customerEmail?.trim() || order.customer?.email?.trim() || '';
+      const displayName = order.customerName?.trim() || order.customer?.name?.trim() || '';
+
+      if (recipientEmail) {
+        await queueTransactionalEmails(tx, () => sendPaymentValidatedEmail(
+          recipientEmail,
+          firstNameFromDisplayName(displayName),
+          String(order.orderNumber).padStart(4, '0'),
+          order.id,
+          { casheaInitial: true },
+        ));
+      }
+
+    }
+
     return { transitioned: transition.count === 1, updated: current };
   });
 
@@ -209,27 +242,6 @@ async function confirmCasheaOrder(
   }
 
   logInfo('cashea_order_confirmed', { operation: 'cashea_reconcile', orderId: order.id });
-
-  const recipientEmail = order.customerEmail?.trim() || order.customer?.email?.trim() || '';
-  const displayName = order.customerName?.trim() || order.customer?.name?.trim() || '';
-
-  if (recipientEmail) {
-    try {
-      await sendPaymentValidatedEmail(
-        recipientEmail,
-        firstNameFromDisplayName(displayName),
-        String(order.orderNumber).padStart(4, '0'),
-        order.id,
-        { casheaInitial: true },
-      );
-    } catch (emailError) {
-      logError('cashea_confirmed_email_failed', emailError, {
-        operation: 'cashea_reconcile',
-        orderId: order.id,
-        provider: 'resend',
-      });
-    }
-  }
 
   return { outcome: 'confirmed', casheaStatus: 'CONFIRMED' };
 }

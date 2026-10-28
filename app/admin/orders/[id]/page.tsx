@@ -253,9 +253,9 @@ export default function AdminOrderDetailPage() {
             className="touch-manipulation select-none min-h-[44px] inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 sm:px-4 text-xs sm:text-sm font-semibold text-slate-700 hover:bg-slate-100 active:bg-slate-200 disabled:opacity-40 disabled:pointer-events-none"
           >
             {resendingEmail ? (
-              <><Loader2 size={13} className="animate-spin" /> Enviando…</>
+              <><Loader2 size={13} className="animate-spin" /> Registrando…</>
             ) : resendEmailResult === 'ok' ? (
-              <><Check size={13} className="text-green-600" /> Enviado</>
+              <><Check size={13} className="text-green-600" /> Envío pendiente</>
             ) : (
               <><Mail size={13} /> Reenviar confirmación</>
             )}
@@ -292,6 +292,8 @@ export default function AdminOrderDetailPage() {
           <StatusUpdateMenu
             onUpdate={handleStatusChange}
             currentStatus={order.status}
+            shippingAddress={order.shippingDetails.address}
+            casheaStatus={order.casheaStatus}
             allowedOnly={
               order.status === 'Pendiente verificación Binance'
                 ? ['Cancelado']

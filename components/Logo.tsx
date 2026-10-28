@@ -68,6 +68,7 @@ export default function Logo({
       alt={alt}
       width={width}
       height={dims.height}
+      style={{ width: 'auto' }}
       priority={priority}
       className={cn('object-contain', dims.className, extra, className)}
     />

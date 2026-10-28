@@ -49,6 +49,7 @@ export default function ShipOrderDialog({
   const dialogRef = useRef<HTMLDivElement>(null);
   const [trackingNumber, setTrackingNumber]     = useState('');
   const [trackingCarrier, setTrackingCarrier]   = useState('');
+  const [customCarrierMode, setCustomCarrierMode] = useState(false);
   const [trackingUrl, setTrackingUrl]           = useState('');
   const [trackingPhotoUrl, setTrackingPhotoUrl] = useState<string | null>(null);
   const [submitting, setSubmitting]             = useState(false);
@@ -58,6 +59,7 @@ export default function ShipOrderDialog({
     if (open) {
       setTrackingNumber(initial?.trackingNumber ?? '');
       setTrackingCarrier(initial?.trackingCarrier ?? '');
+      setCustomCarrierMode(Boolean(initial?.trackingCarrier && !CARRIERS.includes(initial.trackingCarrier)));
       setTrackingUrl(initial?.trackingUrl ?? '');
       setTrackingPhotoUrl(initial?.trackingPhotoUrl ?? null);
       setError(null);
@@ -156,10 +158,11 @@ export default function ShipOrderDialog({
               <span className="ml-1.5 text-[10px] font-medium text-gray-400 normal-case">(opcional)</span>
             </label>
             <select
-              value={CARRIERS.includes(trackingCarrier) ? trackingCarrier : (trackingCarrier ? '__custom__' : '')}
+              value={customCarrierMode ? '__custom__' : trackingCarrier}
               onChange={e => {
-                if (e.target.value === '__custom__') return;
-                setTrackingCarrier(e.target.value);
+                const custom = e.target.value === '__custom__';
+                setCustomCarrierMode(custom);
+                setTrackingCarrier(custom ? '' : e.target.value);
               }}
               className="w-full min-h-[48px] px-3 py-2 border border-gray-200 rounded-xl bg-gray-50 text-base focus:outline-none focus:ring-2 focus:ring-navy/20"
             >
@@ -167,7 +170,7 @@ export default function ShipOrderDialog({
               {CARRIERS.map(c => <option key={c} value={c}>{c}</option>)}
               <option value="__custom__">Personalizado…</option>
             </select>
-            {(trackingCarrier === '__custom__' || (trackingCarrier && !CARRIERS.includes(trackingCarrier))) && (
+            {customCarrierMode && (
               <input
                 type="text"
                 value={trackingCarrier === '__custom__' ? '' : trackingCarrier}

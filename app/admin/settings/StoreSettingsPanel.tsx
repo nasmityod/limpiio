@@ -130,7 +130,7 @@ export function StoreSettingsPanel({
       const result = await updateGeneralStoreSettings(generalSettings);
       if (result.success) {
         const next = result.data ?? generalSettings;
-        setGeneralSettings(next);
+        setGeneralSettings(current => snapshotJson(current) === snapshotJson(generalSettings) ? next : current);
         setGeneralSnapshot(snapshotJson(next));
         setSavedGeneral(true);
         setTimeout(() => setSavedGeneral(false), 3000);
@@ -161,9 +161,10 @@ export function StoreSettingsPanel({
         ...estimates,
         states: estimates.states.filter((s) => s.state.trim() && s.note.trim()),
       };
+      try {
       const result = await updateShippingEstimates(cleaned);
       if (result.success && result.data) {
-        setEstimates(result.data);
+        setEstimates(current => snapshotJson(current) === snapshotJson(estimates) ? result.data! : current);
         setEstimatesSnapshot(snapshotJson(result.data));
         setSavedEstimates(true);
         setTimeout(() => setSavedEstimates(false), 3000);
@@ -171,6 +172,7 @@ export function StoreSettingsPanel({
       } else {
         setEstimatesError(result.message);
       }
+      } catch { setEstimatesError('No se pudieron guardar los estimados. Vuelve a intentarlo.'); }
     });
   };
 

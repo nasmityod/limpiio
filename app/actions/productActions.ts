@@ -24,9 +24,10 @@ import {
 } from '@/lib/products/admin-product-query';
 import { getCachedAdminCategoryNames } from '@/lib/categories/admin-categories';
 import { deleteFromR2, isR2PublicUrl, keyFromR2PublicUrl } from '@/lib/r2';
-import { calcSellingPriceUsd, roundUpToStep } from '@/lib/pricing-formula';
+import { calcSellingPriceUsd, roundUpToStep, canonicalPricingFactor } from '@/lib/pricing-formula';
 import { getPricingParams } from '@/app/actions/configActions';
 import { pingIndexNow } from '@/lib/indexnow';
+import { sanitizeOrderItemImageUrl, isR2PublicHttpsUrl } from '@/lib/r2-public-url';
 import { logError } from '@/lib/safe-logger';
 import { rateLimit } from '@/lib/rate-limit';
 import { getActionClientIp } from '@/lib/security';
@@ -36,27 +37,21 @@ import {
   normalizeCategoryName,
   withSerializableCategoryTransaction,
 } from '@/lib/categories/ensure-product-category';
+import { claimProductMedia, deletedProductAssetKey } from '@/lib/products/claim-product-media';
+import { hasProductAssetReferences } from '@/lib/products/product-asset-references';
 import { CACHE_TAG_CATEGORIES, CACHE_TAG_SITE_SHELL } from '@/lib/site-shell-cache';
 
-const absoluteUrl = z.string().refine(
-  (s) => {
-    try {
-      const u = new URL(s);
-      return u.protocol === 'http:' || u.protocol === 'https:';
-    } catch {
-      return false;
-    }
-  },
-  { message: 'URL inválida' },
-);
+const imageUrlSchema = z.string().refine((s) => sanitizeOrderItemImageUrl(s) !== null,
+  'Usa una ruta interna o una imagen del CDN de la tienda.');
+const videoUrlSchema = z.string().refine(isR2PublicHttpsUrl, 'El video debe estar alojado en el CDN de la tienda.');
 
 /** Slots de galería enviados desde el modal (imágenes y videos). */
 const gallerySlotSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('IMAGE'), url: absoluteUrl }),
+  z.object({ type: z.literal('IMAGE'), url: imageUrlSchema }),
   z.object({
     type: z.literal('VIDEO'),
-    url: absoluteUrl,
-    posterUrl: absoluteUrl.optional(),
+    url: videoUrlSchema,
+    posterUrl: imageUrlSchema.optional(),
   }),
 ]);
 
@@ -76,14 +71,8 @@ function parseGallerySlots(
 ): z.infer<typeof gallerySlotSchema>[] {
   const raw = formData.get('mediaJson');
   if (typeof raw === 'string' && raw.trim()) {
-    try {
-      const parsed = z.array(gallerySlotSchema).max(6).safeParse(JSON.parse(raw));
-      if (parsed.success && parsed.data.length > 0) {
-        return sortMediaImagesFirst(parsed.data);
-      }
-    } catch {
-      /* ignore */
-    }
+    const parsed = z.array(gallerySlotSchema).max(6).parse(JSON.parse(raw));
+    if (parsed.length > 0) return sortMediaImagesFirst(parsed);
   }
   const base = imageUrls.length > 0 ? imageUrls : ['/placeholder-product.png'];
   return base.map((url) => ({ type: 'IMAGE' as const, url }));
@@ -92,10 +81,10 @@ function parseGallerySlots(
 const productSchema = z.object({
   name:        z.string().min(1, 'El nombre es obligatorio'),
   description: z.string().min(1, 'La descripción es obligatoria'),
-  price:       z.coerce.number().positive('El precio debe ser un número positivo'),
+  price:       z.coerce.number().positive('El precio debe ser un número positivo').max(9999999999),
   cost: z.preprocess(
     (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
-    z.coerce.number().positive('El costo debe ser un número positivo').optional(),
+    z.coerce.number().positive('El costo debe ser un número positivo').max(9999999999).optional(),
   ),
   originalPrice: z.preprocess(
     (v) => (typeof v === 'string' && v.trim() === '' ? null : v),
@@ -109,7 +98,7 @@ const productSchema = z.object({
     (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
     z.coerce.number().min(0, 'El margen no puede ser negativo').max(1000, 'Margen fuera de rango').optional(),
   ),
-  stock:       z.coerce.number().int().nonnegative('El stock debe ser un entero no negativo'),
+  stock:       z.coerce.number().int().nonnegative('El stock debe ser un entero no negativo').max(2147483647),
   category: z
     .string()
     .transform(normalizeCategoryName)
@@ -138,7 +127,7 @@ const productSchema = z.object({
       if (typeof v !== 'string' || v.trim() === '') return [];
       try { return JSON.parse(v); } catch { return []; }
     },
-    z.array(z.string().url('URL de imagen inválida')).max(6).default([])
+    z.array(imageUrlSchema).max(6).default([])
   ),
 });
 
@@ -146,24 +135,27 @@ async function verifyAdminSession() {
   return requirePermissionAction('CATALOG');
 }
 
-async function safeDeleteR2ByUrl(url: string, context: string): Promise<void> {
+async function safeDeleteR2ByUrl(url: string, context: string): Promise<boolean> {
   const key = keyFromR2PublicUrl(url);
-  if (!key) return;
+  if (!key) return false;
   try {
+    const reserved = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${url}, 0))`;
+      if (await hasProductAssetReferences(tx, url)) return false;
+      const deletedKey = deletedProductAssetKey(url);
+      await tx.appConfig.upsert({ where: { key: deletedKey }, update: { value: url }, create: { key: deletedKey, value: url } });
+      await tx.videoJob.updateMany({ where: { videoUrl: url }, data: { status: 'DELETING' } });
+      return true;
+    });
+    if (!reserved) return false;
+    // The retirement is durable before external IO. A crash or R2 outage must
+    // not allow a later form to attach the URL while deletion is being retried.
     await deleteFromR2(key);
+    await prisma.videoJob.updateMany({ where: { videoUrl: url, status: 'DELETING' }, data: { status: 'DELETED' } });
+    return true;
   } catch (err) {
     logError('product_r2_delete_failed', err, { operation: context, provider: 'r2' });
-  }
-}
-
-async function markVideoJobDeleted(videoUrl: string, context: string): Promise<void> {
-  try {
-    await prisma.videoJob.updateMany({
-      where: { videoUrl },
-      data: { status: 'DELETED' },
-    });
-  } catch (err) {
-    logError('product_video_job_mark_failed', err, { operation: context });
+    return false;
   }
 }
 
@@ -181,7 +173,7 @@ async function cleanupRemovedProductMedia(
     if (prev.type === ProductMediaType.VIDEO) {
       await safeDeleteR2ByUrl(prev.url, 'updateProductAction');
       if (prev.posterUrl) await safeDeleteR2ByUrl(prev.posterUrl, 'updateProductAction');
-      await markVideoJobDeleted(prev.url, 'updateProductAction');
+
     } else if (isR2PublicUrl(prev.url)) {
       await safeDeleteR2ByUrl(prev.url, 'updateProductAction');
     }
@@ -258,7 +250,7 @@ export async function createProductAction(formData: FormData) {
     const { factor } = await getPricingParams();
     // El margen es SOLO el elegido para este producto. Nunca global.
     const effectiveMargin = validated.data.marginPct ?? null;
-    if (validated.data.cost != null && !(typeof effectiveMargin === 'number' && effectiveMargin > 0)) {
+    if (validated.data.cost != null && !(typeof effectiveMargin === 'number' && effectiveMargin >= 0)) {
       return { success: false, message: 'Indica el margen de ganancia (%) para calcular el precio desde el costo.' };
     }
     const normalPrice = validated.data.cost != null
@@ -285,6 +277,7 @@ export async function createProductAction(formData: FormData) {
     const { categoryCreated, categoryName } = await withSerializableCategoryTransaction(
       async (tx) => {
         const ensuredCategory = await ensureProductCategory(tx, validated.data.category);
+        await claimProductMedia(tx, slots);
         await tx.product.create({
           data: {
             ...rest,
@@ -342,6 +335,8 @@ export async function createProductAction(formData: FormData) {
     };
   } catch (error) {
     logError('product_create_failed', error, { operation: 'create_product' });
+    if (error instanceof z.ZodError) return { success: false, message: error.issues.map(i => i.message).join(', ') };
+    if (error instanceof Error && (error.message.startsWith('El video') || error.message.startsWith('El póster') || error.message.startsWith('Una imagen'))) return { success: false, message: error.message };
     if (error instanceof CategoryNameError) {
       return { success: false, message: error.message };
     }
@@ -356,6 +351,10 @@ export async function updateProductAction(productId: string, formData: FormData)
   try {
     await verifyAdminSession();
 
+    const version = formData.get('expectedUpdatedAt');
+    if (typeof version !== 'string' || !version || !Number.isFinite(Date.parse(version))) {
+      return { success: false, message: 'Vuelve a abrir el producto antes de editarlo.' };
+    }
     const data = {
       name:        formData.get('name'),
       description: formData.get('description'),
@@ -380,7 +379,7 @@ export async function updateProductAction(productId: string, formData: FormData)
     const { factor } = await getPricingParams();
     // El margen es SOLO el elegido para este producto. Nunca global.
     const effectiveMargin = validated.data.marginPct ?? null;
-    if (validated.data.cost != null && !(typeof effectiveMargin === 'number' && effectiveMargin > 0)) {
+    if (validated.data.cost != null && !(typeof effectiveMargin === 'number' && effectiveMargin >= 0)) {
       return { success: false, message: 'Indica el margen de ganancia (%) para calcular el precio desde el costo.' };
     }
     const normalPrice = validated.data.cost != null
@@ -430,9 +429,10 @@ export async function updateProductAction(productId: string, formData: FormData)
     const { categoryCreated, categoryName } = await withSerializableCategoryTransaction(
       async (tx) => {
         const ensuredCategory = await ensureProductCategory(tx, validated.data.category);
+        await claimProductMedia(tx, slots, productId);
         await tx.productMedia.deleteMany({ where: { productId } });
         await tx.product.update({
-          where: { id: productId },
+          where: { id: productId, updatedAt: new Date(version) },
           data: {
             ...rest,
             category: ensuredCategory.name,
@@ -514,7 +514,10 @@ export async function updateProductAction(productId: string, formData: FormData)
       },
     };
   } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') return { success: false, message: 'El producto cambió mientras lo editabas. Vuelve a abrirlo para conservar el inventario y los cambios recientes.' };
     logError('product_update_failed', error, { operation: 'update_product' });
+    if (error instanceof z.ZodError) return { success: false, message: error.issues.map(i => i.message).join(', ') };
+    if (error instanceof Error && (error.message.startsWith('El video') || error.message.startsWith('El póster') || error.message.startsWith('Una imagen'))) return { success: false, message: error.message };
     if (error instanceof CategoryNameError) {
       return { success: false, message: error.message };
     }
@@ -695,15 +698,15 @@ const csvProductSchema = z.object({
       .max(64),
   ),
   name:  z.string().trim().min(1, 'name es obligatorio'),
-  price: z.coerce.number().positive('price debe ser mayor que 0'),
-  stock: z.coerce.number().int().nonnegative('stock debe ser un entero ≥ 0'),
-  category:    z.preprocess(emptyToUndef, z.string().trim().min(1).default('General')),
+  price: z.coerce.number().positive('price debe ser mayor que 0').max(9999999999),
+  stock: z.coerce.number().int().nonnegative('stock debe ser un entero ≥ 0').max(2147483647),
+  category: z.preprocess(emptyToUndef, z.string().default('General').transform(normalizeCategoryName).pipe(z.string().min(1).max(80))),
   brand:       z.preprocess(emptyToUndef, z.string().trim().min(1).default('Sin Marca')),
   description: z.preprocess(emptyToUndef, z.string().trim().min(1).default('Sin descripción')),
   imageUrl: z.preprocess(
     emptyToUndef,
     z.string().trim()
-      .refine((s) => s.startsWith('/') || /^https?:\/\//i.test(s), 'imageUrl inválida')
+      .refine((s) => sanitizeOrderItemImageUrl(s) !== null, 'imageUrl debe ser una ruta interna o una URL del CDN de la tienda')
       .default('/placeholder-product.png'),
   ),
   /** Valor crudo (sin normalizar): la normalización ocurre en normalizeCsvFreeShipping. */
@@ -717,13 +720,14 @@ async function getUniqueSlugForImport(
   name: string,
   taken: Set<string>,
   excludeId?: string,
+  client: Prisma.TransactionClient | typeof prisma = prisma,
 ): Promise<string> {
   const base = slugify(name) || `producto-${Date.now()}`;
   let candidate = base;
   let counter = 2;
   while (true) {
     if (!taken.has(candidate)) {
-      const existing = await prisma.product.findUnique({
+      const existing = await client.product.findUnique({
         where: { slug: candidate },
         select: { id: true },
       });
@@ -738,6 +742,9 @@ async function getUniqueSlugForImport(
 
 export async function importProductsFromCSV(csvData: string) {
   await verifyAdminSession();
+  if (typeof csvData !== 'string' || csvData.length > 5 * 1024 * 1024) {
+    return { success: false, createdCount: 0, updatedCount: 0, errors: ['El CSV no puede superar 5 MB.'], message: 'Archivo demasiado grande.' };
+  }
 
   const parsed = Papa.parse<Record<string, string>>(csvData, {
     header: true,
@@ -787,6 +794,8 @@ export async function importProductsFromCSV(csvData: string) {
     errors.push('El archivo no contiene filas válidas. Cabeceras esperadas: sku (obligatorio), name, brand, category, price, stock, description, imageUrl.');
   }
 
+  if (parsed.data.length > 5000) errors.push('Máximo 5000 filas por importación.');
+  for (const error of parsed.errors) errors.push(`CSV inválido: ${error.message}`);
   // PRD-155: con errores de validación no se toca la BD (todo-o-nada)
   if (errors.length > 0) {
     return {
@@ -809,15 +818,18 @@ export async function importProductsFromCSV(csvData: string) {
   }[] = [];
 
   try {
+    const { factor } = await getPricingParams();
     await prisma.$transaction(
       async (tx) => {
         // Matching dentro de la tx: lecturas consistentes con los upserts (idempotente ante carreras)
         const skus = rows.map((r) => r.data.sku);
         const bySkuList = await tx.product.findMany({
-          where: { sku: { in: skus } },
-          select: { id: true, sku: true, slug: true, name: true, stock: true, images: true },
+          where: { OR: skus.map(sku => ({ sku: { equals: sku, mode: 'insensitive' as const } })) },
+          select: { id: true, sku: true, slug: true, name: true, stock: true, images: true, category: true },
         });
         const bySku = new Map(bySkuList.map((p) => [p.sku!.toLowerCase(), p]));
+        if (bySku.size !== bySkuList.length) throw new CategoryNameError('Hay SKUs duplicados que difieren solo en mayúsculas. Corrige esos productos antes de importar.');
+        const importCategories = new Map<string, string>();
 
         const usedSlugs = new Set<string>();
 
@@ -825,14 +837,21 @@ export async function importProductsFromCSV(csvData: string) {
           const existing = bySku.get(data.sku.toLowerCase());
           // El slug existente se conserva (estabilidad de URL); solo se genera si faltaba
           const slug = existing?.slug
-            || (await getUniqueSlugForImport(data.name, usedSlugs, existing?.id));
+            || (await getUniqueSlugForImport(data.name, usedSlugs, existing?.id, tx));
 
-          const { name, price, stock, category, brand, description, sku, imageUrl } = data;
+          const { name, price, stock, brand, description, sku, imageUrl } = data;
+          const requestedCategory = existing && !(parsed.meta.fields ?? []).includes('category') ? existing.category : data.category;
+          const categoryKey = requestedCategory.toLowerCase();
+          let category = importCategories.get(categoryKey);
+          if (!category) { category = (await ensureProductCategory(tx, requestedCategory)).name; importCategories.set(categoryKey, category); }
 
           await tx.product.upsert({
-            where: { sku },
+            where: { sku: existing?.sku ?? sku },
             update: {
-              name, price, stock, category, brand, description, slug,
+              name, price, stock, category, slug,
+              ...((parsed.meta.fields ?? []).includes('brand') ? { brand } : {}),
+              ...((parsed.meta.fields ?? []).includes('description') ? { description } : {}),
+              cost: null, profitMarginPct: null, originalPrice: null, priceBaseFactor: factor,
               // Columna ausente en TODO el archivo → no tocar el valor actual.
               // Columna presente → se actualiza con el valor validado de la fila.
               ...(freeShippingColumnPresent ? { freeShipping: freeShipping ?? false } : {}),
@@ -840,6 +859,7 @@ export async function importProductsFromCSV(csvData: string) {
             },
             create: {
               name, price, stock, category, brand, description, sku, slug,
+              cost: null, profitMarginPct: null, originalPrice: null, priceBaseFactor: factor,
               // Producto nuevo sin columna → false (predeterminado).
               freeShipping: freeShipping ?? false,
               images: [imageUrl],
@@ -865,7 +885,7 @@ export async function importProductsFromCSV(csvData: string) {
           }
         }
       },
-      { timeout: 60_000 },
+      { timeout: 60_000, isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
   } catch (dbError) {
     logError('product_csv_import_failed', dbError, { operation: 'import_products_csv' });
@@ -873,7 +893,7 @@ export async function importProductsFromCSV(csvData: string) {
       success: false,
       createdCount: 0,
       updatedCount: 0,
-      errors: [`Error de base de datos: ${(dbError as Error).message}`],
+      errors: [dbError instanceof CategoryNameError ? dbError.message : 'No se pudo aplicar el archivo. Revisa SKUs, categorías y vuelve a intentarlo.'],
       message: 'Importación revertida por un error de base de datos. No se modificó ningún producto.',
     };
   }
@@ -893,6 +913,7 @@ export async function importProductsFromCSV(csvData: string) {
   revalidatePath('/');
   revalidateTag('catalog', 'default');
   revalidateTag('categories', 'default'); // category product counts in sidebar
+  revalidateTag(CACHE_TAG_SITE_SHELL, 'default');
 
   return {
     success: true,
@@ -905,10 +926,10 @@ export async function importProductsFromCSV(csvData: string) {
 
 // ── Edición rápida desde la tabla de inventario ─────────────────────────────
 
-export async function quickUpdateStockAction(productId: string, stock: number) {
+export async function quickUpdateStockAction(productId: string, stock: number, expectedStock?: number) {
   try {
     await verifyAdminSession();
-    if (!Number.isInteger(stock) || stock < 0) {
+    if (!Number.isInteger(stock) || stock < 0 || stock > 2147483647 || !Number.isInteger(expectedStock) || (expectedStock as number) < 0) {
       return { success: false, message: 'Stock debe ser un entero ≥ 0.' };
     }
 
@@ -918,7 +939,8 @@ export async function quickUpdateStockAction(productId: string, stock: number) {
     });
     const previousStock = current?.stock ?? 0;
 
-    await prisma.product.update({ where: { id: productId }, data: { stock } });
+    const changed = await prisma.product.updateMany({ where: { id: productId, stock: expectedStock }, data: { stock } });
+    if (changed.count !== 1) return { success: false, message: 'El inventario cambió mientras lo editabas. Actualiza la lista antes de ajustar el stock.' };
 
     // Notificar suscriptores si el producto pasó de agotado a disponible
     if (previousStock === 0 && stock > 0 && current) {
@@ -952,13 +974,14 @@ export async function quickUpdateStockAction(productId: string, stock: number) {
 export async function quickUpdatePriceAction(productId: string, price: number) {
   try {
     await verifyAdminSession();
-    if (typeof price !== 'number' || isNaN(price) || price < 0) {
+    if (typeof price !== 'number' || !Number.isFinite(price) || price <= 0 || price > 9999999999) {
       return { success: false, message: 'Precio inválido.' };
     }
     const safePrice = roundUpToStep(price);
+    const { factor } = await getPricingParams();
     const updated = await prisma.product.update({
       where: { id: productId },
-      data: { price: safePrice },
+      data: { price: safePrice, cost: null, profitMarginPct: null, originalPrice: null, priceBaseFactor: factor },
       select: { slug: true },
     });
     revalidatePath('/admin/products');
@@ -1045,6 +1068,7 @@ export async function getAdminProductById(productId: string) {
     cost: dn(product.cost),
     profitMarginPct: dn(product.profitMarginPct),
     createdAt: product.createdAt.toISOString(),
+    updatedAt: product.updatedAt.toISOString(),
     media: product.media.map((m) => ({
       id: m.id,
       type: m.type,
@@ -1065,10 +1089,14 @@ const RECALC_BATCH_SIZE = 500;
 
 export async function recalculateAllProductPrices() {
   try {
-    await verifyAdminSession();
+    await requirePermissionAction('FINANCIAL_SETTINGS');
     const { factor } = await getPricingParams();
 
-    const products = await prisma.product.findMany({
+    const result = await prisma.$transaction(async (tx) => {
+    // Read the price snapshot after locking it, so a simultaneous edit cannot
+    // be overwritten by a batch computed from an old price.
+    await tx.$queryRaw`SELECT id FROM "Product" ORDER BY id FOR UPDATE`;
+    const products = await tx.product.findMany({
       select: {
         id: true,
         price: true,
@@ -1107,9 +1135,9 @@ export async function recalculateAllProductPrices() {
       if (p.cost != null && Number(p.cost) > 0 && p.profitMarginPct != null) {
         newNormal = calcSellingPriceUsd(Number(p.cost), Number(p.profitMarginPct), factor);
       } else if (p.cost == null && curNormal > 0) {
-        const base = p.priceBaseFactor != null ? Number(p.priceBaseFactor) : null;
+        const base = p.priceBaseFactor != null ? canonicalPricingFactor(Number(p.priceBaseFactor)) : null;
         if (base != null && base > 0) {
-          newNormal = roundUpToStep(curNormal * (factor / base));
+          newNormal = base === factor ? curNormal : roundUpToStep(curNormal * (factor / base));
         } else {
           calibrateOnlyIds.push(p.id);
           skipped++;
@@ -1135,8 +1163,7 @@ export async function recalculateAllProductPrices() {
     }
 
     if (priceWrites.length > 0 || calibrateOnlyIds.length > 0) {
-      await prisma.$transaction(
-        async (tx) => {
+
           for (let i = 0; i < priceWrites.length; i += RECALC_BATCH_SIZE) {
             const batch = priceWrites.slice(i, i + RECALC_BATCH_SIZE);
             const values = Prisma.join(
@@ -1163,12 +1190,12 @@ export async function recalculateAllProductPrices() {
               data: { priceBaseFactor: factor },
             });
           }
-        },
-        // Recalcular el catálogo entero es una operación explícitamente masiva:
-        // el timeout por defecto de Prisma (5 s) no da para miles de filas.
-        { timeout: 120_000, maxWait: 15_000 },
-      );
+
     }
+
+    return { updated, skipped, total: products.length };
+    }, { timeout: 120_000, maxWait: 15_000 });
+    const { updated, skipped, total } = result;
 
     revalidatePath('/admin/products');
     revalidatePath('/');
@@ -1180,7 +1207,7 @@ export async function recalculateAllProductPrices() {
       success: true,
       updated,
       skipped,
-      total: products.length,
+      total,
       message: `Listo: ${updated} producto(s) actualizado(s)${skipped ? `, ${skipped} omitido(s)/calibrado(s)` : ''}.`,
     };
   } catch (error) {

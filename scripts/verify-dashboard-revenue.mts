@@ -27,7 +27,7 @@ const VALIDATED = Prisma.join(VALIDATED_REVENUE_STATUSES);
 // ── ANTES ────────────────────────────────────────────────────────────────────
 const tBefore = process.hrtime.bigint();
 const rows = await prisma.order.findMany({
-  where: { status: { in: [...VALIDATED_REVENUE_STATUSES] } },
+  where: { status: { in: [...VALIDATED_REVENUE_STATUSES] }, OR: [{ paidAt: { not: null } }, { legacyPaidConfirmed: true }] },
   select: { total: true, exchangeRateUsdBs: true },
 });
 const before = accumulateValidatedRevenue(
@@ -61,6 +61,7 @@ const agg = await prisma.$queryRaw<
     )::int AS legacy_count
   FROM "Order" o
   WHERE o.status IN (${VALIDATED})
+    AND (o."paidAt" IS NOT NULL OR o."legacyPaidConfirmed" = true)
 `);
 const after = {
   revenueUsd: roundMoney2(Number(agg[0]?.revenue_usd ?? 0)),

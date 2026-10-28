@@ -45,9 +45,10 @@ export function OrderConfirmationEmail(payload: OrderConfirmationPayload) {
   const orderHref = `${base}/account/orders/${orderPathSegment(payload.orderNumber)}`;
   // SESIÓN 06: guest usa token hasheado en vez de cuid como bearer público.
   const guestTokenRaw = payload.guestToken;
+  const guestLookupHref = `${base}/pedido?n=${encodeURIComponent(payload.orderNumber)}`;
   const guestOrderHref = guestTokenRaw
     ? `${base}/checkout/success?token=${encodeURIComponent(guestTokenRaw)}`
-    : `${base}/checkout/success?orderId=${encodeURIComponent(payload.id)}`;
+    : guestLookupHref;
   const padded = paddedOrderNo(payload.orderNumber);
 
   const formattedDate = new Intl.DateTimeFormat('es-VE', {
@@ -451,21 +452,21 @@ export function OrderConfirmationEmail(payload: OrderConfirmationPayload) {
       </Section>
 
       <PrimaryCta
-        href={guestTokenRaw ? guestOrderHref : orderHref}
+        href={guestTokenRaw || payload.customerIsGuest ? guestOrderHref : orderHref}
         label="Ver detalles del pedido"
         fullWidth
       />
 
-      {/* Enlace alternativo para usuarios con cuenta o que prefieren login */}
+      {/* The number alone never grants access: public lookup also requires ID. */}
       {guestTokenRaw ? (
         <Section style={{ padding: '4px 28px 0', fontFamily: fontSans, textAlign: 'center' }}>
           <Text style={{ margin: 0, fontSize: 12, color: MT.textMuted, lineHeight: 1.6 }}>
-            ¿Tienes una cuenta?{' '}
+            ¿El enlace anterior venció?{' '}
             <Link
-              href={orderHref}
+              href={guestLookupHref}
               style={{ color: MT.gold, textDecoration: 'underline', fontSize: 12 }}
             >
-              Inicia sesión para ver tu pedido
+              Consulta el pedido con tu número y cédula
             </Link>
           </Text>
         </Section>

@@ -1,18 +1,15 @@
 'use server';
 
 import { prisma } from '@/lib/prisma';
-import { sendRestockNotificationEmail } from '@/lib/resend';
+import { enqueueRestockNotifications, processEmailDeliveries } from '@/lib/email-delivery';
 import { rateLimit } from '@/lib/rate-limit';
 import { requirePermissionAction } from '@/lib/admin-access-server';
 import { getActionClientIp } from '@/lib/security';
 import { z } from 'zod';
 import { logWarn, logError, logInfo } from '@/lib/safe-logger';
-import { BRAND } from '@/config/brand';
-
-const SITE_URL = BRAND.siteUrl;
 
 const subscribeSchema = z.object({
-  email:     z.string().email('Email inválido'),
+  email:     z.string().trim().toLowerCase().email('Email inválido'),
   productId: z.string().min(1, 'Producto requerido'),
 });
 
@@ -43,10 +40,10 @@ export async function subscribeRestockAction(
   try {
     const product = await prisma.product.findUnique({
       where:  { id: productId },
-      select: { id: true, stock: true },
+      select: { id: true, stock: true, isActive: true },
     });
 
-    if (!product) {
+    if (!product?.isActive) {
       return { success: false, message: 'Producto no encontrado.' };
     }
 
@@ -54,10 +51,14 @@ export async function subscribeRestockAction(
       return { success: false, message: 'Este producto ya tiene stock disponible.' };
     }
 
-    await prisma.restockSubscription.upsert({
+    await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'restock:' + parsed.data.email + ':' + productId}, 0))`;
+    const subscription = await tx.restockSubscription.upsert({
       where:  { email_productId: { email: parsed.data.email, productId } },
-      update: { notifiedAt: null },
+      update: {},
       create: { email: parsed.data.email, productId },
+    });
+    if (subscription.notifiedAt) await tx.restockSubscription.update({ where: { id: subscription.id }, data: { notifiedAt: null, generation: { increment: 1 } } });
     });
 
     return {
@@ -72,9 +73,8 @@ export async function subscribeRestockAction(
 
 /**
  * Envía emails a todos los suscriptores pendientes de un producto que acaba de
- * tener restock. Reclama `notifiedAt` antes de enviar (claim atómico); si el
- * envío falla, revierte el claim. Best-effort: errores no relanzan para no
- * bloquear la actualización del admin.
+ * tener restock. La cola durable conserva fallos y reclamos interrumpidos;
+ * `notifiedAt` solo se fija tras aceptación del proveedor.
  *
  * Debe llamarse SOLO cuando el stock pasa de 0 a > 0.
  */
@@ -100,51 +100,11 @@ export async function triggerRestockNotifications(
   }
 
   try {
-    const subscribers = await prisma.restockSubscription.findMany({
-      where: { productId, notifiedAt: null },
-      select: { id: true, email: true },
-    });
-
-    if (subscribers.length === 0) return;
-
-    const slug      = productSlug ?? productId;
-    const productUrl = `${SITE_URL}/product/${slug}`;
-    const priceStr   = productPrice != null
-      ? `US $${productPrice.toFixed(2)}`
-      : undefined;
-
-    const now = new Date();
-    let notifiedCount = 0;
-
-    for (const sub of subscribers) {
-      // Claim atómico: solo una ejecución gana este registro.
-      const claim = await prisma.restockSubscription.updateMany({
-        where: { id: sub.id, notifiedAt: null },
-        data:  { notifiedAt: now },
-      });
-      if (claim.count !== 1) continue;
-
-      try {
-        await sendRestockNotificationEmail({
-          email:           sub.email,
-          productName,
-          productUrl,
-          productImageUrl: productImageUrl ?? undefined,
-          productPrice:    priceStr,
-        });
-        notifiedCount++;
-      } catch (e) {
-        // El envío falló: revertir el claim para permitir reintento futuro.
-        await prisma.restockSubscription.updateMany({
-          where: { id: sub.id },
-          data:  { notifiedAt: null },
-        });
-        logError('restock_email_send_failed', e, { operation: 'trigger_restock_notifications', provider: 'resend' });
-      }
-    }
-
-    if (notifiedCount > 0) {
-      logInfo('restock_notifications_sent', { count: notifiedCount, operation: 'trigger_restock_notifications' });
+    // Build the notification from the authoritative catalogue, not RPC input.
+    await enqueueRestockNotifications(productId);
+    const result = await processEmailDeliveries(['RESTOCK']);
+    if (result.accepted.RESTOCK) {
+      logInfo('restock_notifications_accepted', { count: result.accepted.RESTOCK, operation: 'trigger_restock_notifications' });
     }
   } catch (err) {
     logError('restock_notifications_dispatch_failed', err, { operation: 'trigger_restock_notifications' });

@@ -1,3 +1,4 @@
+vi.mock('@/lib/cashea-config', () => ({ getCasheaConfig: () => ({ externalClientId: 'merchant-1' }) }));
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const findUniqueMock = vi.fn();
@@ -44,6 +45,8 @@ function baseOrder(overrides: Record<string, unknown> = {}) {
     id: 'order-1',
     orderNumber: 42,
     status: 'Pendiente',
+    stockDeducted: true, paidAt: null, updatedAt: new Date(),
+    casheaInitialAmount: 25.5, casheaCurrency: 'USD', total: 100, exchangeRateUsdBs: 1, customerIdNumber: 'V12345678',
     casheaStatus: 'RETURNED',
     casheaOrderId: 'CASHEA-123',
     casheaAttemptCount: 0,
@@ -130,7 +133,7 @@ describe('processCasheaConfirmation — verifyCasheaOrder sin implementar (Secci
     expect(result).toEqual({ outcome: 'pending_not_implemented', casheaStatus: 'RETURNED' });
     expect(updateManyMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: 'order-1', casheaStatus: 'VERIFYING' },
+        where: expect.objectContaining({ id: 'order-1', casheaStatus: 'VERIFYING' }),
         data: expect.objectContaining({ casheaStatus: 'RETURNED', casheaAttemptCount: { increment: 1 } }),
       }),
     );
@@ -158,19 +161,44 @@ describe('processCasheaConfirmation — verifyCasheaOrder sin implementar (Secci
   });
 });
 
+describe('processCasheaConfirmation — correlación obligatoria', () => {
+  it.each([
+    ['pedido ajeno', { localOrderReference: 'other-order' }],
+    ['comprador ajeno', { customerIdentification: 'V00000000' }],
+    ['comercio ajeno', { merchantId: 'other-merchant' }],
+    ['moneda incorrecta', { currency: 'VES' }],
+    ['total distinto', { totalAmount: 101 }],
+    ['inicial distinta', { initialAmount: 26 }],
+    ['inicial ausente', { initialAmount: undefined }],
+  ])('no confirma con %s', async (_label, overrides) => {
+    findUniqueMock.mockResolvedValueOnce(baseOrder());
+    verifyCasheaOrderMock.mockResolvedValueOnce({ confirmed: true, initialAmount: 25.5, totalAmount: 100, localOrderReference: 'order-1', customerIdentification: 'V12345678', merchantId: 'merchant-1', currency: 'USD', raw: {}, ...overrides });
+    expect(await processCasheaConfirmation('order-1')).toEqual({ outcome: 'pending_not_confirmed', casheaStatus: 'RETURNED' });
+    expect(sendPaymentValidatedEmailMock).not.toHaveBeenCalled();
+    expect(updateManyMock.mock.calls.some(([args]) => args.data.casheaStatus === 'CONFIRMED')).toBe(false);
+  });
+
+  it('no inventa el pago inicial esperado cuando la sesión no lo capturó', async () => {
+    findUniqueMock.mockResolvedValueOnce(baseOrder({ casheaInitialAmount: null }));
+    verifyCasheaOrderMock.mockResolvedValueOnce({ confirmed: true, initialAmount: 25.5, totalAmount: 100, localOrderReference: 'order-1', customerIdentification: 'V12345678', merchantId: 'merchant-1', currency: 'USD', raw: {} });
+    expect((await processCasheaConfirmation('order-1')).outcome).toBe('pending_not_confirmed');
+    expect(sendPaymentValidatedEmailMock).not.toHaveBeenCalled();
+  });
+});
+
 describe('processCasheaConfirmation — confirmación exitosa', () => {
   it('confirmed=true -> transiciona a CONFIRMED, fija paidAt/estado y envía el correo una vez', async () => {
     findUniqueMock
       .mockResolvedValueOnce(baseOrder()) // lectura inicial
       .mockResolvedValueOnce(baseOrder({ casheaStatus: 'CONFIRMED' })); // relectura post-transacción
-    verifyCasheaOrderMock.mockResolvedValueOnce({ confirmed: true, initialAmount: 25.5, raw: {} });
+    verifyCasheaOrderMock.mockResolvedValueOnce({ confirmed: true, initialAmount: 25.5, totalAmount: 100, localOrderReference: 'order-1', customerIdentification: 'V12345678', merchantId: 'merchant-1', currency: 'USD', raw: {} });
 
     const result = await processCasheaConfirmation('order-1');
 
     expect(result).toEqual({ outcome: 'confirmed', casheaStatus: 'CONFIRMED' });
     expect(updateManyMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: 'order-1', casheaStatus: 'VERIFYING' },
+        where: expect.objectContaining({ id: 'order-1', casheaStatus: 'VERIFYING' }),
         data: expect.objectContaining({
           casheaStatus: 'CONFIRMED',
           status: 'En Proceso',
@@ -193,7 +221,7 @@ describe('processCasheaConfirmation — confirmación exitosa', () => {
     findUniqueMock
       .mockResolvedValueOnce(baseOrder())
       .mockResolvedValueOnce(baseOrder({ casheaStatus: 'CONFIRMED' }));
-    verifyCasheaOrderMock.mockResolvedValueOnce({ confirmed: true, raw: {} });
+    verifyCasheaOrderMock.mockResolvedValueOnce({ confirmed: true, initialAmount: 25.5, totalAmount: 100, localOrderReference: 'order-1', customerIdentification: 'V12345678', merchantId: 'merchant-1', currency: 'USD', raw: {} });
 
     const first = await processCasheaConfirmation('order-1');
     expect(first.outcome).toBe('confirmed');
@@ -213,7 +241,7 @@ describe('processCasheaConfirmation — confirmación exitosa', () => {
     findUniqueMock
       .mockResolvedValueOnce(baseOrder())
       .mockResolvedValueOnce(baseOrder({ casheaStatus: 'CONFIRMED' }));
-    verifyCasheaOrderMock.mockResolvedValueOnce({ confirmed: true, raw: {} });
+    verifyCasheaOrderMock.mockResolvedValueOnce({ confirmed: true, initialAmount: 25.5, totalAmount: 100, localOrderReference: 'order-1', customerIdentification: 'V12345678', merchantId: 'merchant-1', currency: 'USD', raw: {} });
     // La transición dentro de la transacción pierde la carrera (count 0).
     updateManyMock.mockImplementation(async (args: { where: { casheaStatus?: unknown } }) => {
       if (args.where.casheaStatus === 'VERIFYING') return { count: 0 };
@@ -230,7 +258,7 @@ describe('processCasheaConfirmation — confirmación exitosa', () => {
     findUniqueMock
       .mockResolvedValueOnce(baseOrder({ customerEmail: null, customer: { email: null, name: null } }))
       .mockResolvedValueOnce(baseOrder({ casheaStatus: 'CONFIRMED' }));
-    verifyCasheaOrderMock.mockResolvedValueOnce({ confirmed: true, raw: {} });
+    verifyCasheaOrderMock.mockResolvedValueOnce({ confirmed: true, initialAmount: 25.5, totalAmount: 100, localOrderReference: 'order-1', customerIdentification: 'V12345678', merchantId: 'merchant-1', currency: 'USD', raw: {} });
 
     const result = await processCasheaConfirmation('order-1');
 

@@ -26,6 +26,15 @@ import { Resend } from 'resend';
 import * as React from 'react';
 import { isE2eMode } from '@/lib/e2e-mode';
 import { logError, logWarn } from '@/lib/safe-logger';
+import { prisma } from '@/lib/prisma';
+import { encryptEmailPayload, decryptEmailPayload } from '@/lib/email-payload';
+import type { CreateEmailOptions } from 'resend';
+import { createHash } from 'crypto';
+import { emailOutboxTransaction } from '@/lib/email-outbox-context';
+
+export type EmailSendResult = { accepted: true; providerMessageId: string } | {
+  accepted: false; reason: 'unconfigured' | 'invalid' | 'provider_error' | 'exception';
+} | { accepted: false; reason: 'queued'; deliveryId: string };
 
 export type { OrderConfirmationPayload, OrderConfirmationLineItem } from '@/emails/transactional/types';
 
@@ -81,20 +90,25 @@ function getResend(): Resend | null {
  * no se relanzan (envío best-effort que nunca debe tumbar el flujo de negocio).
  */
 async function sendBrandedEmail(params: {
-  resend: Resend;
+  resend: Resend | null;
   to: string;
   subject: string;
   element: React.ReactElement;
   logScope: string;
-}): Promise<void> {
-  const { resend, to, subject, element, logScope } = params;
-
-  // PRD-020: sin remitente propio configurado no se envía nada (nunca se usa
-  // un dominio de terceros como From).
-  if (!FROM_ADDRESS) {
-    logWarn('resend_from_address_absent', { provider: 'resend', operation: logScope });
-    return;
-  }
+  deliveryId?: string;
+  expiresAt?: Date;
+  tokenType?: 'PASSWORD_RESET' | 'EMAIL_CHANGE';
+  tokenHash?: string;
+  orderId?: string;
+  orderRef?: string;
+  trackingNumber?: string;
+  trackingCarrier?: string | null;
+  trackingUrl?: string | null;
+  requestKey?: string;
+  enqueueOnly?: boolean;
+}): Promise<EmailSendResult> {
+  const { to, subject, element, logScope } = params;
+  const outboxTx = emailOutboxTransaction();
 
   try {
     const [html, text] = await Promise.all([
@@ -102,8 +116,8 @@ async function sendBrandedEmail(params: {
       render(element, { plainText: true }),
     ]);
 
-    const { error } = await resend.emails.send({
-      from: FROM_ADDRESS,
+    const payload: CreateEmailOptions = {
+      from: '', // Filled once, immediately before the first provider attempt.
       to,
       // Sin correo de atención configurado se omite el Reply-To: mandar uno
       // vacío haría fallar la petición a Resend.
@@ -111,13 +125,62 @@ async function sendBrandedEmail(params: {
       subject,
       html,
       text,
+    };
+    if (params.deliveryId) {
+      if (outboxTx) throw new Error('Reminder delivery cannot run inside a business outbox transaction');
+      await prisma.emailDelivery.updateMany({
+        where: { id: params.deliveryId, providerPayload: null },
+        data: { providerPayload: encryptEmailPayload(payload) },
+      });
+      return sendStoredBrandedEmail(params.deliveryId);
+    }
+    const dedupKey = `TRANSACTIONAL:${createHash('sha256').update(JSON.stringify(payload)).digest('hex')}${params.requestKey ? ':' + params.requestKey : ''}`;
+    const queued = await (outboxTx ?? prisma).emailDelivery.upsert({
+      where: { dedupKey }, update: {}, create: {
+        dedupKey, kind: 'TRANSACTIONAL', resourceId: logScope, recipient: to.trim().toLowerCase(),
+        payload: { scope: logScope, ...(params.tokenType && params.tokenHash ? { tokenType: params.tokenType, tokenHash: params.tokenHash } : {}), ...(params.orderId ? { orderId: params.orderId } : {}), ...(params.orderRef ? { orderRef: params.orderRef } : {}), ...(params.trackingNumber ? { trackingNumber: params.trackingNumber, trackingCarrier: params.trackingCarrier ?? null, trackingUrl: params.trackingUrl ?? null } : {}) },
+        providerPayload: encryptEmailPayload(payload),
+        tokenExpiresAt: params.expiresAt ?? new Date(Date.now() + 30 * 24 * 60 * 60_000),
+      },
     });
+    if (outboxTx || params.enqueueOnly) return { accepted: false, reason: 'queued', deliveryId: queued.id };
+    const { processEmailDeliveries } = await import('@/lib/email-delivery');
+    await processEmailDeliveries(['TRANSACTIONAL'], 1, queued.id);
+    const stored = await prisma.emailDelivery.findUniqueOrThrow({ where: { id: queued.id }, select: { acceptedAt: true, providerMessageId: true } });
+    return stored.acceptedAt && stored.providerMessageId ? { accepted: true, providerMessageId: stored.providerMessageId } : { accepted: false, reason: 'provider_error' };
+  } catch (err) {
+    if (outboxTx) throw err;
+    logError('resend_enqueue_exception', err, { provider: 'resend', operation: logScope });
+    return { accepted: false, reason: 'exception' };
+  }
+}
+
+/** Worker-only boundary: exact encrypted body and stable provider key on every retry. */
+export async function sendStoredBrandedEmail(deliveryId: string): Promise<EmailSendResult> {
+  const resend = getResend();
+  if (!resend || !FROM_ADDRESS) return { accepted: false, reason: 'unconfigured' };
+  try {
+    const stored = await prisma.emailDelivery.findUniqueOrThrow({ where: { id: deliveryId }, select: { providerPayload: true, firstAttemptAt: true } });
+    if (!stored.providerPayload) return { accepted: false, reason: 'invalid' };
+    let payload: CreateEmailOptions;
+    try { payload = decryptEmailPayload<CreateEmailOptions>(stored.providerPayload); }
+    catch { return { accepted: false, reason: 'invalid' }; }
+    if (!payload.from) {
+      if (stored.firstAttemptAt) throw new Error('Durable email sender missing after an attempt');
+      payload.from = FROM_ADDRESS;
+      await prisma.emailDelivery.updateMany({ where: { id: deliveryId, firstAttemptAt: null }, data: { providerPayload: encryptEmailPayload(payload) } });
+    }
+    await prisma.emailDelivery.updateMany({ where: { id: deliveryId, firstAttemptAt: null }, data: { firstAttemptAt: new Date() } });
+    const { data, error } = await resend.emails.send(payload, { idempotencyKey: `delivery/${deliveryId}`, signal: AbortSignal.timeout(10_000) });
 
     if (error) {
-      logError('resend_send_failed', error, { provider: 'resend', operation: logScope });
+      logError('resend_send_failed', error, { provider: 'resend', operation: 'email_delivery' });
+      return { accepted: false, reason: 'provider_error' };
     }
+    return data?.id ? { accepted: true, providerMessageId: data.id } : { accepted: false, reason: 'provider_error' };
   } catch (err) {
-    logError('resend_send_exception', err, { provider: 'resend', operation: logScope });
+    logError('resend_send_exception', err, { provider: 'resend', operation: 'email_delivery' });
+    return { accepted: false, reason: 'exception' };
   }
 }
 
@@ -143,10 +206,6 @@ export async function sendPaymentValidatedEmail(
   options: PaymentValidatedEmailOptions = {},
 ): Promise<void> {
   const resend = getResend();
-  if (!resend) {
-    logWarn('resend_api_key_missing', { provider: 'resend', operation: 'payment-validated-email' });
-    return;
-  }
 
   const trimmedEmail = email.trim();
   if (!trimmedEmail) {
@@ -165,6 +224,8 @@ export async function sendPaymentValidatedEmail(
       ? brandSubject('Inicial de Cashea confirmada — tu pedido va en preparación')
       : brandSubject('Pago confirmado — tu pedido va en preparación'),
     logScope: 'payment-validated-email',
+    orderId: orderUuid,
+    orderRef: trimmedOrderRef,
     element: (
       <PaymentValidatedEmail
         customerName={trimmedName}
@@ -188,10 +249,6 @@ export async function sendPaymentRejectedEmail(
   orderUuid?: string
 ): Promise<void> {
   const resend = getResend();
-  if (!resend) {
-    logWarn('resend_api_key_missing', { provider: 'resend', operation: 'payment-rejected-email' });
-    return;
-  }
 
   const trimmedEmail = email.trim();
   if (!trimmedEmail) {
@@ -207,6 +264,8 @@ export async function sendPaymentRejectedEmail(
     to: trimmedEmail,
     subject: brandSubject(`No pudimos verificar el pago de tu pedido #${trimmedOrderRef}`),
     logScope: 'payment-rejected-email',
+    orderId: orderUuid,
+    orderRef: trimmedOrderRef,
     element: (
       <PaymentRejectedEmail
         customerName={trimmedName}
@@ -221,28 +280,33 @@ export async function sendPaymentRejectedEmail(
 /**
  * Confirmación de pedido tras checkout exitoso. Errores se registran; no relanza.
  */
-export async function sendOrderConfirmationEmail(order: OrderConfirmationPayload): Promise<void> {
+export async function sendOrderConfirmationEmailResult(order: OrderConfirmationPayload, options: { requestKey?: string; enqueueOnly?: boolean } = {}): Promise<EmailSendResult> {
   const resend = getResend();
-  if (!resend) {
-    logWarn('resend_api_key_missing', { provider: 'resend', operation: 'order-confirmation-email' });
-    return;
-  }
 
   const trimmedEmail = order.email.trim();
   if (!trimmedEmail) {
     logWarn('order_confirmation_email_empty', { provider: 'resend', operation: 'order-confirmation-email' });
-    return;
+    return { accepted: false, reason: 'invalid' };
   }
 
   const subjNo = String(order.orderNumber).padStart(4, '0');
 
-  await sendBrandedEmail({
+  return sendBrandedEmail({
     resend,
     to: trimmedEmail,
     subject: brandSubject(`Recibimos tu pedido #${subjNo} — ya lo estamos revisando`),
     logScope: 'order-confirmation-email',
+    orderId: order.id,
+    requestKey: options.requestKey,
+    enqueueOnly: options.enqueueOnly,
+    ...(order.guestToken ? { expiresAt: new Date(Date.now() + 72 * 60 * 60_000) } : {}),
     element: <OrderConfirmationEmail {...order} />,
   });
+}
+
+/** Existing business callers keep the void contract; outbox failures still throw. */
+export async function sendOrderConfirmationEmail(order: OrderConfirmationPayload): Promise<void> {
+  await sendOrderConfirmationEmailResult(order);
 }
 
 /**
@@ -256,10 +320,6 @@ export async function sendShippingEmail(
   opts?: ShippingNotificationOptions
 ): Promise<void> {
   const resend = getResend();
-  if (!resend) {
-    logWarn('resend_api_key_missing', { provider: 'resend', operation: 'shipping-email' });
-    return;
-  }
 
   const trimmedEmail = email.trim();
   const trimmedTracking = trackingNumber.trim();
@@ -275,6 +335,10 @@ export async function sendShippingEmail(
     to: trimmedEmail,
     subject: brandSubject('Tu pedido salió de la tienda — aquí va tu guía'),
     logScope: 'shipping-email',
+    orderRef: opts?.orderId ?? undefined,
+    trackingNumber: trimmedTracking,
+    trackingCarrier: opts?.carrier ?? null,
+    trackingUrl: opts?.trackingUrl ?? null,
     element: (
       <ShippingNotificationEmail
         customerName={trimmedName}
@@ -291,10 +355,6 @@ export async function sendShippingEmail(
  */
 export async function sendOrderDeliveredEmail(email: string, firstName: string, orderRef: string): Promise<void> {
   const resend = getResend();
-  if (!resend) {
-    logWarn('resend_api_key_missing', { provider: 'resend', operation: 'order-delivered-email' });
-    return;
-  }
 
   const trimmedEmail = email.trim();
   const ref = orderRef.trim();
@@ -310,6 +370,7 @@ export async function sendOrderDeliveredEmail(email: string, firstName: string, 
     to: trimmedEmail,
     subject: brandSubject('Tu pedido llegó — revisa que todo esté perfecto'),
     logScope: 'order-delivered-email',
+    orderRef: ref,
     element: <OrderDeliveredEmail customerName={trimmedName} orderRef={ref} />,
   });
 }
@@ -320,10 +381,6 @@ export async function sendOrderDeliveredEmail(email: string, firstName: string, 
  */
 export async function sendWelcomeEmail(email: string, firstName: string): Promise<void> {
   const resend = getResend();
-  if (!resend) {
-    logWarn('resend_api_key_missing', { provider: 'resend', operation: 'welcome-email' });
-    return;
-  }
 
   const trimmed = firstName.trim() || 'Cliente';
   const trimmedEmail = email.trim();
@@ -351,24 +408,26 @@ export async function sendRestockNotificationEmail(params: {
   productUrl: string;
   productImageUrl?: string;
   productPrice?: string;
-}): Promise<void> {
+  deliveryId?: string;
+}): Promise<EmailSendResult> {
   const resend = getResend();
   if (!resend) {
     logWarn('resend_api_key_missing', { provider: 'resend', operation: 'restock-email' });
-    return;
+    return { accepted: false, reason: 'unconfigured' };
   }
 
   const trimmedEmail = params.email.trim();
   if (!trimmedEmail) {
     logWarn('restock_email_empty', { provider: 'resend', operation: 'restock-email' });
-    return;
+    return { accepted: false, reason: 'invalid' };
   }
 
-  await sendBrandedEmail({
+  return sendBrandedEmail({
     resend,
     to: trimmedEmail,
     subject: brandSubject(`¡${params.productName} volvió al stock!`),
     logScope: 'restock-email',
+    deliveryId: params.deliveryId,
     element: (
       <RestockNotificationEmail
         productName={params.productName}
@@ -391,19 +450,21 @@ export async function sendAbandonedCartEmail(params: {
   items:         AbandonedCartItem[];
   totalUsd:      number;
   recoveryToken: string;
+  unsubscribeToken?: string;
+  deliveryId?: string;
   /** MEJORA 1.3: cupón de un solo uso incluido en el segundo toque (72 h). */
   coupon?: { code: string; discountLabel: string; expiryDays: number };
-}): Promise<void> {
+}): Promise<EmailSendResult> {
   const resend = getResend();
   if (!resend) {
     logWarn('resend_api_key_missing', { provider: 'resend', operation: 'abandoned-cart-email' });
-    return;
+    return { accepted: false, reason: 'unconfigured' };
   }
 
   const trimmedEmail = params.email.trim();
   if (!trimmedEmail || params.items.length === 0) {
     logWarn('abandoned_cart_email_empty', { provider: 'resend', operation: 'abandoned-cart-email' });
-    return;
+    return { accepted: false, reason: 'invalid' };
   }
 
   const base          = emailSiteBaseUrl().replace(/\/$/, '');
@@ -411,15 +472,16 @@ export async function sendAbandonedCartEmail(params: {
   // carrito del cliente desde el snapshot y lo deja en /cart listo para pagar.
   // Apuntar a /checkout "a secas" llegaba con el carrito vacío.
   const recoveryUrl   = `${base}/api/cart/recover?token=${encodeURIComponent(params.recoveryToken)}`;
-  const unsubscribeUrl = `${base}/api/cart/unsubscribe?token=${encodeURIComponent(params.recoveryToken)}`;
+  const unsubscribeUrl = `${base}/api/cart/unsubscribe?token=${encodeURIComponent(params.unsubscribeToken ?? params.recoveryToken)}`;
 
-  await sendBrandedEmail({
+  return sendBrandedEmail({
     resend,
     to:       trimmedEmail,
     subject: params.coupon
       ? brandSubject(`Tu carrito te espera — con ${params.coupon.discountLabel}`)
       : brandSubject('Te guardamos el carrito tal como lo dejaste'),
     logScope: 'abandoned-cart-email',
+    deliveryId: params.deliveryId,
     element: (
       <AbandonedCartEmail
         customerName={params.customerName.trim() || 'Cliente'}
@@ -449,10 +511,6 @@ export async function sendOrderCancelledEmail(
   options: OrderCancelledEmailOptions = {},
 ): Promise<void> {
   const resend = getResend();
-  if (!resend) {
-    logWarn('resend_api_key_missing', { provider: 'resend', operation: 'order-cancelled-email' });
-    return;
-  }
 
   const trimmedEmail = email.trim();
   if (!trimmedEmail) {
@@ -471,6 +529,7 @@ export async function sendOrderCancelledEmail(
         ? brandSubject(`Tu pedido #${ref} venció después de ${options.expiredAfterHours} horas`)
         : brandSubject(`Tu pedido #${ref} fue cancelado`),
     logScope: 'order-cancelled-email',
+    orderRef: ref,
     element: (
       <OrderCancelledEmail
         customerName={trimmedName}
@@ -490,12 +549,9 @@ export async function sendEmailChangeConfirmEmail(params: {
   customerName: string;
   confirmUrl: string;
   newEmail: string;
+  expiresAt?: Date;
 }): Promise<void> {
   const resend = getResend();
-  if (!resend) {
-    logWarn('resend_api_key_missing', { provider: 'resend', operation: 'email-change-confirm' });
-    return;
-  }
 
   const trimmedEmail = params.to.trim();
   if (!trimmedEmail) {
@@ -508,6 +564,9 @@ export async function sendEmailChangeConfirmEmail(params: {
     to: trimmedEmail,
     subject: brandSubject('Confirma tu nuevo correo electrónico'),
     logScope: 'email-change-confirm',
+    expiresAt: params.expiresAt ?? new Date(Date.now() + 60 * 60_000),
+    tokenType: 'EMAIL_CHANGE',
+    tokenHash: createHash('sha256').update(new URL(params.confirmUrl).searchParams.get('token') ?? '').digest('hex'),
     element: (
       <EmailChangeConfirmEmail
         customerName={params.customerName.trim() || 'Cliente'}
@@ -522,28 +581,30 @@ export async function sendEmailChangeConfirmEmail(params: {
  * FASE 4.5 (MEJORA 2.2): solicitud de reseña 7 días después de la entrega.
  * Un email por pedido con deep-links por producto. Errores se registran; no relanza.
  */
-export async function sendReviewRequestEmail(params: {
+export async function sendReviewRequestEmailResult(params: {
   email: string;
   customerName: string;
   products: ReviewRequestProduct[];
-}): Promise<boolean> {
+  deliveryId?: string;
+}): Promise<EmailSendResult> {
   const resend = getResend();
   if (!resend) {
     logWarn('resend_api_key_missing', { provider: 'resend', operation: 'review-request-email' });
-    return false;
+    return { accepted: false, reason: 'unconfigured' };
   }
 
   const trimmedEmail = params.email.trim();
   if (!trimmedEmail || params.products.length === 0) {
     logWarn('review_request_email_empty', { provider: 'resend', operation: 'review-request-email' });
-    return false;
+    return { accepted: false, reason: 'invalid' };
   }
 
-  await sendBrandedEmail({
+  const result = await sendBrandedEmail({
     resend,
     to: trimmedEmail,
     subject: brandSubject('¿Qué tal tu compra? Cuéntanos en 1 minuto'),
     logScope: 'review-request-email',
+    deliveryId: params.deliveryId,
     element: (
       <ReviewRequestEmail
         customerName={params.customerName.trim() || 'Cliente'}
@@ -551,16 +612,16 @@ export async function sendReviewRequestEmail(params: {
       />
     ),
   });
-  return true;
+  return result;
+}
+
+export async function sendReviewRequestEmail(params: Parameters<typeof sendReviewRequestEmailResult>[0]): Promise<boolean> {
+  return (await sendReviewRequestEmailResult(params)).accepted;
 }
 
 /** Correo de recuperación de contraseña. Errores se registran; no relanza. */
-export async function sendPasswordResetEmail(email: string, token: string): Promise<void> {
+export async function sendPasswordResetEmail(email: string, token: string, expiresAt?: Date): Promise<void> {
   const resend = getResend();
-  if (!resend) {
-    logWarn('resend_api_key_missing', { provider: 'resend', operation: 'password-reset-email' });
-    return;
-  }
 
   const trimmedEmail = email.trim();
   if (!trimmedEmail || !token.trim()) {
@@ -578,6 +639,9 @@ export async function sendPasswordResetEmail(email: string, token: string): Prom
     to: trimmedEmail,
     subject: brandSubject('Restablecer tu contraseña'),
     logScope: 'password-reset-email',
+    expiresAt: expiresAt ?? new Date(Date.now() + 60 * 60_000),
+    tokenType: 'PASSWORD_RESET',
+    tokenHash: createHash('sha256').update(token.trim()).digest('hex'),
     element: <PasswordResetEmail resetUrl={resetUrl} />,
   });
 }
@@ -592,10 +656,6 @@ export async function sendEmailChangeNoticeEmail(params: {
   newEmail: string;
 }): Promise<void> {
   const resend = getResend();
-  if (!resend) {
-    logWarn('resend_api_key_missing', { provider: 'resend', operation: 'email-change-notice' });
-    return;
-  }
   const trimmedEmail = params.to.trim();
   if (!trimmedEmail) return;
 

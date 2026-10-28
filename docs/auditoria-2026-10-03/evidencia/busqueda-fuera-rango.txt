@@ -1,0 +1,155 @@
+- link "Saltar al contenido":
+  - /url: "#main-content"
+- banner:
+  - text: 0412-0000000
+  - text: e2e@example.test
+  - text: "Tienda física: Dirección de prueba E2E"
+  - text: Delivery gratis en Barquisimeto
+  - link "Tienda Auditoría Local — Ir al inicio":
+    - /url: /
+    - img "Tienda Auditoría Local"
+  - button "Categorías":
+    - text: Categorías
+  - search:
+    - combobox "Buscar productos"
+    - button "Buscar":
+      - generic: Buscar
+  - navigation "Navegación principal":
+    - link "Lista de deseos":
+      - /url: /wishlist
+      - generic: Lista de deseos
+    - button "Mi cuenta":
+      - generic: A
+      - generic: Admin
+    - button "Carrito de compras":
+      - generic: Carrito de compras
+      - generic: Carrito
+      - generic: "1"
+- status
+- main:
+  - navigation "Breadcrumb":
+    - link "Inicio":
+      - /url: /
+    - generic: Búsqueda
+    - generic: Bluetooth
+  - paragraph:
+    - text: Resultados de búsqueda
+  - heading "Resultados para “Bluetooth”" [level=1]:
+    - text: Resultados para
+    - generic: “Bluetooth”
+  - paragraph: 0 productos encontrados
+  - complementary:
+    - button "Categorías" [expanded]:
+      - text: Categorías
+    - list:
+      - button "Todas las categorías 0":
+        - generic: Todas las categorías
+        - generic: "0"
+      - button "Electrónicos":
+        - generic: Electrónicos
+    - button "Marcas" [expanded]:
+      - text: Marcas
+    - list:
+      - button "Todas las marcas":
+        - generic: Todas las marcas
+      - button "TestBrand":
+        - generic: TestBrand
+    - button "Precio (USD)":
+      - text: Precio (USD)
+    - spinbutton "Precio mínimo"
+    - generic: —
+    - spinbutton "Precio máximo"
+    - button "Aplicar precio"
+    - button "Ordenar":
+      - text: Ordenar
+    - list:
+      - button "Relevancia":
+        - generic: Relevancia
+      - button "Más recientes":
+        - generic: Más recientes
+      - button "Menor precio":
+        - generic: Menor precio
+      - button "Mayor precio":
+        - generic: Mayor precio
+      - button "Nombre A-Z":
+        - generic: Nombre A-Z
+      - button "Nombre Z-A":
+        - generic: Nombre Z-A
+    - button "Mostrar agotados":
+      - text: Mostrar agotados
+    - text: 0 productos en total
+  - paragraph: Todos los resultados
+  - paragraph: 0 resultados en esta página
+  - combobox "Ordenar resultados":
+    - option "Relevancia" [selected]
+    - option "Más recientes"
+    - option "Menor precio"
+    - option "Mayor precio"
+    - option "Nombre A-Z"
+    - option "Nombre Z-A"
+  - paragraph: Sin resultados
+  - paragraph:
+    - text: No encontramos productos que coincidan con
+    - generic: “Bluetooth”
+    - text: . Prueba con otros términos o limpia los filtros.
+  - link "Ver catálogo":
+    - /url: /productos
+- contentinfo:
+  - link "Tienda Auditoría Local — Ir al inicio":
+    - /url: /
+    - img "Tienda Auditoría Local — Tienda de pruebas E2E"
+  - paragraph: Tienda de pruebas E2E
+  - generic: Dirección de prueba E2E
+  - generic: "Lun · Mar · Mié · Jue · Vie: 08:30 – 17:30 · Sáb: 08:30 – 18:00"
+  - link "0412-0000000":
+    - /url: tel:+584120000000
+    - text: 0412-0000000
+  - link "e2e@example.test":
+    - /url: mailto:e2e@example.test
+    - text: e2e@example.test
+  - link "Escríbenos por WhatsApp":
+    - /url: https://wa.me/584120000000?text=Hola%20Tienda%20Auditor%C3%ADa%20Local%2C%20los%20contacto%20desde%20la%20p%C3%A1gina%20web.
+    - text: Escríbenos por WhatsApp
+  - heading "Tienda" [level=3]
+  - list:
+    - link "Inicio":
+      - /url: /
+    - link "Catálogo":
+      - /url: /productos
+    - link "Quiénes somos":
+      - /url: /nosotros
+    - link "Nuestra tienda":
+      - /url: /tienda-barquisimeto
+    - link "Accesorios":
+      - /url: /productos
+  - heading "Ayuda" [level=3]
+  - list:
+    - link "Mis pedidos":
+      - /url: /account/orders
+    - link "¿Dónde está mi pedido?":
+      - /url: /pedido
+    - link "Devoluciones y garantía":
+      - /url: /devoluciones
+    - link "Envíos":
+      - /url: /shipping-policy
+    - link "Privacidad":
+      - /url: /privacy-policy
+    - link "Términos":
+      - /url: /terms-of-service
+  - heading "Síguenos" [level=3]
+  - heading "Así nos pagas" [level=3]
+  - generic: Pago Móvil
+  - generic: Transferencia Bancaria
+  - generic: Binance Pay
+  - generic: Cashea
+  - paragraph: Precios en dólares y bolívares, a la tasa del día. El total en Bs se calcula al momento de pagar.
+  - paragraph: © 2026 Tienda E2E · Dirección de prueba E2E
+- region "Notifications (F8)":
+  - list
+- button "Open Next.js Dev Tools":
+- button "Open issues overlay":
+  - generic: "0"
+  - generic: "1"
+  - generic: Issue
+- button "Collapse issues badge":
+- alert

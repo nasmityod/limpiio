@@ -3,10 +3,15 @@
 #
 # APP_SLUG nombra esta instancia en el servidor: /var/www/<slug>,
 # /etc/<slug>/<slug>.env y /var/log/<slug>-cron.log. cron exporta las
-# asignaciones de este archivo al entorno del comando, y cada línea la ejecuta
-# /bin/sh, así que $APP_SLUG se expande en rutas y redirecciones.
-# Cámbialo aquí si la instancia se despliega con otro nombre.
+# el instalador sustituye las rutas y asigna APP_SLUG/APP_ENV_FILE por comando,
+# para preservar otras instancias en el mismo crontab.
+# Instalar con APP_SLUG=nombre APP_ENV_FILE=/etc/nombre/nombre.env.
 APP_SLUG=storefront
+# Private PostgreSQL backup; serialized separately from API maintenance.
+0 2 * * * flock -n /var/lock/$APP_SLUG-backup.lock /var/www/$APP_SLUG/scripts/backup-postgres.sh >> /var/log/$APP_SLUG-backup.log 2>&1
+# Reconciliation is a no-op until the authoritative Cashea adapter is available.
+*/5 * * * * /var/www/$APP_SLUG/scripts/run-cron-endpoint.sh cashea-reconcile >> /var/log/$APP_SLUG-cron.log 2>&1
+*/5 * * * * /var/www/$APP_SLUG/scripts/run-cron-endpoint.sh email-delivery >> /var/log/$APP_SLUG-cron.log 2>&1
 # update-bcv-rate: 00:15, 01:15 y 05:15 TODOS los días.
 #   - 00:15 caza la publicación de medianoche de la API.
 #   - 01:15 y 05:15 son reintentos por si la fuente publica con retraso.
@@ -21,6 +26,7 @@ APP_SLUG=storefront
 # Borra reset tokens, tokens de email, metadatos PaymentUpload DELETED (>30d), vistas y carritos abandonados
 # según la política de retención. No borra pedidos ni comprobantes LINKED.
 0 3 * * * /var/www/$APP_SLUG/scripts/run-cron-endpoint.sh purge-temporary-data >> /var/log/$APP_SLUG-cron.log 2>&1
+20 3 * * * /var/www/$APP_SLUG/scripts/run-cron-endpoint.sh purge-orphan-uploads >> /var/log/$APP_SLUG-cron.log 2>&1
 # SESIÓN 05 — Purga horaria de PaymentUpload PENDING/UPLOADING expirados: borra objeto R2 y marca DELETED.
 15 * * * * /var/www/$APP_SLUG/scripts/run-cron-endpoint.sh purge-payment-uploads >> /var/log/$APP_SLUG-cron.log 2>&1
 # Cancelación automática de pedidos pendientes: cada 15 minutos, al superar 48 horas desde createdAt.

@@ -15,6 +15,8 @@
  * se usa directamente `NEXT_PUBLIC_CASHEA_ENABLED`, nunca este módulo.
  */
 
+import { CASHEA_AUTHORITATIVE_ADAPTER_READY } from '@/lib/cashea-readiness';
+
 export type CasheaEnvironment = 'sandbox' | 'production';
 
 /**
@@ -170,6 +172,7 @@ export function getCasheaConfig(): CasheaConfig {
       );
     }
 
+    if (!CASHEA_AUTHORITATIVE_ADAPTER_READY) throw new Error('[cashea-config] El adaptador autoritativo de Cashea no está implementado. Mantén CASHEA_ENABLED=false hasta completar el contrato y la aceptación sandbox.');
     return {
       enabled,
       environment,
@@ -202,7 +205,7 @@ export function getCasheaConfig(): CasheaConfig {
     currency,
     deliveryPrice,
     publicApiKey: process.env.NEXT_PUBLIC_CASHEA_PUBLIC_API_KEY?.trim() || null,
-    publicEnabled,
+    publicEnabled: false,
   };
 }
 
@@ -212,5 +215,5 @@ export function getCasheaConfig(): CasheaConfig {
  * responder 404/no-op mientras Cashea está apagado).
  */
 export function isCasheaEnabled(): boolean {
-  return parseBoolean('CASHEA_ENABLED', process.env.CASHEA_ENABLED);
+  return parseBoolean('CASHEA_ENABLED', process.env.CASHEA_ENABLED) && CASHEA_AUTHORITATIVE_ADAPTER_READY;
 }

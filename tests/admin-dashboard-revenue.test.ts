@@ -98,6 +98,10 @@ describe('la consulta SQL implementa las mismas reglas', () => {
     expect([...VALIDATED_REVENUE_STATUSES]).toEqual(['En Proceso', 'Enviado', 'Entregado']);
   });
 
+  it('un estado avanzado sin pago confirmado no constituye ingreso', () => {
+    expect(DASHBOARD_SOURCE).toContain('AND (o."paidAt" IS NOT NULL OR o."legacyPaidConfirmed" = true)');
+  });
+
   it('redondea la conversión a USD por pedido', () => {
     expect(DASHBOARD_SOURCE).toContain('ROUND(o."total" / o."exchangeRateUsdBs", 2)');
   });
@@ -127,6 +131,7 @@ describe('la consulta SQL implementa las mismas reglas', () => {
       .filter(line => !line.trim().startsWith('//') && !line.trim().startsWith('*'))
       .join('\n');
     expect(code).not.toMatch(/findMany\(\{[^}]*distinct/s);
-    expect(code).toContain('COUNT(DISTINCT category)');
+    expect(code).toContain('prisma.category.count()');
+    expect(code).not.toContain('COUNT(DISTINCT category)');
   });
 });

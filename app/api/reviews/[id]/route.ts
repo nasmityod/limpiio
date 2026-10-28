@@ -10,11 +10,13 @@ import { rejectInvalidMutationOrigin } from '@/lib/security';
 import {
   reviewToClient,
   reviewInputSchema,
+  reviewPhotosBelongToUser,
   readReviewsAutoApprove,
   deleteReviewPhotosFromR2,
 } from '@/lib/reviews';
 import { VALID_REVIEW_STATUSES } from '@/lib/definitions';
 import { logError } from '@/lib/safe-logger';
+import { claimReviewPhotos, ReviewPhotoError } from '@/lib/review-photo-assets';
 
 async function revalidateProductReviews(productId: string) {
   try {
@@ -121,8 +123,16 @@ export async function PATCH(
       const autoApprove = await readReviewsAutoApprove();
       const approved = autoApprove && existing.verifiedPurchase;
       const nextPhotos = authorParsed.data.photos ?? [];
+      if (!reviewPhotosBelongToUser(nextPhotos, userId, existing.photos ?? [])) {
+        return NextResponse.json({ error: 'Las fotos deben haber sido subidas desde tu cuenta.' }, { status: 422 });
+      }
 
-      const review = await prisma.review.update({
+      const result = await prisma.$transaction(async tx => {
+        await tx.$executeRaw`SELECT id FROM "Review" WHERE id = ${id} FOR UPDATE`;
+        const current = await tx.review.findUnique({ where: { id } });
+        if (!current || current.userId !== userId) throw new ReviewPhotoError('La reseña ya no está disponible.');
+        await claimReviewPhotos(tx, nextPhotos, userId, current.photos);
+        const review = await tx.review.update({
         where: { id },
         data: {
           rating: authorParsed.data.rating,
@@ -131,12 +141,14 @@ export async function PATCH(
           photos: nextPhotos,
           status: approved ? 'APPROVED' : 'PENDING',
         },
+        });
+        return { review, removed: current.photos.filter(u => !nextPhotos.includes(u)) };
       });
+      const { review } = result;
 
       // SEC-2026-09 (#21): las fotos retiradas de la reseña se borran de R2 —
       // antes quedaban huérfanas para siempre en el CDN público.
-      const removed = (existing.photos ?? []).filter((u) => !nextPhotos.includes(u));
-      await deleteReviewPhotosFromR2(removed);
+      await deleteReviewPhotosFromR2(result.removed, existing.userId);
 
       await revalidateProductReviews(review.productId);
 
@@ -148,6 +160,7 @@ export async function PATCH(
           : 'Reseña actualizada. Será visible tras una breve revisión.',
       });
     } catch (error) {
+      if (error instanceof ReviewPhotoError) return NextResponse.json({ error: error.message }, { status: 422 });
       logError('reviews_author_patch_failed', error, { route: '/api/reviews/[id]' });
       return NextResponse.json({ error: 'No se pudo actualizar la reseña.' }, { status: 500 });
     }
@@ -188,7 +201,7 @@ export async function DELETE(
       }
 
       const deleted = await prisma.review.deleteMany({ where: { id, userId } });
-      if (deleted.count > 0) await deleteReviewPhotosFromR2(existing.photos ?? []);
+      if (deleted.count > 0) await deleteReviewPhotosFromR2(existing.photos ?? [], existing.userId);
       await revalidateProductReviews(existing.productId);
       return NextResponse.json({ success: true });
     }
@@ -197,7 +210,7 @@ export async function DELETE(
     if (!auth.authorized) return auth.response;
 
     const deleted = await prisma.review.deleteMany({ where: { id } });
-    if (deleted.count > 0) await deleteReviewPhotosFromR2(existing.photos ?? []);
+    if (deleted.count > 0) await deleteReviewPhotosFromR2(existing.photos ?? [], existing.userId);
     await revalidateProductReviews(existing.productId);
     return NextResponse.json({ success: true });
   } catch (error) {

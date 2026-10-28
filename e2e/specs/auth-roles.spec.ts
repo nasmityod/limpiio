@@ -40,7 +40,7 @@ test.describe('Auth y Roles', () => {
   });
 
   test('GET /api/orders/:id/payment-proof — guest 401, CLIENT 403', async ({ page, request }) => {
-    // Guest sin sesión: middleware.ts (isUserTokenApi) devuelve 401 sin
+    // Guest sin sesión: proxy.ts (isUserTokenApi) devuelve 401 sin
     // llegar al handler ni consultar BD. El id no necesita existir.
     const guestResponse = await request.get('/api/orders/does-not-exist/payment-proof');
     expect(guestResponse.status()).toBe(401);

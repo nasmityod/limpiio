@@ -11,6 +11,8 @@ import { trackingUrlSchema, trackingPhotoUrlSchema } from '@/lib/tracking-url-va
 import { rejectInvalidMutationOrigin } from '@/lib/security';
 import { deletePrivateProof } from '@/lib/r2';
 import { logError } from '@/lib/safe-logger';
+import { queueTrackingNotification } from '@/lib/order-tracking-notification';
+import { orderSnapshotGuard, OrderTransitionConflict, UNPAID_ORDER_STATUSES } from '@/lib/order-lifecycle';
 
 export async function GET(
   _request: Request,
@@ -93,7 +95,7 @@ export async function PATCH(
   const raw = (body ?? {}) as Record<string, unknown>;
   const has = (key: string) => Object.prototype.hasOwnProperty.call(raw, key);
 
-  const data: Prisma.OrderUpdateInput = {};
+  const data: Prisma.OrderUpdateManyMutationInput = {};
   let touchedTracking = false;
 
   if (has('trackingNumber'))   { data.trackingNumber   = parsed.data.trackingNumber   ?? null; touchedTracking = true; }
@@ -106,29 +108,31 @@ export async function PATCH(
     return NextResponse.json({ error: 'Nada que actualizar.' }, { status: 400 });
   }
 
-  const current = await prisma.order.findUnique({
-    where: { id },
-    select: { shippedAt: true, status: true },
-  });
-  if (!current) return NextResponse.json({ error: 'Pedido no encontrado.' }, { status: 404 });
-
-  const hasTrackingValue = !!(
-    parsed.data.trackingNumber ??
-    parsed.data.trackingCarrier ??
-    parsed.data.trackingUrl ??
-    parsed.data.trackingPhotoUrl
-  );
-  if (touchedTracking && hasTrackingValue && !current.shippedAt && current.status === 'Enviado') {
-    data.shippedAt = new Date();
+  try {
+    const updated = await prisma.$transaction(async (tx) => {
+      const current = await tx.order.findUnique({
+        where: { id }, include: { items: true, customer: { select: { email: true, name: true } } },
+      });
+      if (!current) throw new OrderTransitionConflict('Pedido no encontrado.');
+      const hasTrackingValue = [parsed.data.trackingNumber, parsed.data.trackingCarrier, parsed.data.trackingUrl, parsed.data.trackingPhotoUrl]
+        .some(value => typeof value === 'string' && value.trim() !== '');
+      if (touchedTracking && hasTrackingValue && !current.shippedAt && current.status === 'Enviado') data.shippedAt = new Date();
+      const claim = await tx.order.updateMany({ where: orderSnapshotGuard(current), data });
+      if (claim.count !== 1) throw new OrderTransitionConflict();
+      const updated = await tx.order.findUnique({
+        where: { id }, include: { items: true, customer: { select: { email: true, name: true } } },
+      });
+      if (!updated) throw new OrderTransitionConflict();
+      if (touchedTracking) await queueTrackingNotification(tx, current, updated);
+      return updated;
+    });
+    return NextResponse.json(prismaOrderToOrder(updated));
+  } catch (error) {
+    if (error instanceof OrderTransitionConflict) return NextResponse.json({ error: error.message }, { status: error.message === 'Pedido no encontrado.' ? 404 : 409 });
+    logError('order_patch_failed', error, { operation: 'update_order_tracking', orderId: id });
+    return NextResponse.json({ error: 'No se pudo actualizar el pedido.' }, { status: 500 });
   }
 
-  const updated = await prisma.order.update({
-    where: { id },
-    data,
-    include: { items: true },
-  });
-
-  return NextResponse.json(prismaOrderToOrder(updated));
 }
 
 export async function DELETE(
@@ -156,23 +160,24 @@ export async function DELETE(
         throw err;
       }
 
-      await applyOrderCancellationEffectsInTransaction(tx, {
-        id: order.id,
-        status: order.status,
-        items: order.items,
-        stockDeducted: order.stockDeducted,
-      });
-      // SEC-2026-09 (#22): el comprobante vinculado se marca DELETED en la misma
-      // tx; antes quedaba LINKED con orderId=null (SetNull) y ningún cron lo
-      // purgaba — la captura bancaria del cliente vivía para siempre en R2.
-      await tx.paymentUpload.updateMany({
-        where: { orderId: order.id },
-        data: { status: 'DELETED' },
-      });
+      if (order.casheaStatus || order.paidAt || (!(UNPAID_ORDER_STATUSES as readonly string[]).includes(order.status) && order.status !== 'Cancelado')) throw new OrderTransitionConflict('Los pedidos pagados, enviados o Cashea conservan su historial; no se pueden borrar por esta vía.');
+      const claim = await tx.order.updateMany({ where: orderSnapshotGuard(order), data: { status: 'Cancelado' } });
+      if (claim.count !== 1) throw new OrderTransitionConflict();
+      if (order.status !== 'Cancelado') await applyOrderCancellationEffectsInTransaction(tx, order, { stockClaimStatus: 'Cancelado' });
+      // Durable deletion task survives loss of the process or an unavailable bucket.
+      await tx.paymentUpload.updateMany({ where: { orderId: order.id }, data: { status: 'DELETING' } });
+      if (order.paymentProofKey) {
+        await tx.paymentUpload.upsert({
+          where: { objectKey: order.paymentProofKey },
+          update: { status: 'DELETING' },
+          create: { tokenHash: `cleanup:${order.id}`, objectKey: order.paymentProofKey, status: 'DELETING', expiresAt: new Date() },
+        });
+      }
       await tx.order.delete({ where: { id } });
       return order.paymentProofKey ?? null;
     });
   } catch (err) {
+    if (err instanceof OrderTransitionConflict) return NextResponse.json({ error: err.message }, { status: 409 });
     if (err instanceof Error && err.name === 'OrderNotFoundError') {
       return NextResponse.json({ error: 'Pedido no encontrado.' }, { status: 404 });
     }
@@ -182,6 +187,7 @@ export async function DELETE(
   if (proofKey) {
     try {
       await deletePrivateProof(proofKey);
+      await prisma.paymentUpload.updateMany({ where: { objectKey: proofKey, status: 'DELETING' }, data: { status: 'DELETED' } });
     } catch (err) {
       logError('order_delete_proof_cleanup_failed', err, {
         operation: 'delete_order',

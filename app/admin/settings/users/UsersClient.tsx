@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition, useRef, useEffect, useCallback } from 'react';
+import { useState, useTransition, useRef, useEffect, useCallback, useId } from 'react';
 import {
   Users, Plus, KeyRound, Trash2, Loader2, X, Check, AlertCircle,
   UserCircle, SlidersHorizontal, Crown, ChevronDown, Search,
@@ -16,6 +16,7 @@ import {
 } from '@/app/actions/userActions';
 import { DataTable, type DataTableColumn } from '@/components/admin/DataTable';
 import { TouchIconButton } from '@/components/admin/TouchIconButton';
+import { useAdminDialog } from '@/hooks/useAdminDialog';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { isAdminRole } from '@/lib/is-admin-role';
 import {
@@ -88,7 +89,7 @@ export default function UsersClient({
 
   const flash = (type: 'success' | 'error', msg: string) => {
     setFeedback({ type, msg });
-    setTimeout(() => setFeedback(null), 4500);
+    if (type === 'success') setTimeout(() => setFeedback(current => current?.type === 'success' ? null : current), 4500);
   };
 
   /** Guardia de concurrencia: sólo la respuesta más reciente escribe estado. */
@@ -104,7 +105,8 @@ export default function UsersClient({
       setUsers(result.users);
       setTotal(result.total);
       if (result.users.length === 0 && page > 1) setPage(p => Math.max(1, p - 1));
-    } finally {
+    } catch { if (seq === requestSeq.current) setFeedback({ type: 'error', msg: 'No se pudieron cargar los usuarios. Vuelve a intentarlo.' }); }
+    finally {
       if (seq === requestSeq.current) setRefreshing(false);
     }
   }, [search, page, pageSize, onlyStaff]);
@@ -126,18 +128,22 @@ export default function UsersClient({
   }, [filterKey]);
 
   const refresh = async () => {
-    const { listPermissionAuditLog } = await import('@/app/actions/userActions');
-    const [, newLog] = await Promise.all([loadUsers(), listPermissionAuditLog()]);
-    setAuditLog(newLog);
+    try {
+      const { listPermissionAuditLog } = await import('@/app/actions/userActions');
+      const [, newLog] = await Promise.all([loadUsers(), listPermissionAuditLog()]);
+      setAuditLog(newLog);
+    } catch { flash('error', 'No se pudo actualizar el historial de permisos.'); }
   };
 
   const handleDelete = async (u: AdminUser) => {
+    try {
     const res = await deleteAdminUser(u.id);
     if (res.success) {
       flash('success', res.message);
       await refresh();
     } else flash('error', res.message);
     setDeleteConfirm(null);
+    } catch { flash('error', 'No se pudo eliminar el usuario. Vuelve a intentarlo.'); }
   };
 
   const columns: DataTableColumn<AdminUser>[] = [
@@ -415,28 +421,7 @@ function PermissionsDialog({
   );
   const [pending, startTransition] = useTransition();
   const [confirmClear, setConfirmClear] = useState(false);
-  const dialogRef = useRef<HTMLDivElement>(null);
-
-  // Focus trap y Escape
-  useEffect(() => {
-    const el = dialogRef.current;
-    if (!el) return;
-    const firstFocusable = el.querySelector<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
-    firstFocusable?.focus();
-
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-      if (e.key === 'Tab') {
-        const focusables = el.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled])');
-        const first = focusables[0];
-        const last  = focusables[focusables.length - 1];
-        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
-        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
-      }
-    };
-    document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
-  }, [onClose]);
+  const { dialogRef, close } = useAdminDialog(onClose, true, pending);
 
   const toggle = (perm: AdminPermission) => {
     setSelected(prev => {
@@ -460,20 +445,24 @@ function PermissionsDialog({
     setConfirmClear(false);
   };
 
+  const [dialogError, setDialogError] = useState('');
+  const showError = (message: string) => { setDialogError(message); onError(message); };
+
   const handleSave = () => {
     startTransition(async () => {
+      try {
       const res = await updateUserPermissions({
         userId:      user.id,
         permissions: [...selected],
       });
       if (res.success) onSaved(res.message);
-      else onError(res.message);
+      else showError(res.message);
+      } catch { showError('No se pudieron guardar los permisos. Vuelve a intentarlo.'); }
     });
   };
 
   const groups = getPermissionsByGroup();
   const count  = selected.size;
-  const wasAdmin = user.adminPermissions.length > 0;
 
   return (
     <div
@@ -481,7 +470,7 @@ function PermissionsDialog({
       aria-modal="true"
       aria-labelledby="perm-dialog-title"
       className="fixed inset-0 z-50 flex sm:items-center sm:justify-center"
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={e => { if (e.target === e.currentTarget) close(); }}
     >
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
       <div
@@ -489,6 +478,7 @@ function PermissionsDialog({
         className="relative z-10 w-full sm:w-[520px] sm:max-w-[92vw] sm:my-6 bg-white sm:rounded-2xl shadow-2xl flex flex-col max-h-screen max-h-[100dvh] sm:max-h-[90vh]"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
+        {dialogError && <p role="alert" className="p-3 bg-red-50 text-red-700 rounded-lg text-sm">{dialogError}</p>}
         {/* Header */}
         <header className="sticky top-0 bg-white sm:rounded-t-2xl border-b border-gray-100 px-4 py-3.5 flex items-center justify-between gap-3"
           style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.875rem)' }}>
@@ -496,7 +486,7 @@ function PermissionsDialog({
             <h2 id="perm-dialog-title" className="text-base font-black text-navy">Permisos de usuario</h2>
             <p className="text-xs text-gray-500 truncate">{user.email}</p>
           </div>
-          <button type="button" onClick={onClose} aria-label="Cerrar" className="w-11 h-11 flex items-center justify-center rounded-full active:bg-gray-100">
+          <button type="button" onClick={close} aria-label="Cerrar" className="w-11 h-11 flex items-center justify-center rounded-full active:bg-gray-100">
             <X size={20} className="text-gray-500" />
           </button>
         </header>
@@ -576,7 +566,7 @@ function PermissionsDialog({
             {' '}Pagos y exportación de clientes incluyen Pedidos automáticamente.
           </p>
           <div className="flex gap-2">
-            <button type="button" onClick={onClose} disabled={pending}
+            <button type="button" onClick={close} disabled={pending}
               className="flex-1 min-h-[48px] bg-white border border-gray-200 text-gray-700 text-sm font-semibold rounded-xl">
               Cancelar
             </button>
@@ -649,14 +639,16 @@ function CreateUserDialog({ onClose, onCreated }: { onClose: () => void; onCreat
   const submit = () => {
     setError(null);
     startTransition(async () => {
+      try {
       const res = await createAdminUser({ name, email, password });
       if (res.success) onCreated();
       else setError(res.message);
+      } catch { setError('Error de conexión. Los datos pendientes se conservan.'); }
     });
   };
 
   return (
-    <Dialog title="Nuevo usuario" onClose={onClose}>
+    <Dialog title="Nuevo usuario" onClose={onClose} busy={pending}>
       <p className="text-xs text-gray-500">El usuario se crea sin permisos. Podrás asignarlos a continuación.</p>
       <DialogField label="Nombre completo" value={name} onChange={setName} />
       <DialogField label="Email" type="email" value={email} onChange={setEmail} />
@@ -684,14 +676,16 @@ function ResetPasswordDialog({ user, onClose, onDone }: { user: AdminUser; onClo
   const submit = () => {
     setError(null);
     startTransition(async () => {
+      try {
       const res = await resetUserPassword({ userId: user.id, password });
       if (res.success) onDone();
       else setError(res.message);
+      } catch { setError('Error de conexión. Los datos pendientes se conservan.'); }
     });
   };
 
   return (
-    <Dialog title={`Nueva contraseña — ${user.email}`} onClose={onClose}>
+    <Dialog title={`Nueva contraseña — ${user.email}`} onClose={onClose} busy={pending}>
       <DialogField label="Nueva contraseña" type="password" value={password} onChange={setPassword} hint="Mínimo 8 caracteres." />
       {error && (
         <p className="text-sm font-medium text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{error}</p>
@@ -711,13 +705,13 @@ function ResetPasswordDialog({ user, onClose, onDone }: { user: AdminUser; onClo
 function DeleteConfirmDialog({ user, onClose, onConfirm }: { user: AdminUser; onClose: () => void; onConfirm: () => void }) {
   const [pending, startTransition] = useTransition();
   return (
-    <Dialog title={`Eliminar usuario`} onClose={onClose}>
+    <Dialog title={`Eliminar usuario`} onClose={onClose} busy={pending}>
       <p className="text-sm text-gray-700">
         ¿Confirmas que deseas eliminar <strong>{user.email}</strong>? Esta acción no se puede deshacer.
       </p>
       <DialogFooter>
         <button type="button" onClick={onClose} disabled={pending} className="flex-1 min-h-[48px] bg-white border border-gray-200 text-gray-700 text-sm font-semibold rounded-xl">Cancelar</button>
-        <button type="button" onClick={() => startTransition(onConfirm)} disabled={pending}
+        <button type="button" onClick={() => startTransition(async () => { await onConfirm(); })} disabled={pending}
           className="flex-1 min-h-[48px] bg-red-600 text-white text-sm font-black uppercase rounded-xl flex items-center justify-center gap-2">
           {pending ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />} Eliminar
         </button>
@@ -728,16 +722,17 @@ function DeleteConfirmDialog({ user, onClose, onConfirm }: { user: AdminUser; on
 
 // ─── Primitivos ──────────────────────────────────────────────────────────────
 
-function Dialog({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+function Dialog({ title, onClose, children, busy = false }: { title: string; onClose: () => void; children: React.ReactNode; busy?: boolean }) {
+  const { dialogRef, close } = useAdminDialog(onClose, true, busy);
   return (
-    <div className="fixed inset-0 z-50 flex sm:items-center sm:justify-center" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={title} className="fixed inset-0 z-50 flex sm:items-center sm:justify-center" onClick={(e) => { if (e.target === e.currentTarget) close(); }}>
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
       <div className="relative z-10 w-full sm:w-[420px] sm:max-w-[92vw] sm:my-6 bg-white sm:rounded-2xl shadow-2xl flex flex-col max-h-screen max-h-[100dvh] sm:max-h-[88vh]"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         <header className="sticky top-0 bg-white sm:rounded-t-2xl border-b border-gray-100 px-4 py-3.5 flex items-center justify-between gap-3"
           style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.875rem)' }}>
           <h2 className="text-base font-black text-navy truncate">{title}</h2>
-          <button type="button" onClick={onClose} aria-label="Cerrar" className="w-11 h-11 flex items-center justify-center rounded-full active:bg-gray-100">
+          <button type="button" onClick={close} aria-label="Cerrar" className="w-11 h-11 flex items-center justify-center rounded-full active:bg-gray-100">
             <X size={20} className="text-gray-500" />
           </button>
         </header>
@@ -758,10 +753,11 @@ function DialogField({ label, value, onChange, type = 'text', hint }: {
   type?:    string;
   hint?:    string;
 }) {
+  const fieldId = useId();
   return (
     <div>
-      <label className="block text-xs font-bold uppercase tracking-wide text-gray-700 mb-1.5">{label}</label>
-      <input
+      <label htmlFor={fieldId} className="block text-xs font-bold uppercase tracking-wide text-gray-700 mb-1.5">{label}</label>
+      <input id={fieldId}
         type={type}
         value={value}
         onChange={e => onChange(e.target.value)}

@@ -79,6 +79,11 @@ export function searchTermsFrom(q: string): string[] {
     .slice(0, 6);
 }
 
+/** SQL bindings prevent injection; escaping also makes user %/_ literal text. */
+export function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, '\\$&');
+}
+
 /**
  * Matching tolerante a errores por palabra (pg_trgm + unaccent):
  * - LIKE sobre la expresión normalizada → coincidencia exacta de subcadena.
@@ -89,16 +94,17 @@ export function searchTermsFrom(q: string): string[] {
  * Umbral configurable a nivel de BD: SET pg_trgm.word_similarity_threshold.
  */
 function textMatchWhere(q: string): Prisma.Sql {
+  const literal = escapeLikePattern(q);
   const words = searchTermsFrom(q);
   if (words.length === 0) {
     return Prisma.sql`(
-      ${NORMALIZED_SEARCH_EXPR} LIKE '%' || immutable_unaccent(lower(${q})) || '%'
+      ${NORMALIZED_SEARCH_EXPR} LIKE '%' || immutable_unaccent(lower(${literal})) || '%'
       OR immutable_unaccent(lower(name)) % immutable_unaccent(lower(${q}))
     )`;
   }
   const perWord = words.map(
     (w) => Prisma.sql`(
-      ${NORMALIZED_SEARCH_EXPR} LIKE '%' || immutable_unaccent(lower(${w})) || '%'
+      ${NORMALIZED_SEARCH_EXPR} LIKE '%' || immutable_unaccent(lower(${escapeLikePattern(w)})) || '%'
       OR immutable_unaccent(lower(${w})) <% ${NORMALIZED_SEARCH_EXPR}
     )`,
   );
@@ -106,16 +112,17 @@ function textMatchWhere(q: string): Prisma.Sql {
 }
 
 function relevanceOrderBy(q: string): Prisma.Sql {
+  const literal = escapeLikePattern(q);
   return Prisma.sql`
     CASE
-      WHEN immutable_unaccent(lower(name)) LIKE immutable_unaccent(lower(${q})) || '%' THEN 0
-      WHEN immutable_unaccent(lower(name)) LIKE '%' || immutable_unaccent(lower(${q})) || '%' THEN 1
-      WHEN immutable_unaccent(lower(coalesce(brand,''))) LIKE '%' || immutable_unaccent(lower(${q})) || '%' THEN 2
-      WHEN immutable_unaccent(lower(category)) LIKE '%' || immutable_unaccent(lower(${q})) || '%' THEN 3
+      WHEN immutable_unaccent(lower(name)) LIKE immutable_unaccent(lower(${literal})) || '%' THEN 0
+      WHEN immutable_unaccent(lower(name)) LIKE '%' || immutable_unaccent(lower(${literal})) || '%' THEN 1
+      WHEN immutable_unaccent(lower(coalesce(brand,''))) LIKE '%' || immutable_unaccent(lower(${literal})) || '%' THEN 2
+      WHEN immutable_unaccent(lower(category)) LIKE '%' || immutable_unaccent(lower(${literal})) || '%' THEN 3
       ELSE 4
     END ASC,
     similarity(immutable_unaccent(lower(name)), immutable_unaccent(lower(${q}))) DESC,
-    "createdAt" DESC
+    "createdAt" DESC, id DESC
   `;
 }
 
@@ -125,19 +132,19 @@ function buildOrderBy(query: ProductQuery): Prisma.Sql {
 
   switch (sort) {
     case 'price-asc':
-      return Prisma.sql`price ASC`;
+      return Prisma.sql`price ASC, id ASC`;
     case 'price-desc':
-      return Prisma.sql`price DESC`;
+      return Prisma.sql`price DESC, id DESC`;
     case 'name-asc':
-      return Prisma.sql`name ASC`;
+      return Prisma.sql`name ASC, id ASC`;
     case 'name-desc':
-      return Prisma.sql`name DESC`;
+      return Prisma.sql`name DESC, id DESC`;
     case 'newest':
-      return Prisma.sql`"createdAt" DESC`;
+      return Prisma.sql`"createdAt" DESC, id DESC`;
     case 'relevance':
-      return q.length >= 2 ? relevanceOrderBy(q) : Prisma.sql`"createdAt" DESC`;
+      return q.length >= 2 ? relevanceOrderBy(q) : Prisma.sql`"createdAt" DESC, id DESC`;
     default:
-      return Prisma.sql`"createdAt" DESC`;
+      return Prisma.sql`"createdAt" DESC, id DESC`;
   }
 }
 
@@ -207,9 +214,9 @@ export async function queryCatalogProducts(
   const facetWhere = buildWhereConditions(query, { forFacets: true });
   const orderBy = buildOrderBy(query);
 
-  const [productRows, facetRows] = await Promise.all([
+  const [productRows, facetRows, totalRows] = await Promise.all([
     prisma.$queryRaw<
-      Array<CatalogProductRow & { totalCount: bigint }>
+      Array<CatalogProductRow>
     >(Prisma.sql`
       SELECT
         id,
@@ -222,8 +229,7 @@ export async function queryCatalogProducts(
         category,
         brand,
         images,
-        "freeShipping",
-        COUNT(*) OVER() AS "totalCount"
+        "freeShipping"
       FROM "Product"
       WHERE ${productWhere}
       ORDER BY ${orderBy}
@@ -239,9 +245,12 @@ export async function queryCatalogProducts(
       FROM "Product"
       WHERE ${facetWhere}
     `),
+    prisma.$queryRaw<Array<{ total: bigint }>>(Prisma.sql`
+      SELECT COUNT(*) AS total FROM "Product" WHERE ${productWhere}
+    `),
   ]);
 
-  const total = productRows.length > 0 ? Number(productRows[0].totalCount) : 0;
+  const total = Number(totalRows[0]?.total ?? 0);
 
   return {
     items: productRows.map(mapRowToCard),
@@ -252,6 +261,7 @@ export async function queryCatalogProducts(
 
 /** Sugerencias rápidas para autocomplete (máx. 7). */
 export async function querySearchSuggestions(q: string, limit = 7): Promise<CatalogProductCard[]> {
+  limit = Number.isFinite(limit) ? Math.min(20, Math.max(1, Math.trunc(limit))) : 7;
   const trimmed = q.trim();
   if (trimmed.length < 2 || trimmed.length > 120) return [];
 

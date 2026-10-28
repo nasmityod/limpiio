@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/Badge';
 
 interface OrderHistoryClientProps {
   orders: Order[];
+  total?: number;
 }
 
 const formatDate = (dateString: string) =>
@@ -36,7 +37,7 @@ function orderStepIndex(o: Order): number {
   }
 }
 
-export default function OrderHistoryClient({ orders }: OrderHistoryClientProps) {
+export default function OrderHistoryClient({ orders, total = orders.length }: OrderHistoryClientProps) {
   const router = useRouter();
   const [guestRef, setGuestRef] = useState('');
 
@@ -70,14 +71,14 @@ export default function OrderHistoryClient({ orders }: OrderHistoryClientProps) 
           </p>
           <p className="text-xs text-slate-500 mb-3">
             Los pedidos realizados sin cuenta no aparecen aquí, pero puedes
-            consultarlos con tu número de pedido (lo recibiste por correo).
+            consultarlos con tu número de pedido y la cédula usada al comprar.
           </p>
           <form
             onSubmit={(e) => {
               e.preventDefault();
               const ref = guestRef.trim();
               if (!ref) return;
-              router.push(`/account/orders/${encodeURIComponent(ref)}`);
+              router.push(`/pedido?n=${encodeURIComponent(ref)}`);
             }}
             className="flex gap-2 max-w-sm"
           >
@@ -107,7 +108,7 @@ export default function OrderHistoryClient({ orders }: OrderHistoryClientProps) 
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl md:text-[1.75rem] font-bold text-navy tracking-tight">Mis pedidos</h1>
         <span className="text-sm text-slate-500">
-          {orders.length} pedido{orders.length !== 1 ? 's' : ''}
+          {total} pedido{total !== 1 ? 's' : ''}
         </span>
       </div>
 

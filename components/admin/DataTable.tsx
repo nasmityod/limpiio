@@ -113,7 +113,7 @@ export function DataTable<T>({
     others: mobileColumns.filter(c => !c.primary && !c.secondary),
   }), [mobileColumns]);
 
-  const allSelected = data.length > 0 && selectedIds.length === data.length;
+  const allSelected = data.length > 0 && data.every(row => selectedSet.has(rowKey(row)));
 
   const toggleAll = () => {
     if (!onSelectionChange) return;
@@ -167,13 +167,12 @@ export function DataTable<T>({
           const isSelected = selectedSet.has(id);
 
           const interactive = Boolean(onRowClick);
-          const Wrapper = interactive ? 'button' : ('div' as const);
+          const Wrapper = 'div';
 
           return (
             <li key={id}>
               <Wrapper
-                type={interactive ? 'button' : undefined}
-                onClick={interactive ? () => onRowClick?.(row) : undefined}
+                onClick={interactive ? (e) => { if (!(e.target as HTMLElement).closest('button, a, input, select, textarea, label')) onRowClick?.(row); } : undefined}
                 className={`w-full text-left bg-white border rounded-2xl shadow-sm p-3.5 ${ACCENT_BORDER[accent]} ${ACCENT_BG[accent]} touch-manipulation select-none ${
                   interactive ? 'active:bg-gray-50' : ''
                 } ${isSelected ? 'ring-2 ring-brand-yellow' : ''}`}
@@ -186,6 +185,7 @@ export function DataTable<T>({
                     >
                       <input
                         type="checkbox"
+                        aria-label={`Seleccionar registro ${id}`}
                         checked={isSelected}
                         onChange={() => toggleOne(id)}
                         className="w-6 h-6 sm:w-5 sm:h-5 rounded border-gray-300 text-navy focus:ring-navy"
@@ -210,6 +210,7 @@ export function DataTable<T>({
                     )}
                   </div>
 
+                  {interactive && <button type="button" aria-label={`Abrir registro ${id}`} className="min-w-[44px] min-h-[44px] rounded-lg text-navy focus-visible:ring-2 focus-visible:ring-navy" onClick={(e) => { e.stopPropagation(); onRowClick?.(row); }}>→</button>}
                   {actions && (
                     <div className="flex items-center gap-1 flex-shrink-0" onClick={e => e.stopPropagation()}>
                       {actions(row)}
@@ -252,6 +253,7 @@ export function DataTable<T>({
                 <th className="px-4 py-3 w-12">
                   <input
                     type="checkbox"
+                    aria-label="Seleccionar todos los registros visibles"
                     checked={allSelected}
                     onChange={toggleAll}
                     className="w-4 h-4 rounded border-gray-300 text-navy focus:ring-navy"
@@ -288,6 +290,7 @@ export function DataTable<T>({
                     <td className="px-4 py-2.5" onClick={e => e.stopPropagation()}>
                       <input
                         type="checkbox"
+                        aria-label={`Seleccionar registro ${id}`}
                         checked={isSelected}
                         onChange={() => toggleOne(id)}
                         className="w-4 h-4 rounded border-gray-300 text-navy focus:ring-navy"
@@ -300,6 +303,7 @@ export function DataTable<T>({
                       className={`px-4 py-2.5 ${col.align ? ALIGN_CLS[col.align] : ''}`}
                     >
                       {col.cell(row)}
+                      {onRowClick && col === desktopColumns[0] && <button type="button" aria-label={`Abrir registro ${id}`} className="ml-2 min-w-[32px] min-h-[32px] rounded-lg text-navy focus-visible:ring-2 focus-visible:ring-navy" onClick={(e) => { e.stopPropagation(); onRowClick(row); }}>→</button>}
                     </td>
                   ))}
                   {actions && (

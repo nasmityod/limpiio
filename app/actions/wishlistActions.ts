@@ -19,6 +19,7 @@ import { d, dn } from '@/lib/decimal';
 import { PRODUCT_CARD_SELECT } from '@/lib/product-select';
 import { firstCardImage } from '@/lib/product-media';
 import { logError } from '@/lib/safe-logger';
+import type { Prisma } from '@prisma/client';
 
 const MAX_WISHLIST_ITEMS = 100;
 
@@ -42,10 +43,11 @@ async function sessionUserId(): Promise<string | null> {
   return session?.user?.id ?? null;
 }
 
-async function loadWishlistProducts(userId: string): Promise<WishlistProductDTO[]> {
-  const rows = await prisma.wishlistItem.findMany({
+async function loadWishlistProducts(userId: string, db: Prisma.TransactionClient = prisma): Promise<WishlistProductDTO[]> {
+  const rows = await db.wishlistItem.findMany({
     where: { userId, product: { isActive: true } },
     orderBy: { createdAt: 'asc' },
+    take: MAX_WISHLIST_ITEMS,
     select: { product: { select: PRODUCT_CARD_SELECT } },
   });
   return rows.map(({ product: p }) => ({
@@ -64,15 +66,47 @@ async function loadWishlistProducts(userId: string): Promise<WishlistProductDTO[
   }));
 }
 
-/** Wishlist de la cuenta (solo productos activos). [] sin sesión. */
-export async function getWishlistAction(): Promise<WishlistProductDTO[]> {
+export type WishlistResult = { ok: true; items: WishlistProductDTO[]; unmergedIds?: string[] } | {
+  ok: false; code: 'UNAUTHORIZED' | 'UNAVAILABLE' | 'LIMIT' | 'INVALID_PRODUCT';
+};
+
+async function mutateWishlist(userId: string, ids: string[], mode: 'merge' | 'add' | 'remove' | 'clear'): Promise<WishlistResult> {
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'wishlist:' + userId}, 0))`;
+    await tx.wishlistItem.deleteMany({ where: { userId, product: { isActive: false } } });
+    const current = await tx.wishlistItem.findMany({ where: { userId }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], select: { productId: true } });
+    // Repair overfull lists from older versions without silently replacing the
+    // oldest favourites when an account receives concurrent additions.
+    if (current.length > MAX_WISHLIST_ITEMS) {
+      await tx.wishlistItem.deleteMany({ where: { userId, productId: { in: current.slice(MAX_WISHLIST_ITEMS).map(p => p.productId) } } });
+    }
+    const retained = new Set(current.slice(0, MAX_WISHLIST_ITEMS).map(p => p.productId));
+    let unmergedIds: string[] = [];
+    if (mode === 'clear') await tx.wishlistItem.deleteMany({ where: { userId } });
+    else if (mode === 'remove') await tx.wishlistItem.deleteMany({ where: { userId, productId: { in: ids } } });
+    else {
+      const valid = await tx.product.findMany({ where: { id: { in: ids }, isActive: true }, select: { id: true } });
+      const active = new Set(valid.map(p => p.id));
+      const additions = ids.filter(id => active.has(id) && !retained.has(id));
+      if (mode === 'add' && !active.has(ids[0])) return { ok: false, code: 'INVALID_PRODUCT' };
+      const remaining = MAX_WISHLIST_ITEMS - retained.size;
+      if (mode === 'add' && additions.length > remaining) return { ok: false, code: 'LIMIT' };
+      if (mode === 'merge') unmergedIds = additions.slice(remaining);
+      if (additions.length) await tx.wishlistItem.createMany({ data: additions.slice(0, remaining).map(productId => ({ userId, productId })), skipDuplicates: true });
+    }
+    return { ok: true, items: await loadWishlistProducts(userId, tx), unmergedIds };
+  });
+}
+
+/** A failed read is distinct from a successfully empty account. */
+export async function getWishlistAction(): Promise<WishlistResult> {
   const userId = await sessionUserId();
-  if (!userId) return [];
+  if (!userId) return { ok: false, code: 'UNAUTHORIZED' };
   try {
-    return await loadWishlistProducts(userId);
+    return { ok: true, items: await loadWishlistProducts(userId) };
   } catch (err) {
     logError('wishlist_get_failed', err, { operation: 'get_wishlist' });
-    return [];
+    return { ok: false, code: 'UNAVAILABLE' };
   }
 }
 
@@ -82,66 +116,52 @@ export async function getWishlistAction(): Promise<WishlistProductDTO[]> {
  */
 export async function mergeWishlistAction(
   localProductIds: string[],
-): Promise<WishlistProductDTO[]> {
+): Promise<WishlistResult> {
   const userId = await sessionUserId();
-  if (!userId) return [];
+  if (!userId) return { ok: false, code: 'UNAUTHORIZED' };
   try {
     const ids = [...new Set(localProductIds)].filter(
       (id) => typeof id === 'string' && id.length > 0 && id.length < 40,
     ).slice(0, MAX_WISHLIST_ITEMS);
 
-    if (ids.length > 0) {
-      // Solo productos que existen y están activos (ids locales pueden estar viejos).
-      const valid = await prisma.product.findMany({
-        where: { id: { in: ids }, isActive: true },
-        select: { id: true },
-      });
-      if (valid.length > 0) {
-        await prisma.wishlistItem.createMany({
-          data: valid.map((p) => ({ userId, productId: p.id })),
-          skipDuplicates: true,
-        });
-      }
-    }
-    return await loadWishlistProducts(userId);
+    return await mutateWishlist(userId, ids, 'merge');
   } catch (err) {
     logError('wishlist_merge_failed', err, { operation: 'merge_wishlist' });
-    return [];
+    return { ok: false, code: 'UNAVAILABLE' };
   }
 }
 
-export async function addWishlistItemAction(productId: string): Promise<void> {
+export async function addWishlistItemAction(productId: string): Promise<WishlistResult> {
   const userId = await sessionUserId();
-  if (!userId || !productId) return;
+  if (!userId) return { ok: false, code: 'UNAUTHORIZED' };
+  if (!productId || productId.length > 40) return { ok: false, code: 'INVALID_PRODUCT' };
   try {
-    const count = await prisma.wishlistItem.count({ where: { userId } });
-    if (count >= MAX_WISHLIST_ITEMS) return;
-    await prisma.wishlistItem.createMany({
-      data: [{ userId, productId }],
-      skipDuplicates: true,
-    });
+    return await mutateWishlist(userId, [productId], 'add');
   } catch (err) {
     // FK violation = producto inexistente; best-effort, la UI ya se actualizó.
     logError('wishlist_add_failed', err, { operation: 'add_wishlist_item' });
+    return { ok: false, code: 'UNAVAILABLE' };
   }
 }
 
-export async function removeWishlistItemAction(productId: string): Promise<void> {
+export async function removeWishlistItemAction(productId: string): Promise<WishlistResult> {
   const userId = await sessionUserId();
-  if (!userId || !productId) return;
+  if (!userId) return { ok: false, code: 'UNAUTHORIZED' };
   try {
-    await prisma.wishlistItem.deleteMany({ where: { userId, productId } });
+    return await mutateWishlist(userId, [productId], 'remove');
   } catch (err) {
     logError('wishlist_remove_failed', err, { operation: 'remove_wishlist_item' });
+    return { ok: false, code: 'UNAVAILABLE' };
   }
 }
 
-export async function clearWishlistAction(): Promise<void> {
+export async function clearWishlistAction(): Promise<WishlistResult> {
   const userId = await sessionUserId();
-  if (!userId) return;
+  if (!userId) return { ok: false, code: 'UNAUTHORIZED' };
   try {
-    await prisma.wishlistItem.deleteMany({ where: { userId } });
+    return await mutateWishlist(userId, [], 'clear');
   } catch (err) {
     logError('wishlist_clear_failed', err, { operation: 'clear_wishlist' });
+    return { ok: false, code: 'UNAVAILABLE' };
   }
 }

@@ -28,7 +28,7 @@ describe('deploy/crontab.vps', () => {
   });
 
   it('los crons de API pasan por run-cron-endpoint.sh', () => {
-    const apiLines = cronLines.filter((l) => !l.includes('run-bcv-cron.sh'));
+    const apiLines = cronLines.filter((l) => !l.includes('run-bcv-cron.sh') && !l.includes('backup-postgres.sh'));
     expect(apiLines.length).toBeGreaterThan(0);
     for (const line of apiLines) {
       expect(line).toMatch(/run-cron-endpoint\.sh [a-z-]+ >>/);

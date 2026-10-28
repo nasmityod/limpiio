@@ -9,7 +9,7 @@ const ROOT = resolve(__dirname, '..');
 
 const LEGACY_ALLOWLIST = new Set([
   'lib/api-auth.ts',
-  'middleware.ts',
+  'proxy.ts',
   'lib/is-admin-role.ts',
   'components/Navbar.tsx',
   'app/admin/settings/users/UsersClient.tsx',

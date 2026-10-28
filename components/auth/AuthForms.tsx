@@ -497,7 +497,7 @@ export function AuthRegisterForm({ callbackUrl }: RegisterPanelProps) {
         <div>
           <h2 className="text-xl font-bold tracking-tight text-navy">¡Cuenta creada!</h2>
           <p className="mt-2 text-sm text-slate-600 leading-relaxed max-w-xs">
-            Te enviamos un correo de bienvenida a{' '}
+            Recibirás un correo de bienvenida en{' '}
             <span className="font-semibold text-navy break-all">{registeredEmail}</span>.
             Revisa tu bandeja de entrada y la carpeta de spam.
           </p>

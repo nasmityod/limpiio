@@ -1,0 +1,400 @@
+{
+  "measuredAt": "2026-10-04T20:21:42.816Z",
+  "fixture": {
+    "database": "127.0.0.1:55439/limpio_audit_test",
+    "prefix": "audit_catalog_ecf99bf5e0284239adae3c5fe7a92c49",
+    "syntheticProducts": 5000,
+    "activeProducts": 4500,
+    "availableProducts": 3857,
+    "deletedProducts": 5000,
+    "remainingOwnProducts": 0
+  },
+  "workload": {
+    "concurrentReads": 50,
+    "databaseStatementsPerRead": 3,
+    "poolMax": 10,
+    "pageSize": 24,
+    "warmedScenarios": 10,
+    "transport": "Direct local module calls and PostgreSQL TCP; no HTTP",
+    "sourceModule": "lib/products/query-products.ts"
+  },
+  "timings": {
+    "batchElapsedMs": 399.981,
+    "p50Ms": 187.091,
+    "p95Ms": 349.16,
+    "p99Ms": 398.414,
+    "minMs": 26.618,
+    "maxMs": 398.414
+  },
+  "checks": [
+    "24 rows per full page",
+    "total retained beyond final page",
+    "inactive products always excluded",
+    "out-of-stock excluded unless requested",
+    "brand and monetary filters",
+    "freeShipping snapshot and decimal monetary mapping",
+    "stable tied order and non-overlapping pages",
+    "literal category fixture isolation",
+    "fifty concurrent results match warmed baselines"
+  ],
+  "samples": [
+    {
+      "index": 0,
+      "scenario": "available-newest-page1",
+      "elapsedMs": 28.451,
+      "returnedRows": 24,
+      "total": 3857
+    },
+    {
+      "index": 1,
+      "scenario": "available-newest-page2",
+      "elapsedMs": 29.549,
+      "returnedRows": 24,
+      "total": 3857
+    },
+    {
+      "index": 2,
+      "scenario": "available-price-asc",
+      "elapsedMs": 26.618,
+      "returnedRows": 24,
+      "total": 3857
+    },
+    {
+      "index": 3,
+      "scenario": "available-price-desc-page4",
+      "elapsedMs": 46.492,
+      "returnedRows": 24,
+      "total": 3857
+    },
+    {
+      "index": 4,
+      "scenario": "available-name-asc",
+      "elapsedMs": 50.56,
+      "returnedRows": 24,
+      "total": 3857
+    },
+    {
+      "index": 5,
+      "scenario": "available-last-page",
+      "elapsedMs": 49.757,
+      "returnedRows": 17,
+      "total": 3857
+    },
+    {
+      "index": 6,
+      "scenario": "include-empty-stock-page2",
+      "elapsedMs": 66.149,
+      "returnedRows": 24,
+      "total": 4500
+    },
+    {
+      "index": 7,
+      "scenario": "brand-price-range",
+      "elapsedMs": 61.437,
+      "returnedRows": 24,
+      "total": 453
+    },
+    {
+      "index": 8,
+      "scenario": "beyond-last-page",
+      "elapsedMs": 73.298,
+      "returnedRows": 0,
+      "total": 3857
+    },
+    {
+      "index": 9,
+      "scenario": "text-search-relevance",
+      "elapsedMs": 162.85,
+      "returnedRows": 24,
+      "total": 3857
+    },
+    {
+      "index": 10,
+      "scenario": "available-newest-page1",
+      "elapsedMs": 81.367,
+      "returnedRows": 24,
+      "total": 3857
+    },
+    {
+      "index": 11,
+      "scenario": "available-newest-page2",
+      "elapsedMs": 89.641,
+      "returnedRows": 24,
+      "total": 3857
+    },
+    {
+      "index": 12,
+      "scenario": "available-price-asc",
+      "elapsedMs": 97.482,
+      "returnedRows": 24,
+      "total": 3857
+    },
+    {
+      "index": 13,
+      "scenario": "available-price-desc-page4",
+      "elapsedMs": 108.638,
+      "returnedRows": 24,
+      "total": 3857
+    },
+    {
+      "index": 14,
+      "scenario": "available-name-asc",
+      "elapsedMs": 112.774,
+      "returnedRows": 24,
+      "total": 3857
+    },
+    {
+      "index": 15,
+      "scenario": "available-last-page",
+      "elapsedMs": 117.284,
+      "returnedRows": 17,
+      "total": 3857
+    },
+    {
+      "index": 16,
+      "scenario": "include-empty-stock-page2",
+      "elapsedMs": 130.452,
+      "returnedRows": 24,
+      "total": 4500
+    },
+    {
+      "index": 17,
+      "scenario": "brand-price-range",
+      "elapsedMs": 125.147,
+      "returnedRows": 24,
+      "total": 453
+    },
+    {
+      "index": 18,
+      "scenario": "beyond-last-page",
+      "elapsedMs": 138.869,
+      "returnedRows": 0,
+      "total": 3857
+    },
+    {
+      "index": 19,
+      "scenario": "text-search-relevance",
+      "elapsedMs": 232.088,
+      "returnedRows": 24,
+      "total": 3857
+    },
+    {
+      "index": 20,
+      "scenario": "available-newest-page1",
+      "elapsedMs": 147.661,
+      "returnedRows": 24,
+      "total": 3857
+    },
+    {
+      "index": 21,
+      "scenario": "available-newest-page2",
+      "elapsedMs": 157.363,
+      "returnedRows": 24,
+      "total": 3857
+    },
+    {
+      "index": 22,
+      "scenario": "available-price-asc",
+      "elapsedMs": 166.131,
+      "returnedRows": 24,
+      "total": 3857
+    },
+    {
+      "index": 23,
+      "scenario": "available-price-desc-page4",
+      "elapsedMs": 176.907,
+      "returnedRows": 24,
+      "total": 3857
+    },
+    {
+      "index": 24,
+      "scenario": "available-name-asc",
+      "elapsedMs": 182.913,
+      "returnedRows": 24,
+      "total": 3857
+    },
+    {
+      "index": 25,
+      "scenario": "available-last-page",
+      "elapsedMs": 187.091,
+      "returnedRows": 17,
+      "total": 3857
+    },
+    {
+      "index": 26,
+      "scenario": "include-empty-stock-page2",
+      "elapsedMs": 199.159,
+      "returnedRows": 24,
+      "total": 4500
+    },
+    {
+      "index": 27,
+      "scenario": "brand-price-range",
+      "elapsedMs": 195.962,
+      "returnedRows": 24,
+      "total": 453
+    },
+    {
+      "index": 28,
+      "scenario": "beyond-last-page",
+      "elapsedMs": 207.732,
+      "returnedRows": 0,
+      "total": 3857
+    },
+    {
+      "index": 29,
+      "scenario": "text-search-relevance",
+      "elapsedMs": 307.107,
+      "returnedRows": 24,
+      "total": 3857
+    },
+    {
+      "index": 30,
+      "scenario": "available-newest-page1",
+      "elapsedMs": 218.775,
+      "returnedRows": 24,
+      "total": 3857
+    },
+    {
+      "index": 31,
+      "scenario": "available-newest-page2",
+      "elapsedMs": 226.383,
+      "returnedRows": 24,
+      "total": 3857
+    },
+    {
+      "index": 32,
+      "scenario": "available-price-asc",
+      "elapsedMs": 237.773,
+      "returnedRows": 24,
+      "total": 3857
+    },
+    {
+      "index": 33,
+      "scenario": "available-price-desc-page4",
+      "elapsedMs": 246.607,
+      "returnedRows": 24,
+      "total": 3857
+    },
+    {
+      "index": 34,
+      "scenario": "available-name-asc",
+      "elapsedMs": 255.807,
+      "returnedRows": 24,
+      "total": 3857
+    },
+    {
+      "index": 35,
+      "scenario": "available-last-page",
+      "elapsedMs": 261.425,
+      "returnedRows": 17,
+      "total": 3857
+    },
+    {
+      "index": 36,
+      "scenario": "include-empty-stock-page2",
+      "elapsedMs": 269.396,
+      "returnedRows": 24,
+      "total": 4500
+    },
+    {
+      "index": 37,
+      "scenario": "brand-price-range",
+      "elapsedMs": 268.649,
+      "returnedRows": 24,
+      "total": 453
+    },
+    {
+      "index": 38,
+      "scenario": "beyond-last-page",
+      "elapsedMs": 280.928,
+      "returnedRows": 0,
+      "total": 3857
+    },
+    {
+      "index": 39,
+      "scenario": "text-search-relevance",
+      "elapsedMs": 364.374,
+      "returnedRows": 24,
+      "total": 3857
+    },
+    {
+      "index": 40,
+      "scenario": "available-newest-page1",
+      "elapsedMs": 289.878,
+      "returnedRows": 24,
+      "total": 3857
+    },
+    {
+      "index": 41,
+      "scenario": "available-newest-page2",
+      "elapsedMs": 300.597,
+      "returnedRows": 24,
+      "total": 3857
+    },
+    {
+      "index": 42,
+      "scenario": "available-price-asc",
+      "elapsedMs": 309.015,
+      "returnedRows": 24,
+      "total": 3857
+    },
+    {
+      "index": 43,
+      "scenario": "available-price-desc-page4",
+      "elapsedMs": 319.643,
+      "returnedRows": 24,
+      "total": 3857
+    },
+    {
+      "index": 44,
+      "scenario": "available-name-asc",
+      "elapsedMs": 327.198,
+      "returnedRows": 24,
+      "total": 3857
+    },
+    {
+      "index": 45,
+      "scenario": "available-last-page",
+      "elapsedMs": 329.02,
+      "returnedRows": 17,
+      "total": 3857
+    },
+    {
+      "index": 46,
+      "scenario": "include-empty-stock-page2",
+      "elapsedMs": 341.675,
+      "returnedRows": 24,
+      "total": 4500
+    },
+    {
+      "index": 47,
+      "scenario": "brand-price-range",
+      "elapsedMs": 339.921,
+      "returnedRows": 24,
+      "total": 453
+    },
+    {
+      "index": 48,
+      "scenario": "beyond-last-page",
+      "elapsedMs": 349.16,
+      "returnedRows": 0,
+      "total": 3857
+    },
+    {
+      "index": 49,
+      "scenario": "text-search-relevance",
+      "elapsedMs": 398.414,
+      "returnedRows": 24,
+      "total": 3857
+    }
+  ],
+  "limitations": [
+    "Local synthetic fixture; this does not certify production VPS capacity.",
+    "No HTTP, rendering, authentication, media transfer, browser, CDN or external provider load.",
+    "Warm scenario baselines precede the measured batch; no cold-cache claim.",
+    "Each read issues three real SQL statements; timings include connection-pool queuing.",
+    "No writes run concurrently during measurements; this does not prove snapshot consistency while the catalog changes.",
+    "Nearest-rank percentiles over fifty samples; p99 is the maximum sample."
+  ]
+}

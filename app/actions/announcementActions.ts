@@ -12,7 +12,8 @@ import { CACHE_TAG_SITE_SHELL, CACHE_TAG_ANNOUNCEMENT } from '@/lib/site-shell-c
 
 /** Lectura pública de la barra de anuncios (la usa el layout). */
 export async function getAnnouncement(): Promise<Announcement> {
-  return readAnnouncement();
+  await requirePermissionAction('SITE_CONTENT');
+  return readAnnouncement(true);
 }
 
 export type UpdateAnnouncementResult = { success: true } | { success: false; message: string };

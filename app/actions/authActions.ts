@@ -9,6 +9,7 @@ import { getActionClientIp, hashToken } from '@/lib/security';
 import { logError, logInfo } from '@/lib/safe-logger';
 import bcrypt from 'bcrypt';
 import { BRAND } from '@/config/brand';
+import { queueTransactionalEmails } from '@/lib/email-outbox-context';
 
 function firstNameFromName(displayName: string): string {
   const t = displayName.trim();
@@ -33,7 +34,7 @@ const RESET_INVALID_MESSAGE =
  * correo exista (anti-enumeración) y pide revisar la bandeja de entrada.
  */
 const REGISTER_GENERIC_MESSAGE =
-  'Solicitud procesada. Si el correo no estaba registrado, tu cuenta quedó creada y te enviamos un correo de bienvenida — revisa tu bandeja (y el spam).';
+  'Solicitud procesada. Si el correo no estaba registrado, tu cuenta quedó creada y recibirás un correo de bienvenida — revisa tu bandeja (y el spam).';
 
 export async function registerUserAction({ name, email, password }: Record<string, string>) {
   try {
@@ -86,7 +87,8 @@ export async function registerUserAction({ name, email, password }: Record<strin
     // (y la insignia «compra verificada»). La vinculación de pedidos guest
     // exige prueba de posesión: el token del pedido (registerFromOrderAction)
     // o un flujo de verificación de correo.
-    await prisma.user.create({
+    await prisma.$transaction(async tx => {
+      await tx.user.create({
       data: {
         name: name.trim().slice(0, 120),
         email: normalizedEmail,
@@ -94,10 +96,9 @@ export async function registerUserAction({ name, email, password }: Record<strin
         role: 'CLIENT',
       },
       select: { id: true },
+      });
+      await queueTransactionalEmails(tx, () => sendWelcomeEmail(normalizedEmail, firstNameFromName(name)));
     });
-
-    // Correo de bienvenida (fallos no revierten el registro; se registran en logs)
-    await sendWelcomeEmail(normalizedEmail, firstNameFromName(name));
 
     return { success: true, message: REGISTER_GENERIC_MESSAGE };
 
@@ -197,6 +198,7 @@ export async function registerFromOrderAction(
         where: { id: order.id },
         data: { customerId: user.id },
       });
+      await queueTransactionalEmails(tx, () => sendWelcomeEmail(normalizedEmail, firstNameFromName(order.customerName)));
 
       return user;
     });
@@ -204,8 +206,6 @@ export async function registerFromOrderAction(
     if (!created) {
       return { success: false, message: REGISTER_FROM_ORDER_GENERIC_FAILURE };
     }
-
-    await sendWelcomeEmail(normalizedEmail, firstNameFromName(order.customerName));
 
     logInfo('register_from_order_success', { operation: 'register_from_order' });
     return {
@@ -245,19 +245,24 @@ export async function requestPasswordReset(
     });
 
     if (user) {
-      await prisma.passwordResetToken.deleteMany({ where: { userId: user.id } });
       // El token claro viaja SOLO en el email; en BD se guarda el hash SHA-256.
       // Si la BD se filtra, los tokens activos no son utilizables.
       const token = randomUUID();
       const expiresAt = new Date(Date.now() + RESET_EXPIRY_MS);
-      await prisma.passwordResetToken.create({
+      await prisma.$transaction(async tx => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'password-reset:' + user.id}, 0))`;
+        const current = await tx.user.findUnique({ where: { id: user.id }, select: { email: true } });
+        if (current?.email.trim().toLowerCase() !== trimmed) return;
+        await tx.passwordResetToken.deleteMany({ where: { userId: user.id } });
+        await tx.passwordResetToken.create({
         data: {
           token: hashToken(token),
           userId: user.id,
           expiresAt,
         },
+        });
+        await queueTransactionalEmails(tx, () => sendPasswordResetEmail(trimmed, token, expiresAt));
       });
-      await sendPasswordResetEmail(trimmed, token);
     }
 
     return { ok: true, message: PASSWORD_RESET_GENERIC_MESSAGE };
@@ -358,6 +363,7 @@ export async function resetPassword(
     // (token + no expirado) garantiza que de dos requests concurrentes con el
     // mismo token solo una obtenga count=1 y cambie la contraseña (sin TOCTOU).
     const consumed = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'password-reset:' + row.userId}, 0))`;
       const deleted = await tx.passwordResetToken.deleteMany({
         where: { token: tokenHash, expiresAt: { gt: new Date() } },
       });

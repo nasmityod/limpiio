@@ -28,8 +28,8 @@ export function isAllowedNextVersion(version) {
   return (
     parsed.major === 16 &&
     (
-      parsed.minor > 2 ||
-      (parsed.minor === 2 && parsed.patch >= 6)
+      parsed.minor > 3 ||
+      (parsed.minor === 3 && parsed.patch >= 8)
     )
   );
 }
@@ -71,14 +71,14 @@ export function main() {
 
   if (!isAllowedNextVersion(versions.next)) {
     console.error(
-      `ERROR: Next.js ${versions.next} no cumple el mínimo seguro 16.2.6 dentro de major 16.`,
+      `ERROR: Next.js ${versions.next} no cumple el mínimo revisado 16.3.8 dentro de major 16.`,
     );
     process.exitCode = 1;
     return;
   }
 
   console.log(
-    'OK: Next.js cumple el mínimo seguro >=16.2.6 dentro de major 16.',
+    'OK: Next.js cumple el mínimo revisado >=16.3.8 dentro de major 16; ejecutar también npm audit.',
   );
 }
 

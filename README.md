@@ -2,7 +2,7 @@
 
 Tienda online — Next.js 16 (App Router) + Prisma 7 + PostgreSQL + NextAuth 4 + Resend + Cloudflare R2.
 
-**Producción:** VPS propio (`$APP_SLUG.service` systemd activo; PM2 con [`ecosystem.config.js`](ecosystem.config.js) como alternativa no simultánea) en `https://tu-dominio.com`. CI en GitHub Actions. `vercel.json` está vacío (`{}`); los crons ya no corren en Vercel.
+**Producción recomendada:** Vercel + PostgreSQL gestionado + Cloudflare R2 + Upstash Redis + Resend. El VPS sigue soportado como alternativa operativa. CI en GitHub Actions. `vercel.json` fija el framework y usa un build sin migraciones automáticas.
 
 > README operativo (PRD-059): cómo levantar el proyecto, migrar la base de datos y desplegar sin sorpresas.
 
@@ -22,7 +22,8 @@ porqué de cada decisión está en [`docs/desmarcado/REPORTE-DESMARCADO.md`](doc
 - Node.js 20+ (CI usa 22)
 - PostgreSQL (Neon u otro; producción usa conexión remota con pooling)
 - Cuentas/servicios: Resend, Cloudflare R2 (y Upstash Redis recomendado en multi-instancia)
-- **Producción VPS:** systemd (`$APP_SLUG.service`), nginx ([`deploy/nginx/sites-available/app`](deploy/nginx/sites-available/app)), crontab ([`deploy/crontab.vps`](deploy/crontab.vps) instalado vía [`scripts/install-crontab.sh`](scripts/install-crontab.sh)) — ver [`docs/ENTREGABLE-CRON-BCV-VPS-V2.md`](docs/ENTREGABLE-CRON-BCV-VPS-V2.md)
+- **Producción Vercel:** proyecto Next.js conectado al repositorio, variables de entorno configuradas en Vercel y PostgreSQL accesible durante el build.
+- **Producción VPS (alternativa):** systemd (`$APP_SLUG.service`), nginx ([`deploy/nginx/sites-available/app`](deploy/nginx/sites-available/app)), crontab ([`deploy/crontab.vps`](deploy/crontab.vps) instalado vía [`scripts/install-crontab.sh`](scripts/install-crontab.sh)) — ver [`docs/ENTREGABLE-CRON-BCV-VPS-V2.md`](docs/ENTREGABLE-CRON-BCV-VPS-V2.md)
 
 ## Arranque local
 
@@ -38,7 +39,7 @@ npm run dev
 | Script | Qué hace |
 |---|---|
 | `npm run dev` | Servidor de desarrollo |
-| `npm run build` / `npm start` | Build (incluye `prisma migrate deploy` + `prisma generate`) y `next start` |
+| `npm run build` / `npm start` | Build reproducible (`prisma generate` + `next build`) y `next start` |
 | `npm run lint` | ESLint (flat config, `eslint-config-next@16`) |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm test` | Tests unitarios (Vitest, sin BD) |
@@ -107,8 +108,24 @@ NEXT_PUBLIC_CONTACT_EMAIL=ventas@tu-dominio.com
 SENTRY_DSN=              # errores de servidor (instrumentation.ts)
 NEXT_PUBLIC_SENTRY_DSN=  # errores de navegador (instrumentation-client.ts)
                          # ⚠ añadir dominio de ingesta Sentry a connect-src en
-                         #   buildStrictCsp() y buildPublicCachedCsp() (middleware.ts)
+                         #   buildStrictCsp() y buildPublicCachedCsp() (proxy.ts)
 ```
+
+## Despliegue en Vercel
+
+1. Importa el repositorio en Vercel y conserva el framework **Next.js**. El proyecto ya incluye [`vercel.json`](vercel.json) con el build `npm run build`.
+2. Configura en Vercel las variables de `.env.example` para **Production** y **Preview**. Como mínimo: `DATABASE_URL`, `DIRECT_URL`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, `DEPLOYMENT_ENV=vercel`, `CHECKOUT_MODE`, `CRON_SECRET`, las credenciales de R2, `NEXT_PUBLIC_SITE_URL` y las variables de Upstash Redis.
+3. Aplica las migraciones desde un entorno autorizado antes del primer despliegue y después de cada cambio de `prisma/schema.prisma`:
+
+   ```bash
+   npx prisma migrate deploy
+   ```
+
+   `DIRECT_URL` debe ser la conexión directa a PostgreSQL; `DATABASE_URL` puede usar pooling para el runtime.
+4. El build genera algunas páginas ISR y el sitemap consultando PostgreSQL. Por eso la base de datos debe estar accesible desde los build workers de Vercel; el build no modifica el esquema.
+5. Los endpoints bajo `/api/cron/*` permanecen protegidos por `CRON_SECRET`. No se registran crons automáticamente en `vercel.json` para evitar duplicar el crontab del VPS. Si la migración es completa a Vercel, configura allí solo los jobs necesarios teniendo en cuenta que los horarios de Vercel usan UTC.
+
+Después del primer deploy, verifica `/api/health`, el login, una ficha de producto, una subida a R2 y un pedido de prueba.
 
 ### Modo de compra (`CHECKOUT_MODE`)
 
@@ -119,7 +136,7 @@ El servidor decide el modo; el cliente **no puede** cambiarlo desde el body ni c
 | `whatsapp` | Público (guest o autenticado) | Guest permitido | No disponibles (404) | `/checkout/success?token=` |
 | `full` | Solo con sesión | 401 sin sesión | Solo autenticado | Solo `?orderId=` con sesión dueño/admin |
 
-Cambiar `CHECKOUT_MODE` requiere **rebuild y restart** del proceso Node (afecta `middleware.ts` y el bundle del servidor).
+Cambiar `CHECKOUT_MODE` requiere **rebuild y restart** del proceso Node (afecta `proxy.ts` y el bundle del servidor).
 
 #### Cambiar el modo en producción (VPS)
 
@@ -191,7 +208,7 @@ Si la BD ya tenía el schema del baseline anterior, el squash `init` puede reque
 3. **Variables:** `/etc/$APP_SLUG/$APP_SLUG.env` (systemd + crontab) y `.env` en el repo deben estar sincronizados (`CRON_SECRET`, BD, R2, etc.). **Si `CRON_SECRET` falta en `$APP_SLUG.env`, el cron BCV responderá 401 silenciosamente** — diagnosticar con `sudo grep -c "^CRON_SECRET=" /etc/$APP_SLUG/$APP_SLUG.env` (debe devolver `1`).
 4. **Crontab:** Instalar/actualizar con `sudo bash scripts/install-crontab.sh`. El instalador valida `CRON_SECRET` y `scripts/run-bcv-cron.sh` antes de instalar. El archivo fuente es [`deploy/crontab.vps`](deploy/crontab.vps) (TZ America/Caracas).
 5. **Build seguro:** `npm run deploy:vps` (alias de `bash scripts/deploy-vps.sh`) — compila en `.next-staging` sin detener el servicio activo, luego swap atómico (stop → mv → start) de ~segundos, health-check con rollback automático, y purga opcional de caché Cloudflare vía `CF_ZONE_ID`/`CF_API_TOKEN` desde `/etc/$APP_SLUG/$APP_SLUG.env`.
-6. **Migraciones:** `npx prisma migrate deploy` se ejecuta dentro de `npm run build` (el script `build` lo incluye automáticamente).
+6. **Migraciones:** `npm run deploy:vps` ejecuta `npm run db:migrate` explícitamente antes de compilar el build staging.
 
 ### Artefactos locales del deploy
 
@@ -225,7 +242,7 @@ Documentación operativa completa: [`docs/ENTREGABLE-CRON-BCV-VPS-V2.md`](docs/E
 - `/var/log/bcv-cron.log` — cron BCV (644, root)
 - `/var/log/$APP_SLUG-cron.log` — abandoned-cart, review-request, purge-product-views, purge-temporary-data, purge-payment-uploads
 
-`vercel.json` no define crons (`{}`). Backups del schedule legacy Vercel: `vercel.json.bak.*` en el servidor.
+`vercel.json` no define crons por defecto: así no se duplican los jobs cuando la misma aplicación sigue operando en VPS. En una migración completa a Vercel, configura los jobs necesarios en el panel o en `vercel.json`, usando horarios UTC.
 
 ### Tasa BCV automática
 
