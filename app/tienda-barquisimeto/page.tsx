@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { connection } from 'next/server';
 import {
   MapPin, Phone, Mail, Clock, ShieldCheck,
   Truck, RefreshCcw, Star, ArrowRight, Navigation,
@@ -88,6 +89,8 @@ function formatPhoneLink(phone: string | undefined | null): string {
 }
 
 export default async function TiendaBarquisimetoPage() {
+  // Resolver las categorías con la BD de ejecución, fuera del build de Vercel.
+  await connection();
   const [seo, settings, ...categoryPaths] = await Promise.all([
     readSeoLocal(),
     readSettings(),

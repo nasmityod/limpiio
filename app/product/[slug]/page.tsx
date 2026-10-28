@@ -46,18 +46,10 @@ export const revalidate = 300;
 
 const SITE_URL = BRAND.siteUrl;
 
-// Bound build work as the catalog grows; other active fichas use on-demand ISR.
-export async function generateStaticParams() {
-  const rawLimit = Number(process.env.PRODUCT_PRERENDER_LIMIT ?? 100);
-  const limit = Number.isInteger(rawLimit) && rawLimit >= 0 && rawLimit <= 2000 ? rawLimit : 100;
-  if (limit === 0) return [];
-  const products = await prisma.product.findMany({
-    where: { isActive: true },
-    select: { slug: true, id: true },
-    orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
-    take: limit,
-  });
-  return products.map((p) => ({ slug: p.slug ?? p.id }));
+// Generar cada ficha en su primera visita y conservar ISR (300 s).
+// El build de Vercel no debe consultar una BD que puede ser inaccesible desde CI.
+export function generateStaticParams() {
+  return [];
 }
 
 // Clamp de meta description: 140–160 chars, corta en palabra completa y solo
