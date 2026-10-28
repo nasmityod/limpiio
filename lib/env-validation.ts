@@ -13,12 +13,25 @@ const REQUIRED_ALWAYS = ['DATABASE_URL', 'NEXTAUTH_SECRET', 'NEXTAUTH_URL'] as c
  * Recomendadas en producción — solo advertencia (degradación graceful).
  * RESEND_*: coherente con lib/resend.tsx (omite envío sin API key / From).
  */
-const RECOMMENDED_IN_PRODUCTION = ['RESEND_API_KEY', 'RESEND_FROM_ADDRESS'] as const;
+const RECOMMENDED_IN_PRODUCTION = [
+  'RESEND_API_KEY',
+  'RESEND_FROM_ADDRESS',
+  // R2 valida sus credenciales al subir/leer archivos en lib/r2.ts.
+  // Su ausencia no debe impedir consultar el catálogo ni iniciar sesión.
+  'R2_ENDPOINT',
+  'R2_ACCESS_KEY_ID',
+  'R2_SECRET_ACCESS_KEY',
+  'R2_BUCKET_NAME',
+  'R2_PUBLIC_BASE_URL',
+  'R2_PRIVATE_BUCKET_NAME',
+  'R2_PRIVATE_ACCESS_KEY_ID',
+  'R2_PRIVATE_SECRET_ACCESS_KEY',
+] as const;
 
 /**
  * Requeridas en producción en runtime (en dev se degradan con warning).
- * PRD-010 / PRD-108: R2 es imprescindible para subir imágenes y comprobantes
- * de pago — debe validarse al arranque, no al primer upload.
+ * La BD, la autenticación y el rate limiting deben estar disponibles para
+ * servir la tienda. Los servicios de archivos se validan al utilizarlos.
  */
 const REQUIRED_IN_PRODUCTION = [
   'CRON_SECRET',
@@ -32,14 +45,6 @@ const REQUIRED_IN_PRODUCTION = [
   // localhost. Antes existía un fallback a un dominio concreto y el fallo
   // pasaba inadvertido: ahora producción debe declarar su propia URL.
   'NEXT_PUBLIC_SITE_URL',
-  'R2_ENDPOINT',
-  'R2_ACCESS_KEY_ID',
-  'R2_SECRET_ACCESS_KEY',
-  'R2_BUCKET_NAME',
-  'R2_PUBLIC_BASE_URL',
-  'R2_PRIVATE_BUCKET_NAME',
-  'R2_PRIVATE_ACCESS_KEY_ID',
-  'R2_PRIVATE_SECRET_ACCESS_KEY',
   'CHECKOUT_MODE',
   // Sin esto en producción, el rate limiting cae al fallback en memoria del
   // proceso: cada `pm2 restart`/deploy borra los contadores de fuerza bruta.
