@@ -81,3 +81,5 @@ docs/DEV-DEPENDENCY-AUDIT.md
 
 # Artefactos del proceso de desmarcado (no versionar)
 .cleanup/
+
+.vercel
